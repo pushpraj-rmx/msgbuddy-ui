@@ -9,6 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.90.17",
+    "axios": "^1.13.2",
+    "daisyui": "^5.5.14",
     "next": "16.1.2",
     "react": "19.2.3",
     "react-dom": "19.2.3"
@@ -22,5 +25,6 @@
     "eslint-config-next": "16.1.2",
     "tailwindcss": "^4",
     "typescript": "^5"
-  }
+  },
+  "browserslist": "> 1%"
 }
