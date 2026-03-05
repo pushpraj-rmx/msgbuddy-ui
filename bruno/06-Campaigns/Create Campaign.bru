@@ -1,0 +1,34 @@
+meta {
+  name: Create Campaign
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/campaigns
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Holiday Promo 2025",
+    "description": "Black Friday campaign",
+    "channel": "WHATSAPP",
+    "templateId": "clx123template",
+    "templateVersion": 1,
+    "audienceType": "CONTACTS",
+    "contactIds": ["clx1", "clx2"],
+    "scheduledAt": "2025-12-01T09:00:00Z",
+    "timezone": "America/New_York",
+    "chunkSize": 100,
+    "throttlePerMin": 60
+  }
+}

@@ -1,0 +1,31 @@
+meta {
+  name: Create Segment
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/segments
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "VIP with email",
+    "description": "Contacts with VIP tag and email set",
+    "query": {
+      "tags": ["vip"],
+      "hasEmail": true,
+      "isBlocked": false,
+      "isOptedOut": false
+    }
+  }
+}

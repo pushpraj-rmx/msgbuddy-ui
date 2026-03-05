@@ -1,0 +1,18 @@
+meta {
+  name: List Contact Notes
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/contacts/:contactId/notes
+  body: none
+}
+
+params:path {
+  contactId: CONTACT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

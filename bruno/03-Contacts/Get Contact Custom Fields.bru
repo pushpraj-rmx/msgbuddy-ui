@@ -1,0 +1,18 @@
+meta {
+  name: Get Contact Custom Fields
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/contacts/:contactId/custom-fields
+  body: none
+}
+
+params:path {
+  contactId: CONTACT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

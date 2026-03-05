@@ -1,0 +1,26 @@
+meta {
+  name: Update Settings
+  type: http
+  seq: 11
+}
+
+put {
+  url: {{baseUrl}}/api/workspaces/:id/settings
+  body: json
+}
+
+params:path {
+  id: clx_ws_123
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "timezone": "America/New_York",
+    "locale": "en-US"
+  }
+}

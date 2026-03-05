@@ -1,0 +1,23 @@
+meta {
+  name: Get Contact Timeline
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/contacts/:contactId/timeline
+  body: none
+}
+
+params:query {
+  limit: 20
+  cursor:
+}
+
+params:path {
+  contactId: CONTACT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

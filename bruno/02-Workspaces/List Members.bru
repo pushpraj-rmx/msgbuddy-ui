@@ -1,0 +1,18 @@
+meta {
+  name: List Members
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/workspaces/:id/members
+  body: none
+}
+
+params:path {
+  id: clx_ws_123
+}
+
+headers {
+  Authorization: {{token}}
+}

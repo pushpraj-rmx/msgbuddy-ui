@@ -1,0 +1,25 @@
+meta {
+  name: Update Integration
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/integrations/:id
+  body: json
+}
+
+params:path {
+  id: clx_int_123
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Updated Integration Name"
+  }
+}

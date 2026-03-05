@@ -1,0 +1,17 @@
+meta {
+  name: Workspace Events Stream
+  type: sse
+  seq: 1
+}
+
+sse {
+  url: {{baseUrl}}/api/sse/workspace/:workspaceId
+}
+
+params:path {
+  workspaceId: clx_ws_123
+}
+
+headers {
+  Authorization: {{token}}
+}

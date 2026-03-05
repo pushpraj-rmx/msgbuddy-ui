@@ -1,0 +1,18 @@
+meta {
+  name: Delete Template
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/templates/:id
+  body: none
+}
+
+params:path {
+  id: clx_tpl_123
+}
+
+headers {
+  Authorization: {{token}}
+}

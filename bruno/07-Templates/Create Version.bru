@@ -1,0 +1,30 @@
+meta {
+  name: Create Version
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/templates/:id/versions
+  body: json
+}
+
+params:path {
+  id: clx_tpl_123
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "headerType": "TEXT",
+    "headerContent": "Welcome!",
+    "body": "Hello {{1}}, welcome to {{2}}!",
+    "footer": "Powered by MsgBuddy",
+    "buttons": [],
+    "variables": []
+  }
+}

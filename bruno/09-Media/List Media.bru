@@ -1,0 +1,19 @@
+meta {
+  name: List Media
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/media
+  body: none
+}
+
+params:query {
+  limit: 20
+  cursor: 
+}
+
+headers {
+  Authorization: {{token}}
+}

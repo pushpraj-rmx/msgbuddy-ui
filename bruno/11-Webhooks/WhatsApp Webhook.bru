@@ -1,0 +1,25 @@
+meta {
+  name: WhatsApp Webhook
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/webhooks/whatsapp
+  body: json
+  auth: none
+}
+
+params:query {
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "object": "whatsapp_business_account",
+    "entry": []
+  }
+}

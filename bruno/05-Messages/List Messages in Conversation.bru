@@ -1,0 +1,18 @@
+meta {
+  name: List Messages in Conversation
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/messages/conversation/:conversationId
+  body: none
+}
+
+params:path {
+  conversationId: clx_conv_123
+}
+
+headers {
+  Authorization: {{token}}
+}

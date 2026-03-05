@@ -1,0 +1,25 @@
+meta {
+  name: Merge Contacts
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/contacts/merge
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "primaryId": "CONTACT_ID_TO_KEEP",
+    "duplicateId": "CONTACT_ID_TO_MERGE_AND_DELETE"
+  }
+}

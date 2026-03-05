@@ -1,0 +1,18 @@
+meta {
+  name: Delete Workspace
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/workspaces/:id
+  body: none
+}
+
+params:path {
+  id: clx_ws_123
+}
+
+headers {
+  Authorization: {{token}}
+}

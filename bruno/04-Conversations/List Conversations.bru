@@ -1,0 +1,21 @@
+meta {
+  name: List Conversations
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/conversations
+  body: none
+}
+
+params:query {
+  status: OPEN
+  channel: WHATSAPP
+  limit: 20
+  cursor: 
+}
+
+headers {
+  Authorization: {{token}}
+}

@@ -1,0 +1,28 @@
+meta {
+  name: Update Message Status
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/messages/:id/status
+  body: json
+}
+
+params:path {
+  id: clx_msg_123
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "status": "DELIVERED",
+    "providerMessageId": "wamid.xxx",
+    "errorCode": null,
+    "errorMessage": null
+  }
+}

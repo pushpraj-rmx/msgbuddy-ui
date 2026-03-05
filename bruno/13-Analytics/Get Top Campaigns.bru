@@ -1,0 +1,20 @@
+meta {
+  name: Get Top Campaigns
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/analytics/campaigns
+  body: none
+}
+
+params:query {
+  start: 2025-01-01
+  end: 2025-01-31
+  limit: 5
+}
+
+headers {
+  Authorization: {{token}}
+}

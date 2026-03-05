@@ -1,0 +1,17 @@
+meta {
+  name: Rebuild Aggregates
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/usage/rebuild
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

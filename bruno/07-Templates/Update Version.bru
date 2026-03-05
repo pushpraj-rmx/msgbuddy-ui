@@ -1,0 +1,27 @@
+meta {
+  name: Update Version
+  type: http
+  seq: 9
+}
+
+put {
+  url: {{baseUrl}}/api/templates/:id/versions/:version
+  body: json
+}
+
+params:path {
+  id: clx_tpl_123
+  version: 1
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "body": "Updated body text",
+    "footer": "Updated footer"
+  }
+}

@@ -1,0 +1,32 @@
+meta {
+  name: Create Integration
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/integrations
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Main WhatsApp",
+    "provider": "WHATSAPP",
+    "channel": "WHATSAPP",
+    "credentials": {
+      "phoneNumberId": "123456789",
+      "businessAccountId": "987654321",
+      "accessToken": "your_access_token"
+    },
+    "isDefault": false
+  }
+}

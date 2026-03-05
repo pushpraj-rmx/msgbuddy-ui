@@ -1,0 +1,19 @@
+meta {
+  name: Get Summary
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/analytics/summary
+  body: none
+}
+
+params:query {
+  start: 2025-01-01
+  end: 2025-01-31
+}
+
+headers {
+  Authorization: {{token}}
+}

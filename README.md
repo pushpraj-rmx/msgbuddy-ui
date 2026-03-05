@@ -1,8 +1,31 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Configuration
+
+This is a pure client-side Next.js app that connects directly to the MsgBuddy backend API.
+
+### API URL Configuration
+
+The app connects to the MsgBuddy API. By default, it uses `https://v2.msgbuddy.com`.
+
+To configure a different API URL, create a `.env.local` file in the root directory:
+
+```bash
+NEXT_PUBLIC_API_URL=https://v2.msgbuddy.com
+```
+
+## Authentication
+
+- Access tokens are short-lived (≈15 minutes) and kept in memory/localStorage plus a non-HttpOnly cookie for SSR usage.
+- Refresh tokens are stored as HttpOnly cookies set during login/register; they rotate on refresh.
+- Axios silently refreshes on `401` responses. If refresh fails, the session is cleared and the user is sent to `/login`.
+- Logout calls the API to revoke the refresh token and removes local cookies.
+
 ## Getting Started
 
-First, run the development server:
+First, make sure your MsgBuddy API is reachable at `https://v2.msgbuddy.com` (or configure the URL as shown above).
+
+Then, run the development server:
 
 ```bash
 npm run dev

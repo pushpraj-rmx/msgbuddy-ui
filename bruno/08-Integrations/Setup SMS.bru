@@ -1,0 +1,30 @@
+meta {
+  name: Setup SMS
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/integrations/setup/sms
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "SMS Gateway",
+    "credentials": {
+      "provider": "twilio",
+      "accountSid": "AC...",
+      "authToken": "your_auth_token",
+      "fromNumber": "+15551234567"
+    }
+  }
+}

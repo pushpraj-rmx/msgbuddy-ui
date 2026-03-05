@@ -1,0 +1,26 @@
+meta {
+  name: Create Contact
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/contacts
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "phone": "+14155552671",
+    "name": "Jane Doe",
+    "email": "jane@example.com"
+  }
+}

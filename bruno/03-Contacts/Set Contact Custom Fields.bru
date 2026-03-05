@@ -1,0 +1,30 @@
+meta {
+  name: Set Contact Custom Fields
+  type: http
+  seq: 15
+}
+
+put {
+  url: {{baseUrl}}/api/contacts/:contactId/custom-fields
+  body: json
+}
+
+params:path {
+  contactId: CONTACT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "fields": [
+      {
+        "fieldId": "CUSTOM_FIELD_ID_HERE",
+        "value": "Mumbai"
+      }
+    ]
+  }
+}

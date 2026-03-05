@@ -1,0 +1,18 @@
+meta {
+  name: Get Custom Field
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/custom-fields/:id
+  body: none
+}
+
+params:path {
+  id: CUSTOM_FIELD_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

@@ -1,0 +1,18 @@
+meta {
+  name: Deactivate Integration
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/integrations/:id/deactivate
+  body: none
+}
+
+params:path {
+  id: clx_int_123
+}
+
+headers {
+  Authorization: {{token}}
+}

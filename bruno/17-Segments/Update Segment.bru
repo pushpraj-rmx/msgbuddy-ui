@@ -1,0 +1,29 @@
+meta {
+  name: Update Segment
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/segments/{{segmentId}}
+  body: json
+}
+
+params:path {
+  segmentId: SEGMENT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "VIP with email",
+    "query": {
+      "tags": ["vip", "new"],
+      "hasEmail": true
+    }
+  }
+}

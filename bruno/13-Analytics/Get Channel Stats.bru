@@ -1,0 +1,19 @@
+meta {
+  name: Get Channel Stats
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/analytics/channels
+  body: none
+}
+
+params:query {
+  start: 2025-01-01
+  end: 2025-01-31
+}
+
+headers {
+  Authorization: {{token}}
+}

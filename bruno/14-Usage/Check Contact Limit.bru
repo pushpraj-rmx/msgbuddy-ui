@@ -1,0 +1,17 @@
+meta {
+  name: Check Contact Limit
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/usage/check/contacts
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

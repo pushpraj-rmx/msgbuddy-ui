@@ -1,0 +1,17 @@
+meta {
+  name: Get Current Usage
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/usage
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

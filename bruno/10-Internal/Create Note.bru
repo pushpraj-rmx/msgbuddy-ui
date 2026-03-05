@@ -1,0 +1,27 @@
+meta {
+  name: Create Note
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/internal/notes
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "targetType": "CONTACT",
+    "targetId": "clx123contact",
+    "content": "Customer requested callback tomorrow",
+    "isPinned": false
+  }
+}

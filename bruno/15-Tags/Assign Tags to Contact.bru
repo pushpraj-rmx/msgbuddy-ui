@@ -1,0 +1,28 @@
+meta {
+  name: Assign Tags to Contact
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/contacts/{{contactId}}/tags
+  body: json
+}
+
+params:query {
+}
+
+params:path {
+  contactId: CONTACT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "tagIds": ["TAG_ID_1", "TAG_ID_2"]
+  }
+}

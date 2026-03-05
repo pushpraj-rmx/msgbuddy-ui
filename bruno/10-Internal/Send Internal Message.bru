@@ -1,0 +1,25 @@
+meta {
+  name: Send Internal Message
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/internal/messages
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "conversationId": "clx_conv_123",
+    "text": "Internal team note"
+  }
+}

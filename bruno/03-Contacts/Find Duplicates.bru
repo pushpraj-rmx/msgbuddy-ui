@@ -1,0 +1,17 @@
+meta {
+  name: Find Duplicates
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/contacts/duplicates
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

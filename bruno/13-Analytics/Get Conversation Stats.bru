@@ -1,0 +1,19 @@
+meta {
+  name: Get Conversation Stats
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/analytics/conversations
+  body: none
+}
+
+params:query {
+  start: 2025-01-01
+  end: 2025-01-31
+}
+
+headers {
+  Authorization: {{token}}
+}

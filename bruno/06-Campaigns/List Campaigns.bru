@@ -1,0 +1,20 @@
+meta {
+  name: List Campaigns
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/campaigns
+  body: none
+}
+
+params:query {
+  status: ACTIVE
+  channel: WHATSAPP
+  isActive: true
+}
+
+headers {
+  Authorization: {{token}}
+}

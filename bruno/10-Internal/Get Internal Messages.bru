@@ -1,0 +1,18 @@
+meta {
+  name: Get Internal Messages
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/api/internal/messages/:conversationId
+  body: none
+}
+
+params:path {
+  conversationId: clx_conv_123
+}
+
+headers {
+  Authorization: {{token}}
+}

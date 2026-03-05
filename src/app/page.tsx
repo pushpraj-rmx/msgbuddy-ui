@@ -1,23 +1,14 @@
-"use client";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/auth";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { hasToken } from "@/lib/auth";
+export default async function Home() {
+  const raw = (await cookies()).get(ACCESS_TOKEN_COOKIE)?.value;
+  const token = raw ? decodeURIComponent(raw) : null;
 
-export default function Home() {
-  const router = useRouter();
+  if (token) {
+    redirect("/dashboard");
+  }
 
-  useEffect(() => {
-    if (hasToken()) {
-      router.push("/me");
-    } else {
-      router.push("/login");
-    }
-  }, [router]);
-
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-base-100">
-      <span className="loading loading-spinner loading-lg"></span>
-    </div>
-  );
+  redirect("/login");
 }

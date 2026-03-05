@@ -1,0 +1,18 @@
+meta {
+  name: Delete Media
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{baseUrl}}/api/media/:id
+  body: none
+}
+
+params:path {
+  id: clx_media_123
+}
+
+headers {
+  Authorization: {{token}}
+}

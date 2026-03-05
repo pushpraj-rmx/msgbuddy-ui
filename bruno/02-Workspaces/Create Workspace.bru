@@ -1,0 +1,24 @@
+meta {
+  name: Create Workspace
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/workspaces
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "My New Workspace"
+  }
+}

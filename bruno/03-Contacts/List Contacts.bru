@@ -1,0 +1,17 @@
+meta {
+  name: List Contacts
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/contacts
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

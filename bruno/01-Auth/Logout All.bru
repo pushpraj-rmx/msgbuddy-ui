@@ -1,0 +1,17 @@
+meta {
+  name: Logout All
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/auth/logout-all
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

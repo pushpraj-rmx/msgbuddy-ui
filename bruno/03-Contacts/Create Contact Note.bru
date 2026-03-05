@@ -1,0 +1,25 @@
+meta {
+  name: Create Contact Note
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/contacts/:contactId/notes
+  body: json
+}
+
+params:path {
+  contactId: CONTACT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "content": "Customer requested callback next week"
+  }
+}

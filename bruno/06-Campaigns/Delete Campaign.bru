@@ -1,0 +1,18 @@
+meta {
+  name: Delete Campaign
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/campaigns/:id
+  body: none
+}
+
+params:path {
+  id: clx_camp_123
+}
+
+headers {
+  Authorization: {{token}}
+}

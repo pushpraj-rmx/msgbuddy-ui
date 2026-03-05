@@ -1,0 +1,18 @@
+meta {
+  name: Delete Segment
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/segments/{{segmentId}}
+  body: none
+}
+
+params:path {
+  segmentId: SEGMENT_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

@@ -1,0 +1,27 @@
+meta {
+  name: Create Custom Field
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/custom-fields
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "city",
+    "label": "City",
+    "type": "TEXT",
+    "isRequired": false
+  }
+}

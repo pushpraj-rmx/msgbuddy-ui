@@ -1,0 +1,18 @@
+meta {
+  name: List by Contact
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/conversations/contact/:contactId
+  body: none
+}
+
+params:path {
+  contactId: clx_contact_123
+}
+
+headers {
+  Authorization: {{token}}
+}

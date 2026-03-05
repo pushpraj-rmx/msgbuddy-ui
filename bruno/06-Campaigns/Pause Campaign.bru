@@ -1,0 +1,18 @@
+meta {
+  name: Pause Campaign
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/campaigns/:id/pause
+  body: none
+}
+
+params:path {
+  id: clx_camp_123
+}
+
+headers {
+  Authorization: {{token}}
+}

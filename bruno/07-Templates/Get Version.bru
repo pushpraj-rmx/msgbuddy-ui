@@ -1,0 +1,19 @@
+meta {
+  name: Get Version
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/templates/:id/versions/:version
+  body: none
+}
+
+params:path {
+  id: clx_tpl_123
+  version: 1
+}
+
+headers {
+  Authorization: {{token}}
+}

@@ -1,0 +1,29 @@
+meta {
+  name: Update Tag
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/tags/{{tagId}}
+  body: json
+}
+
+params:query {
+}
+
+params:path {
+  tagId: TAG_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "vip",
+    "color": "#10B981"
+  }
+}

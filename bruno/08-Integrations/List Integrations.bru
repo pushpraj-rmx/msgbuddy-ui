@@ -1,0 +1,20 @@
+meta {
+  name: List Integrations
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/integrations
+  body: none
+}
+
+params:query {
+  provider: WHATSAPP
+  channel: WHATSAPP
+  isActive: true
+}
+
+headers {
+  Authorization: {{token}}
+}

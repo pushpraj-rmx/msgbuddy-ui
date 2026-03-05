@@ -1,0 +1,19 @@
+meta {
+  name: Approve Version
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/templates/:id/versions/:version/approve
+  body: none
+}
+
+params:path {
+  id: clx_tpl_123
+  version: 1
+}
+
+headers {
+  Authorization: {{token}}
+}

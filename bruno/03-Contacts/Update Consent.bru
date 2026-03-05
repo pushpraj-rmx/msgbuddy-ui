@@ -1,0 +1,26 @@
+meta {
+  name: Update Consent
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/contacts/:id/consent
+  body: json
+}
+
+params:path {
+  id: clx_contact_123
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "isBlocked": false,
+    "isOptedOut": false
+  }
+}

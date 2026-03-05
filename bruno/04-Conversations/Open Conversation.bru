@@ -1,0 +1,18 @@
+meta {
+  name: Open Conversation
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/conversations/:id/open
+  body: none
+}
+
+params:path {
+  id: clx_conv_123
+}
+
+headers {
+  Authorization: {{token}}
+}

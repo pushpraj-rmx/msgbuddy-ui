@@ -1,0 +1,27 @@
+meta {
+  name: Update Custom Field
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/custom-fields/:id
+  body: json
+}
+
+params:path {
+  id: CUSTOM_FIELD_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "label": "City (updated)",
+    "type": "TEXT",
+    "isRequired": false
+  }
+}

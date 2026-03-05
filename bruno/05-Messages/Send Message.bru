@@ -1,0 +1,27 @@
+meta {
+  name: Send Message
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/messages
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "contactId": "ck_123cafe",
+    "text": "Hello there! 👋",
+    "idempotencyKey": "idemp-1234",
+    "channel": "WHATSAPP"
+  }
+}

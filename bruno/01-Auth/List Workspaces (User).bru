@@ -1,0 +1,17 @@
+meta {
+  name: List Workspaces (User)
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/workspaces
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

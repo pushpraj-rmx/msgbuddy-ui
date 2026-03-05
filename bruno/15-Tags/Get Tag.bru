@@ -1,0 +1,21 @@
+meta {
+  name: Get Tag
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/tags/{{tagId}}
+  body: none
+}
+
+params:query {
+}
+
+params:path {
+  tagId: TAG_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

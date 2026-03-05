@@ -1,0 +1,17 @@
+meta {
+  name: List Segments
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/segments
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

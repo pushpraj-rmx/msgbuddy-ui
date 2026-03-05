@@ -1,0 +1,17 @@
+meta {
+  name: Export Contacts
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/contacts/export
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

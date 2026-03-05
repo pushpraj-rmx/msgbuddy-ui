@@ -1,0 +1,18 @@
+meta {
+  name: Cancel Campaign
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/campaigns/:id/cancel
+  body: none
+}
+
+params:path {
+  id: clx_camp_123
+}
+
+headers {
+  Authorization: {{token}}
+}

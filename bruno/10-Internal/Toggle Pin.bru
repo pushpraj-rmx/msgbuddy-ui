@@ -1,0 +1,18 @@
+meta {
+  name: Toggle Pin
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/internal/notes/:id/toggle-pin
+  body: none
+}
+
+params:path {
+  id: clx_note_123
+}
+
+headers {
+  Authorization: {{token}}
+}

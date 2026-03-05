@@ -1,0 +1,18 @@
+meta {
+  name: Get Integration
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/integrations/:id
+  body: none
+}
+
+params:path {
+  id: clx_int_123
+}
+
+headers {
+  Authorization: {{token}}
+}

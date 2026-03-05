@@ -1,0 +1,18 @@
+meta {
+  name: Mark as Read
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/conversations/:id/read
+  body: none
+}
+
+params:path {
+  id: clx_conv_123
+}
+
+headers {
+  Authorization: {{token}}
+}

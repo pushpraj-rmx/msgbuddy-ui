@@ -1,0 +1,19 @@
+meta {
+  name: Get Usage for Period
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/usage/period
+  body: none
+}
+
+params:query {
+  start: 2025-01-01
+  end: 2025-01-31
+}
+
+headers {
+  Authorization: {{token}}
+}

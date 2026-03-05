@@ -1,0 +1,22 @@
+meta {
+  name: Get Campaign Progress
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/campaigns/:id/progress
+  body: none
+}
+
+params:path {
+  id: clx_camp_123
+}
+
+params:query {
+  runId: 
+}
+
+headers {
+  Authorization: {{token}}
+}

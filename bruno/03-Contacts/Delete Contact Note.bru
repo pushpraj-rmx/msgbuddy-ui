@@ -1,0 +1,19 @@
+meta {
+  name: Delete Contact Note
+  type: http
+  seq: 13
+}
+
+delete {
+  url: {{baseUrl}}/api/contacts/:contactId/notes/:noteId
+  body: none
+}
+
+params:path {
+  contactId: CONTACT_ID_HERE
+  noteId: NOTE_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

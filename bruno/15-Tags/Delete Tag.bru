@@ -1,0 +1,21 @@
+meta {
+  name: Delete Tag
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{baseUrl}}/api/tags/{{tagId}}
+  body: none
+}
+
+params:query {
+}
+
+params:path {
+  tagId: TAG_ID_HERE
+}
+
+headers {
+  Authorization: {{token}}
+}

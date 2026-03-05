@@ -1,0 +1,18 @@
+meta {
+  name: Close Conversation
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/conversations/:id/close
+  body: none
+}
+
+params:path {
+  id: clx_conv_123
+}
+
+headers {
+  Authorization: {{token}}
+}

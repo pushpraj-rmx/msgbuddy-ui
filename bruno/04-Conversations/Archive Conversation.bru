@@ -1,0 +1,18 @@
+meta {
+  name: Archive Conversation
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/conversations/:id/archive
+  body: none
+}
+
+params:path {
+  id: clx_conv_123
+}
+
+headers {
+  Authorization: {{token}}
+}

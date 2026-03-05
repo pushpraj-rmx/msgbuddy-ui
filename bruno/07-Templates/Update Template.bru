@@ -1,0 +1,25 @@
+meta {
+  name: Update Template
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/templates/:id
+  body: json
+}
+
+params:path {
+  id: clx_tpl_123
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Updated Template Name"
+  }
+}

@@ -1,0 +1,22 @@
+meta {
+  name: Import Contacts CSV
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/contacts/import
+  body: multipart-form-data
+}
+
+params:query {
+  defaultCountry: IN
+}
+
+headers {
+  Authorization: {{token}}
+}
+
+body:multipart-form-data {
+  file: <@./sample-contacts.csv>
+}

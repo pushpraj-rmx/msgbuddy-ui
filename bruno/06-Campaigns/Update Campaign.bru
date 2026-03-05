@@ -1,0 +1,26 @@
+meta {
+  name: Update Campaign
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/api/campaigns/:id
+  body: json
+}
+
+params:path {
+  id: clx_camp_123
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Updated Campaign Name",
+    "description": "Updated description"
+  }
+}

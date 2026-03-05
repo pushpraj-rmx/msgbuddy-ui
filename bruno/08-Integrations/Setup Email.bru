@@ -1,0 +1,33 @@
+meta {
+  name: Setup Email
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/integrations/setup/email
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Transactional Email",
+    "credentials": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "secure": true,
+      "user": "noreply@acme.com",
+      "password": "your_smtp_password",
+      "fromEmail": "noreply@acme.com",
+      "fromName": "Acme Support"
+    }
+  }
+}

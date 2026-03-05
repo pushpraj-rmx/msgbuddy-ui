@@ -1,0 +1,19 @@
+meta {
+  name: Sync to Provider
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/media/:id/sync/:provider
+  body: none
+}
+
+params:path {
+  id: clx_media_123
+  provider: whatsapp
+}
+
+headers {
+  Authorization: {{token}}
+}

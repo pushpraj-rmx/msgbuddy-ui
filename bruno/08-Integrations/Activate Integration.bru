@@ -1,0 +1,18 @@
+meta {
+  name: Activate Integration
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/integrations/:id/activate
+  body: none
+}
+
+params:path {
+  id: clx_int_123
+}
+
+headers {
+  Authorization: {{token}}
+}

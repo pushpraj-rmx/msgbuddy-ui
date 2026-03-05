@@ -1,0 +1,26 @@
+meta {
+  name: Reject Version
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/templates/:id/versions/:version/reject
+  body: json
+}
+
+params:path {
+  id: clx_tpl_123
+  version: 1
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "reason": "Template violates policy guidelines"
+  }
+}

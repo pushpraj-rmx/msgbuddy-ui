@@ -1,0 +1,17 @@
+meta {
+  name: Retry Failed Syncs
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/media/retry-failed
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

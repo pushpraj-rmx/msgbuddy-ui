@@ -1,0 +1,30 @@
+meta {
+  name: Setup WhatsApp
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/integrations/setup/whatsapp
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Main WhatsApp",
+    "credentials": {
+      "phoneNumberId": "123456789",
+      "businessAccountId": "987654321",
+      "accessToken": "your_access_token",
+      "webhookVerifyToken": "your_verify_token"
+    }
+  }
+}

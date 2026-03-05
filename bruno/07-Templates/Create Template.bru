@@ -1,0 +1,26 @@
+meta {
+  name: Create Template
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/templates
+  body: json
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "name": "Welcome Template",
+    "channel": "WHATSAPP",
+    "category": "UTILITY"
+  }
+}

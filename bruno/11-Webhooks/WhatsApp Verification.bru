@@ -1,0 +1,20 @@
+meta {
+  name: WhatsApp Verification
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/webhooks/whatsapp
+  body: none
+  auth: none
+}
+
+params:query {
+  hub.mode: subscribe
+  hub.verify_token: YOUR_VERIFY_TOKEN
+  hub.challenge: CHALLENGE_STRING
+}
+
+headers {
+}

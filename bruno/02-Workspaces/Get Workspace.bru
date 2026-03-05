@@ -1,0 +1,18 @@
+meta {
+  name: Get Workspace
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/workspaces/:id
+  body: none
+}
+
+params:path {
+  id: clx_ws_123
+}
+
+headers {
+  Authorization: {{token}}
+}

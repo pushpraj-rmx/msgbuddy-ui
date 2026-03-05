@@ -1,0 +1,17 @@
+meta {
+  name: Check Message Limit
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/usage/check/messages
+  body: none
+}
+
+params:query {
+}
+
+headers {
+  Authorization: {{token}}
+}

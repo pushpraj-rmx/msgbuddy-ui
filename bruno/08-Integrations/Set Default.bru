@@ -1,0 +1,18 @@
+meta {
+  name: Set Default
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/integrations/:id/set-default
+  body: none
+}
+
+params:path {
+  id: clx_int_123
+}
+
+headers {
+  Authorization: {{token}}
+}
