@@ -133,6 +133,11 @@ export const endpoints = {
   },
   whatsapp: {
     exchangeCode: `${P}/whatsapp/exchange-code`,
+    phoneStatus: (phoneNumberId: string) =>
+      `${P}/channels/whatsapp/status/${encodeURIComponent(phoneNumberId)}`,
+    connections: `${P}/whatsapp/connections`,
+    disconnect: (cloudApiAccountId: string) =>
+      `${P}/whatsapp/disconnect/${encodeURIComponent(cloudApiAccountId)}`,
   },
   platform: {
     workspaces: `${P}/platform/workspaces`,

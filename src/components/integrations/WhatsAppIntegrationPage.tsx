@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/axios";
 import { endpoints } from "@/lib/endpoints";
-import type { WorkspaceCloudApiConfigResponse } from "@/lib/api";
+import { whatsappApi, type WorkspaceCloudApiConfigResponse } from "@/lib/api";
+import { useQuery } from "@tanstack/react-query";
+import type { AxiosError } from "axios";
 
 const APP_ID = "303289632797814";
 const CONFIG_ID = "1592612271863244";
@@ -48,14 +50,20 @@ type EmbeddedSignupContext = {
   business_id: string | null;
 };
 
+type StatusErrorBody = { statusCode?: number; message?: string };
+
 function isConnected(config: WorkspaceCloudApiConfigResponse | null): boolean {
   return config != null && (config.status === "ACTIVE" || config.hasAccessToken === true);
 }
 
 export function WhatsAppIntegrationPage({
   initialCloudApiConfig = null,
+  variant = "single",
+  onConnected,
 }: {
   initialCloudApiConfig?: WorkspaceCloudApiConfigResponse | null;
+  variant?: "single" | "connectOnly";
+  onConnected?: () => void;
 }) {
   const [status, setStatus] = useState<ConnectionStatus>(() =>
     isConnected(initialCloudApiConfig) ? "connected" : "idle"
@@ -181,6 +189,7 @@ export function WhatsAppIntegrationPage({
                 );
                 setConnectedDisplay({ wabaId: waba });
                 setStatus("connected");
+                onConnected?.();
               })
               .catch((error: unknown) => {
                 const details = (error as { response?: { data?: unknown; status?: number } })
@@ -288,6 +297,7 @@ export function WhatsAppIntegrationPage({
             );
             setConnectedDisplay({ wabaId: wabaId });
             setStatus("connected");
+            onConnected?.();
           })
           .catch((error: unknown) => {
             const details = (error as { response?: { data?: unknown; status?: number } })
@@ -319,7 +329,64 @@ export function WhatsAppIntegrationPage({
     );
   }, [sdkReady]);
 
+  if (variant === "connectOnly") {
+    return (
+      <div className="space-y-4">
+        <div className="card card-border bg-base-200">
+          <div className="card-body">
+            <h2 className="card-title">Add WhatsApp number</h2>
+            <p className="text-base-content/80">
+              Connect an additional WhatsApp Business phone number using Meta Embedded Signup.
+            </p>
+            {cancelMessage && <p className="text-sm text-warning">{cancelMessage}</p>}
+            {exchangeError && <p className="text-sm text-error">{exchangeError}</p>}
+            <div className="card-actions">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleConnect}
+                disabled={!sdkReady || status === "loading"}
+              >
+                {status === "loading" ? (
+                  <>
+                    <span className="loading loading-spinner loading-sm" />
+                    Connecting…
+                  </>
+                ) : (
+                  "Connect with Facebook"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (status === "connected") {
+    const phoneNumberId =
+      connectedDisplay.phoneNumberId ||
+      initialCloudApiConfig?.phoneNumberId ||
+      "";
+
+    const phoneStatusQuery = useQuery({
+      queryKey: ["whatsapp", "phone-status", phoneNumberId],
+      queryFn: () => whatsappApi.fetchPhoneStatus(phoneNumberId),
+      enabled: Boolean(phoneNumberId?.trim()),
+      staleTime: 30_000,
+      retry: 1,
+    });
+
+    const queryError = phoneStatusQuery.error as AxiosError<StatusErrorBody> | null;
+    const errorStatus = queryError?.response?.status;
+    const errorMessage =
+      queryError?.response?.data?.message ||
+      queryError?.message ||
+      "Failed to load phone number status.";
+
+    const statusData = phoneStatusQuery.data;
+    const displayPhone = statusData?.displayPhoneNumber || phoneNumberId || "Unknown";
+
     return (
       <div className="space-y-4">
         <div>
@@ -341,6 +408,114 @@ export function WhatsAppIntegrationPage({
             <p className="text-sm text-base-content/60">
               Your WhatsApp Business account is linked. Connection state is loaded from the server on refresh.
             </p>
+          </div>
+        </div>
+
+        <div className="card card-border bg-base-200">
+          <div className="card-body gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h2 className="card-title">Phone number status</h2>
+                <p className="text-sm text-base-content/60">
+                  Live status from Meta for this workspace.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => phoneStatusQuery.refetch()}
+                disabled={!phoneStatusQuery.isFetched || phoneStatusQuery.isFetching}
+              >
+                {phoneStatusQuery.isFetching ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs" />
+                    Refreshing…
+                  </>
+                ) : (
+                  "Refresh"
+                )}
+              </button>
+            </div>
+
+            {!phoneNumberId?.trim() ? (
+              <div role="alert" className="alert alert-warning alert-soft">
+                <span>
+                  No phone number id found for this workspace. Refresh the page after connecting, or reconnect WhatsApp.
+                </span>
+              </div>
+            ) : phoneStatusQuery.isLoading ? (
+              <div className="space-y-2">
+                <div className="skeleton h-4 w-2/3" />
+                <div className="skeleton h-4 w-1/2" />
+                <div className="skeleton h-4 w-1/3" />
+              </div>
+            ) : errorStatus === 404 ? (
+              <div role="alert" className="alert alert-info alert-soft">
+                <span>WhatsApp not connected for this workspace.</span>
+              </div>
+            ) : errorStatus === 422 ? (
+              <div role="alert" className="alert alert-warning alert-soft">
+                <div className="space-y-1">
+                  <div>WhatsApp connection inactive.</div>
+                  <div className="text-sm opacity-70">{errorMessage}</div>
+                </div>
+              </div>
+            ) : phoneStatusQuery.isError ? (
+              <div role="alert" className="alert alert-error alert-soft">
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>Failed to load phone number status.</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      onClick={() => phoneStatusQuery.refetch()}
+                      disabled={phoneStatusQuery.isFetching}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                  <details className="collapse collapse-arrow bg-base-100/40">
+                    <summary className="collapse-title text-sm font-medium">
+                      Details
+                    </summary>
+                    <div className="collapse-content">
+                      <pre className="text-xs whitespace-pre-wrap text-base-content/70">
+                        {errorMessage}
+                      </pre>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <div className="text-xs text-base-content/60">Display phone</div>
+                  <div className="font-medium">{displayPhone}</div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-base-content/60">Verified name</div>
+                  <div className="font-medium">
+                    {statusData?.verifiedName || "—"}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-base-content/60">Verification</div>
+                  <div className="font-medium">
+                    {statusData?.verificationStatus || "Unknown"}
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-base-content/60">Quality</div>
+                  <div className="font-medium">
+                    {statusData?.qualityRating || "Unknown"}
+                  </div>
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <div className="text-xs text-base-content/60">Meta status</div>
+                  <div className="font-medium">{statusData?.status || "Unknown"}</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

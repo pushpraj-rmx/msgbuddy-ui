@@ -853,6 +853,29 @@ export interface WorkspaceCloudApiConfigResponse {
   status: CloudApiConnectionStatus;
 }
 
+export type WhatsAppPhoneStatus = {
+  phoneNumberId: string;
+  displayPhoneNumber?: string;
+  verifiedName?: string;
+  qualityRating?: string;
+  verificationStatus?: string;
+  status?: string;
+};
+
+export type CloudApiAccountStatus = "ACTIVE" | "INACTIVE" | "EXPIRED" | "ERROR" | string;
+
+export type WhatsAppConnection = {
+  id: string;
+  workspaceId?: string;
+  phoneNumberId: string;
+  wabaId?: string;
+  isDefault?: boolean;
+  status?: CloudApiAccountStatus;
+  tokenExpiresAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export const workspaceApi = {
   getWorkspace: async (id: string) => {
     const response = await api.get(endpoints.workspaces.byId(id));
@@ -898,6 +921,27 @@ export const workspaceApi = {
   ) => {
     const response = await api.put(endpoints.workspaces.cloudApi(id), data);
     return response.data as WorkspaceCloudApiConfigResponse;
+  },
+};
+
+export const whatsappApi = {
+  fetchPhoneStatus: async (phoneNumberId: string): Promise<WhatsAppPhoneStatus> => {
+    const response = await api.get<{ success: true; data: WhatsAppPhoneStatus }>(
+      endpoints.whatsapp.phoneStatus(phoneNumberId)
+    );
+    return response.data.data;
+  },
+
+  listConnections: async (): Promise<WhatsAppConnection[]> => {
+    const response = await api.get(endpoints.whatsapp.connections);
+    const body = response.data as
+      | { success: true; data: WhatsAppConnection[] }
+      | WhatsAppConnection[];
+    return Array.isArray(body) ? body : body.data;
+  },
+
+  disconnect: async (cloudApiAccountId: string): Promise<void> => {
+    await api.post(endpoints.whatsapp.disconnect(cloudApiAccountId));
   },
 };
 

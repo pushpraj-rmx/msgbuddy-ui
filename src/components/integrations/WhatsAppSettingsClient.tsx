@@ -1,0 +1,536 @@
+"use client";
+
+import { useState } from "react";
+import { WhatsAppIntegrationPage } from "@/components/integrations/WhatsAppIntegrationPage";
+import {
+  workspaceApi,
+  whatsappApi,
+  type WhatsAppConnection,
+  type WhatsAppPhoneStatus,
+  type WorkspaceProviderType,
+  type WorkspaceCloudApiConfigResponse,
+  type WorkspaceMessagingConfigPayload,
+  type WorkspaceSettingsPayload,
+  type WorkspaceCloudApiConfigPayload,
+} from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AxiosError } from "axios";
+
+export type WorkspaceSettings = Partial<WorkspaceSettingsPayload> & {
+  timezone?: string;
+  locale?: string;
+};
+
+type StatusErrorBody = { statusCode?: number; message?: string };
+
+function ConnectionRow({
+  connection,
+}: {
+  connection: WhatsAppConnection;
+}) {
+  const phoneStatusQuery = useQuery({
+    queryKey: ["whatsapp", "phone-status", connection.phoneNumberId],
+    queryFn: () => whatsappApi.fetchPhoneStatus(connection.phoneNumberId),
+    enabled: Boolean(connection.phoneNumberId?.trim()),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const queryError = phoneStatusQuery.error as AxiosError<StatusErrorBody> | null;
+  const errorStatus = queryError?.response?.status;
+  const errorMessage =
+    queryError?.response?.data?.message ||
+    queryError?.message ||
+    "Failed to load phone number status.";
+
+  const statusData: WhatsAppPhoneStatus | undefined = phoneStatusQuery.data;
+  const displayPhone =
+    statusData?.displayPhoneNumber || connection.phoneNumberId || "Unknown";
+
+  return (
+    <div className="card card-border bg-base-200">
+      <div className="card-body gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="space-y-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold truncate">{displayPhone}</h3>
+              {connection.isDefault ? (
+                <span className="badge badge-primary">Default</span>
+              ) : null}
+              {connection.status ? (
+                <span className="badge badge-ghost">{connection.status}</span>
+              ) : null}
+            </div>
+            <div className="text-xs text-base-content/60 truncate">
+              Phone number id: {connection.phoneNumberId}
+              {connection.wabaId ? ` · WABA: ${connection.wabaId}` : ""}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => phoneStatusQuery.refetch()}
+            disabled={!phoneStatusQuery.isFetched || phoneStatusQuery.isFetching}
+          >
+            {phoneStatusQuery.isFetching ? (
+              <>
+                <span className="loading loading-spinner loading-xs" />
+                Refreshing…
+              </>
+            ) : (
+              "Refresh status"
+            )}
+          </button>
+        </div>
+
+        {phoneStatusQuery.isLoading ? (
+          <div className="space-y-2">
+            <div className="skeleton h-4 w-2/3" />
+            <div className="skeleton h-4 w-1/2" />
+          </div>
+        ) : errorStatus === 404 ? (
+          <div role="alert" className="alert alert-info alert-soft">
+            <span>WhatsApp not connected for this workspace.</span>
+          </div>
+        ) : errorStatus === 422 ? (
+          <div role="alert" className="alert alert-warning alert-soft">
+            <div className="space-y-1">
+              <div>WhatsApp connection inactive.</div>
+              <div className="text-sm opacity-70">{errorMessage}</div>
+            </div>
+          </div>
+        ) : phoneStatusQuery.isError ? (
+          <div role="alert" className="alert alert-error alert-soft">
+            <details className="collapse collapse-arrow bg-base-100/40">
+              <summary className="collapse-title text-sm font-medium">
+                Failed to load status (click for details)
+              </summary>
+              <div className="collapse-content">
+                <pre className="text-xs whitespace-pre-wrap text-base-content/70">
+                  {errorMessage}
+                </pre>
+              </div>
+            </details>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <div className="text-xs text-base-content/60">Verified name</div>
+              <div className="font-medium">{statusData?.verifiedName || "—"}</div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs text-base-content/60">Verification</div>
+              <div className="font-medium">
+                {statusData?.verificationStatus || "Unknown"}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs text-base-content/60">Quality</div>
+              <div className="font-medium">{statusData?.qualityRating || "Unknown"}</div>
+            </div>
+            <div className="space-y-1">
+              <div className="text-xs text-base-content/60">Meta status</div>
+              <div className="font-medium">{statusData?.status || "Unknown"}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function WhatsAppSettingsClient({
+  workspaceId,
+  settings,
+  messagingConfig,
+  cloudApiConfig,
+}: {
+  workspaceId: string;
+  settings: WorkspaceSettings;
+  messagingConfig: WorkspaceMessagingConfigPayload;
+  cloudApiConfig: WorkspaceCloudApiConfigResponse | null;
+}) {
+  const queryClient = useQueryClient();
+  const [providerType, setProviderType] =
+    useState<WorkspaceProviderType>(messagingConfig.providerType);
+  const [messagingSaving, setMessagingSaving] = useState(false);
+  const [messagingError, setMessagingError] = useState<string | null>(null);
+
+  // TODO: BSP | BSP form state; complete BSP-specific validation/UX later
+  const [bspForm, setBspForm] = useState({
+    whatsappPhoneNumberId: settings.whatsappPhoneNumberId ?? "",
+    whatsappBusinessId: settings.whatsappBusinessId ?? "",
+    whatsappAccessToken: settings.whatsappAccessToken ?? "",
+    whatsappWebhookSecret: settings.whatsappWebhookSecret ?? "",
+  });
+  const [bspSaving, setBspSaving] = useState(false);
+  const [bspError, setBspError] = useState<string | null>(null);
+
+  const [cloudForm, setCloudForm] = useState({
+    phoneNumberId: cloudApiConfig?.phoneNumberId ?? "",
+    wabaId: cloudApiConfig?.wabaId ?? "",
+    accessToken: "",
+  });
+  const [cloudSaving, setCloudSaving] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const [cloudApiConfigState, setCloudApiConfigState] =
+    useState<WorkspaceCloudApiConfigResponse | null>(cloudApiConfig);
+
+  const connectionsQuery = useQuery({
+    queryKey: ["whatsapp", "connections"],
+    queryFn: () => whatsappApi.listConnections(),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const disconnectMutation = useMutation({
+    mutationFn: (cloudApiAccountId: string) => whatsappApi.disconnect(cloudApiAccountId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connections"] });
+    },
+  });
+
+  const handleProviderChange = async (next: WorkspaceProviderType) => {
+    setMessagingError(null);
+    setMessagingSaving(true);
+    try {
+      await workspaceApi.updateMessagingConfig(workspaceId, {
+        providerType: next,
+      });
+      setProviderType(next);
+    } catch (e) {
+      setMessagingError(e instanceof Error ? e.message : "Failed to update provider");
+    } finally {
+      setMessagingSaving(false);
+    }
+  };
+
+  // TODO: BSP | Save BSP WhatsApp credentials; add validation / success feedback later
+  const handleBspSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBspError(null);
+    setBspSaving(true);
+    try {
+      await workspaceApi.updateSettings(workspaceId, {
+        whatsappPhoneNumberId: bspForm.whatsappPhoneNumberId || undefined,
+        whatsappBusinessId: bspForm.whatsappBusinessId || undefined,
+        whatsappAccessToken: bspForm.whatsappAccessToken || undefined,
+        whatsappWebhookSecret: bspForm.whatsappWebhookSecret || undefined,
+      });
+    } catch (e) {
+      setBspError(e instanceof Error ? e.message : "Failed to save BSP settings");
+    } finally {
+      setBspSaving(false);
+    }
+  };
+
+  const handleCloudSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCloudError(null);
+    setCloudSaving(true);
+    try {
+      const payload: WorkspaceCloudApiConfigPayload = {
+        phoneNumberId: cloudForm.phoneNumberId,
+        wabaId: cloudForm.wabaId,
+      };
+      if (cloudForm.accessToken.trim()) {
+        payload.accessToken = cloudForm.accessToken;
+      }
+      const updated = await workspaceApi.updateCloudApiConfig(workspaceId, payload);
+      setCloudApiConfigState(updated);
+      setCloudForm((prev) => ({ ...prev, accessToken: "" }));
+    } catch (e) {
+      setCloudError(e instanceof Error ? e.message : "Failed to save Cloud API config");
+    } finally {
+      setCloudSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <WhatsAppIntegrationPage
+        variant="connectOnly"
+        initialCloudApiConfig={cloudApiConfigState}
+        onConnected={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connections"] });
+        }}
+      />
+
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold">Connected numbers</h2>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => connectionsQuery.refetch()}
+            disabled={connectionsQuery.isFetching}
+          >
+            {connectionsQuery.isFetching ? (
+              <>
+                <span className="loading loading-spinner loading-xs" />
+                Refreshing…
+              </>
+            ) : (
+              "Refresh list"
+            )}
+          </button>
+        </div>
+
+        {connectionsQuery.isLoading ? (
+          <div className="space-y-2">
+            <div className="skeleton h-16 w-full" />
+            <div className="skeleton h-16 w-full" />
+          </div>
+        ) : connectionsQuery.isError ? (
+          <div role="alert" className="alert alert-error alert-soft">
+            <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+              <span>Failed to load WhatsApp connections.</span>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() => connectionsQuery.refetch()}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : !connectionsQuery.data?.length ? (
+          <div role="alert" className="alert alert-info alert-soft">
+            <span>No WhatsApp numbers connected yet.</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {connectionsQuery.data.map((conn) => (
+              <div key={conn.id} className="space-y-2">
+                <ConnectionRow connection={conn} />
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-error btn-outline"
+                    onClick={() => disconnectMutation.mutate(conn.id)}
+                    disabled={disconnectMutation.isPending}
+                  >
+                    {disconnectMutation.isPending ? (
+                      <>
+                        <span className="loading loading-spinner loading-xs" />
+                        Disconnecting…
+                      </>
+                    ) : (
+                      "Disconnect"
+                    )}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card bg-base-200 shadow-sm">
+        <div className="card-body">
+          <h2 className="card-title text-lg">Provider</h2>
+          <p className="text-sm text-base-content/60">
+            Choose BSP (legacy) or Meta Cloud API for WhatsApp.
+          </p>
+          <div className="flex flex-wrap gap-4 pt-2">
+            <label className="label cursor-pointer gap-2">
+              <input
+                type="radio"
+                name="provider"
+                className="radio radio-primary"
+                checked={providerType === "BSP"}
+                onChange={() => handleProviderChange("BSP")}
+                disabled={messagingSaving}
+              />
+              <span>BSP (legacy)</span>
+            </label>
+            <label className="label cursor-pointer gap-2">
+              <input
+                type="radio"
+                name="provider"
+                className="radio radio-primary"
+                checked={providerType === "CLOUD_API"}
+                onChange={() => handleProviderChange("CLOUD_API")}
+                disabled={messagingSaving}
+              />
+              <span>Cloud API</span>
+            </label>
+          </div>
+          {messagingSaving && <span className="loading loading-spinner loading-sm" />}
+          {messagingError && (
+            <div role="alert" className="alert alert-error">
+              <span>{messagingError}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {providerType === "BSP" && (
+        <div className="card bg-base-200 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-lg">BSP WhatsApp</h2>
+            <p className="text-sm text-base-content/60">
+              Phone number ID, Business ID, access token, and webhook secret (stored
+              in workspace settings).
+            </p>
+            <form onSubmit={handleBspSubmit} className="space-y-4">
+              <label className="form-control">
+                <span className="label">Phone number ID</span>
+                <input
+                  type="text"
+                  className="input input-bordered"
+                  value={bspForm.whatsappPhoneNumberId}
+                  onChange={(e) =>
+                    setBspForm((p) => ({ ...p, whatsappPhoneNumberId: e.target.value }))
+                  }
+                  placeholder="e.g. 123456789"
+                />
+              </label>
+              <label className="form-control">
+                <span className="label">Business ID</span>
+                <input
+                  type="text"
+                  className="input input-bordered"
+                  value={bspForm.whatsappBusinessId}
+                  onChange={(e) =>
+                    setBspForm((p) => ({ ...p, whatsappBusinessId: e.target.value }))
+                  }
+                  placeholder="e.g. 123456789012345"
+                />
+              </label>
+              <label className="form-control">
+                <span className="label">Access token</span>
+                <input
+                  type="password"
+                  className="input input-bordered"
+                  value={bspForm.whatsappAccessToken}
+                  onChange={(e) =>
+                    setBspForm((p) => ({ ...p, whatsappAccessToken: e.target.value }))
+                  }
+                  placeholder="Permanent or temporary token"
+                />
+              </label>
+              <label className="form-control">
+                <span className="label">Webhook secret</span>
+                <input
+                  type="password"
+                  className="input input-bordered"
+                  value={bspForm.whatsappWebhookSecret}
+                  onChange={(e) =>
+                    setBspForm((p) => ({
+                      ...p,
+                      whatsappWebhookSecret: e.target.value,
+                    }))
+                  }
+                  placeholder="App secret or custom verify token"
+                />
+              </label>
+              <button type="submit" className="btn btn-primary" disabled={bspSaving}>
+                {bspSaving ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  "Save BSP settings"
+                )}
+              </button>
+              {bspError && (
+                <div role="alert" className="alert alert-error">
+                  <span>{bspError}</span>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {providerType === "CLOUD_API" && (
+        <div className="card bg-base-200 shadow-sm">
+          <div className="card-body">
+            <h2 className="card-title text-lg">Meta Cloud API</h2>
+            <p className="text-sm text-base-content/60">
+              Phone number ID and WABA ID. Access token is encrypted and not shown;
+              add a new token to update.
+            </p>
+            {cloudApiConfigState && (
+              <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-base-content/60">Status:</span>
+                  <span
+                    className={`badge ${
+                      cloudApiConfigState.status === "ACTIVE"
+                        ? "badge-success"
+                        : cloudApiConfigState.status === "EXPIRED"
+                          ? "badge-warning"
+                          : "badge-ghost"
+                    }`}
+                  >
+                    {cloudApiConfigState.status}
+                  </span>
+                </div>
+                {cloudApiConfigState.tokenExpiresAt && (
+                  <p className="text-sm text-base-content/60">
+                    Token expires:{" "}
+                    {new Date(cloudApiConfigState.tokenExpiresAt).toLocaleString()}
+                  </p>
+                )}
+                <p className="text-sm text-base-content/60">
+                  Access token: {cloudApiConfigState.hasAccessToken ? "Set" : "Not set"}
+                </p>
+              </div>
+            )}
+            <form onSubmit={handleCloudSubmit} className="space-y-4 mt-4">
+              <label className="form-control">
+                <span className="label">Phone number ID</span>
+                <input
+                  type="text"
+                  className="input input-bordered"
+                  value={cloudForm.phoneNumberId}
+                  onChange={(e) =>
+                    setCloudForm((p) => ({ ...p, phoneNumberId: e.target.value }))
+                  }
+                  required
+                  placeholder="e.g. 123456789"
+                />
+              </label>
+              <label className="form-control">
+                <span className="label">WABA ID</span>
+                <input
+                  type="text"
+                  className="input input-bordered"
+                  value={cloudForm.wabaId}
+                  onChange={(e) => setCloudForm((p) => ({ ...p, wabaId: e.target.value }))}
+                  required
+                  placeholder="WhatsApp Business Account ID"
+                />
+              </label>
+              <label className="form-control">
+                <span className="label">Access token (optional, to set or update)</span>
+                <input
+                  type="password"
+                  className="input input-bordered"
+                  value={cloudForm.accessToken}
+                  onChange={(e) =>
+                    setCloudForm((p) => ({ ...p, accessToken: e.target.value }))
+                  }
+                  placeholder="Leave blank to keep existing"
+                />
+              </label>
+              <button type="submit" className="btn btn-primary" disabled={cloudSaving}>
+                {cloudSaving ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  "Save Cloud API config"
+                )}
+              </button>
+              {cloudError && (
+                <div role="alert" className="alert alert-error">
+                  <span>{cloudError}</span>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
