@@ -3,6 +3,8 @@ import {
   type Campaign,
   type Template,
 } from "@/components/campaigns/CampaignsClient";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { serverFetch } from "@/lib/api";
 import { endpoints } from "@/lib/endpoints";
 
@@ -16,14 +18,12 @@ export default async function CampaignsPage() {
   const templates = templatesRes?.items ?? [];
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Campaigns</h1>
-        <p className="text-sm text-base-content/60">
-          Create and monitor outbound campaigns.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Campaigns"
+        description="Create and monitor outbound campaigns."
+      />
       <CampaignsClient initialCampaigns={campaigns} templates={templates} />
-    </div>
+    </PageContainer>
   );
 }

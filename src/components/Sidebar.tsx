@@ -12,6 +12,7 @@ import {
   DocumentDuplicateIcon,
   PhotoIcon,
   ChartBarIcon,
+  CircleStackIcon,
   Cog6ToothIcon,
   ArrowRightOnRectangleIcon,
   CommandLineIcon,
@@ -37,11 +38,13 @@ function getNav(platformRole: string) {
     { href: "/templates", label: "Templates", Icon: DocumentDuplicateIcon },
     { href: "/media", label: "Media", Icon: PhotoIcon },
     { href: "/analytics", label: "Analytics", Icon: ChartBarIcon },
+    { href: "/usage", label: "Usage", Icon: CircleStackIcon },
     { href: "/settings", label: "Settings", Icon: Cog6ToothIcon },
   ];
 
   if (canAccessPlatform(platformRole)) {
     items.push({ href: "/platform", label: "Platform", Icon: CommandLineIcon });
+    items.push({ href: "/ops", label: "Ops", Icon: CommandLineIcon });
   }
   if (isSuperAdmin(platformRole)) {
     items.push({
@@ -79,7 +82,6 @@ export function Sidebar({
           className="btn btn-ghost flex items-center gap-2 text-xl font-semibold text-primary"
           onClick={() => closeDrawer(drawerId)}
         >
-          <ChatBubbleLeftRightIcon className="h-6 w-6" />
           MsgBuddy
         </Link>
       </div>
@@ -129,3 +131,5 @@ export function Sidebar({
     </aside>
   );
 }
+
+

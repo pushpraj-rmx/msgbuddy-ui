@@ -6,6 +6,7 @@ import { useState } from "react";
 import { segmentsApi } from "@/lib/api";
 import type { Segment, SegmentQuery } from "@/lib/types";
 import { SegmentFormModal } from "./SegmentFormModal";
+import { SegmentPreviewModal } from "./SegmentPreviewModal";
 
 const SEGMENTS_QUERY_KEY = ["segments"] as const;
 
@@ -13,6 +14,7 @@ export function SegmentsPageClient() {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSegment, setEditingSegment] = useState<Segment | null>(null);
+  const [previewingSegment, setPreviewingSegment] = useState<Segment | null>(null);
 
   const { data: segments = [] } = useQuery({
     queryKey: SEGMENTS_QUERY_KEY,
@@ -25,7 +27,12 @@ export function SegmentsPageClient() {
       description?: string;
       query: SegmentQuery;
     }) => segmentsApi.create(data),
-    onSuccess: () => {
+    onSuccess: async (created) => {
+      try {
+        await segmentsApi.preview(created.id);
+      } catch {
+        // Best effort; preview is still available via explicit action.
+      }
       queryClient.invalidateQueries({ queryKey: SEGMENTS_QUERY_KEY });
       setModalOpen(false);
       setEditingSegment(null);
@@ -40,7 +47,12 @@ export function SegmentsPageClient() {
       id: string;
       data: { name?: string; description?: string; query?: SegmentQuery };
     }) => segmentsApi.update(id, data),
-    onSuccess: () => {
+    onSuccess: async (updated) => {
+      try {
+        await segmentsApi.preview(updated.id);
+      } catch {
+        // Best effort
+      }
       queryClient.invalidateQueries({ queryKey: SEGMENTS_QUERY_KEY });
       setModalOpen(false);
       setEditingSegment(null);
@@ -132,6 +144,14 @@ export function SegmentsPageClient() {
                       <button
                         type="button"
                         className="btn btn-ghost btn-sm"
+                        onClick={() => setPreviewingSegment(seg)}
+                        aria-label={`Preview ${seg.name}`}
+                      >
+                        Preview
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
                         onClick={() => {
                           setEditingSegment(seg);
                           setModalOpen(true);
@@ -182,6 +202,13 @@ export function SegmentsPageClient() {
           isPending={createMutation.isPending || updateMutation.isPending}
         />
       )}
+
+      {previewingSegment ? (
+        <SegmentPreviewModal
+          segment={previewingSegment}
+          onClose={() => setPreviewingSegment(null)}
+        />
+      ) : null}
     </div>
   );
 }

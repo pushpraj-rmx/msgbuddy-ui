@@ -18,12 +18,16 @@ export const platformKeys = {
   users: (params: PlatformUsersListParams) =>
     [...platformKeys.all, "users", params] as const,
   user: (id: string) => [...platformKeys.all, "user", id] as const,
+  userLoginHistory: (id: string) =>
+    [...platformKeys.all, "userLoginHistory", id] as const,
   webhookLogs: (params: PlatformWebhookLogsParams) =>
     [...platformKeys.all, "webhookLogs", params] as const,
   usageEvents: (params: PlatformUsageEventsParams) =>
     [...platformKeys.all, "usageEvents", params] as const,
   bspCredentials: () => [...platformKeys.all, "bspCredentials"] as const,
   channelAccounts: () => [...platformKeys.all, "channelAccounts"] as const,
+  connectedClientBusinesses: () =>
+    [...platformKeys.all, "connectedClientBusinesses"] as const,
 };
 
 export function usePlatformWorkspaces(params: PlatformWorkspacesListParams) {
@@ -75,6 +79,14 @@ export function usePlatformUser(id: string | null) {
   return useQuery({
     queryKey: platformKeys.user(id ?? ""),
     queryFn: () => platformApi.getUser(id!),
+    enabled: !!id,
+  });
+}
+
+export function usePlatformUserLoginHistory(id: string | null) {
+  return useQuery({
+    queryKey: platformKeys.userLoginHistory(id ?? ""),
+    queryFn: () => platformApi.getUserLoginHistory(id!),
     enabled: !!id,
   });
 }
@@ -138,6 +150,13 @@ export function useChannelAccounts() {
   return useQuery({
     queryKey: platformKeys.channelAccounts(),
     queryFn: () => platformApi.listChannelAccounts(),
+  });
+}
+
+export function useConnectedClientBusinesses() {
+  return useQuery({
+    queryKey: platformKeys.connectedClientBusinesses(),
+    queryFn: () => platformApi.listConnectedClientBusinesses(),
   });
 }
 

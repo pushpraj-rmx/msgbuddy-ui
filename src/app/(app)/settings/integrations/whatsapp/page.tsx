@@ -1,4 +1,6 @@
 import { WhatsAppSettingsClient } from "@/components/integrations/WhatsAppSettingsClient";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   serverFetch,
   type MeResponse,
@@ -32,19 +34,17 @@ export default async function WhatsAppIntegrationRoute() {
   ]);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">WhatsApp</h1>
-        <p className="text-sm text-base-content/60">
-          Connect and configure WhatsApp for this workspace.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="WhatsApp"
+        description="Connect and configure WhatsApp for this workspace."
+      />
       <WhatsAppSettingsClient
         workspaceId={me.workspace.id}
         settings={settings}
         messagingConfig={messagingConfig}
         cloudApiConfig={cloudApiConfig}
       />
-    </div>
+    </PageContainer>
   );
 }

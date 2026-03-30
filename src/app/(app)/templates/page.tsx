@@ -1,16 +1,15 @@
 import { TemplatesClient } from "@/components/templates/TemplatesClient";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function TemplatesPage() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Templates</h1>
-        <p className="text-sm text-base-content/60">
-          Create and manage message templates. Search, filter, sort, and
-          preview on demand.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Templates"
+        description="Create and manage message templates. Search, filter, sort, and preview on demand."
+      />
       <TemplatesClient />
-    </div>
+    </PageContainer>
   );
 }

@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { IntegrationsSettingsClient } from "@/components/integrations/IntegrationsSettingsClient";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import {
   serverFetch,
   type MeResponse,
@@ -28,33 +30,13 @@ export default async function IntegrationsSettingsPage() {
   const connected = isWhatsAppConnected(cloudApiConfig);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Integrations</h1>
-        <p className="text-sm text-base-content/60">
-          Manage external channel connections for this workspace.
-        </p>
-      </div>
-
-      <Link
-        href="/settings/integrations/whatsapp"
-        className="card card-border bg-base-200 hover:bg-base-300 transition-colors block"
-      >
-        <div className="card-body">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="space-y-1">
-              <h2 className="card-title text-base">WhatsApp</h2>
-              <p className="text-sm text-base-content/70">
-                Connect and monitor your WhatsApp Business phone number.
-              </p>
-            </div>
-            <span className={`badge ${connected ? "badge-success" : "badge-ghost"}`}>
-              {connected ? "Connected" : "Not connected"}
-            </span>
-          </div>
-        </div>
-      </Link>
-    </div>
+    <PageContainer>
+      <PageHeader
+        title="Integrations"
+        description="Manage external channel connections for this workspace."
+      />
+      <IntegrationsSettingsClient whatsappConnected={connected} />
+    </PageContainer>
   );
 }
 

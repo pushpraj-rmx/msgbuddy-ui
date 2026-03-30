@@ -130,7 +130,10 @@ export function ContactDetailClient({
                 className="toggle toggle-warning toggle-sm"
                 checked={contact.isBlocked}
                 onChange={(e) =>
-                  consentMutation.mutate({ isBlocked: e.target.checked })
+                  consentMutation.mutate({
+                    isBlocked: e.target.checked,
+                    isOptedOut: contact.isOptedOut,
+                  })
                 }
               />
             </label>
@@ -141,7 +144,10 @@ export function ContactDetailClient({
                 className="toggle toggle-error toggle-sm"
                 checked={contact.isOptedOut}
                 onChange={(e) =>
-                  consentMutation.mutate({ isOptedOut: e.target.checked })
+                  consentMutation.mutate({
+                    isBlocked: contact.isBlocked,
+                    isOptedOut: e.target.checked,
+                  })
                 }
               />
             </label>

@@ -28,12 +28,16 @@ export function SegmentFormModal({
   );
   const [tags, setTags] = useState<string[]>(segment?.query?.tags ?? []);
   const [hasEmail, setHasEmail] = useState(segment?.query?.hasEmail ?? false);
+  const [hasPhone, setHasPhone] = useState(segment?.query?.hasPhone ?? false);
   const [isBlocked, setIsBlocked] = useState(
     segment?.query?.isBlocked ?? false
   );
   const [isOptedOut, setIsOptedOut] = useState(
     segment?.query?.isOptedOut ?? false
   );
+  const [customFields, setCustomFields] = useState<
+    NonNullable<SegmentQuery["customFields"]>
+  >(segment?.query?.customFields ?? []);
   const [lastMessageAfter, setLastMessageAfter] = useState(
     segment?.query?.lastMessageAfter ?? ""
   );
@@ -46,20 +50,46 @@ export function SegmentFormModal({
     queryFn: () => tagsApi.list(),
   });
 
-  const toggleTag = (tagName: string) => {
+  const toggleTag = (tagId: string) => {
     setTags((prev) =>
-      prev.includes(tagName)
-        ? prev.filter((t) => t !== tagName)
-        : [...prev, tagName]
+      prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
     );
+  };
+
+  const addCustomField = () => {
+    setCustomFields((prev) => [
+      ...prev,
+      { name: "", op: "eq", value: "" },
+    ]);
+  };
+
+  const updateCustomField = (
+    idx: number,
+    next: Partial<NonNullable<SegmentQuery["customFields"]>[number]>
+  ) => {
+    setCustomFields((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, ...next } : row))
+    );
+  };
+
+  const removeCustomField = (idx: number) => {
+    setCustomFields((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleSubmit = () => {
     const query: SegmentQuery = {
       tags: tags.length ? tags : undefined,
       hasEmail: hasEmail || undefined,
+      hasPhone: hasPhone || undefined,
       isBlocked: isBlocked || undefined,
       isOptedOut: isOptedOut || undefined,
+      customFields: customFields
+        .map((row) => ({
+          name: row.name.trim(),
+          op: row.op,
+          value: row.value,
+        }))
+        .filter((row) => row.name && row.value),
       lastMessageAfter: lastMessageAfter || undefined,
       lastMessageBefore: lastMessageBefore || undefined,
     };
@@ -105,8 +135,8 @@ export function SegmentFormModal({
               <button
                 key={tag.id}
                 type="button"
-                className={`btn btn-sm ${tags.includes(tag.name) ? "btn-primary" : "btn-ghost"}`}
-                onClick={() => toggleTag(tag.name)}
+                className={`btn btn-sm ${tags.includes(tag.id) ? "btn-primary" : "btn-ghost"}`}
+                onClick={() => toggleTag(tag.id)}
               >
                 {tag.name}
               </button>
@@ -121,6 +151,15 @@ export function SegmentFormModal({
                 onChange={(e) => setHasEmail(e.target.checked)}
               />
               <span className="text-sm">Has email</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm"
+                checked={hasPhone}
+                onChange={(e) => setHasPhone(e.target.checked)}
+              />
+              <span className="text-sm">Has phone</span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -141,6 +180,69 @@ export function SegmentFormModal({
               <span className="text-sm">Opted out</span>
             </label>
           </div>
+
+          <div className="mt-2 rounded-xl border border-base-300 bg-base-100 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium">Custom field filters</div>
+              <button
+                type="button"
+                className="btn btn-xs btn-outline"
+                onClick={addCustomField}
+              >
+                + Add
+              </button>
+            </div>
+            {customFields.length === 0 ? (
+              <p className="mt-2 text-xs text-base-content/60">
+                Optional. Add rules like “city contains London”.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {customFields.map((row, idx) => (
+                  <div key={idx} className="grid grid-cols-12 gap-2">
+                    <input
+                      className="input input-bordered input-sm col-span-4"
+                      placeholder="field name"
+                      value={row.name}
+                      onChange={(e) =>
+                        updateCustomField(idx, { name: e.target.value })
+                      }
+                    />
+                    <select
+                      className="select select-bordered select-sm col-span-3"
+                      value={row.op}
+                      onChange={(e) =>
+                        updateCustomField(idx, {
+                          op: e.target.value as "eq" | "ne" | "contains",
+                        })
+                      }
+                    >
+                      <option value="eq">equals</option>
+                      <option value="ne">not equals</option>
+                      <option value="contains">contains</option>
+                    </select>
+                    <input
+                      className="input input-bordered input-sm col-span-4"
+                      placeholder="value"
+                      value={row.value}
+                      onChange={(e) =>
+                        updateCustomField(idx, { value: e.target.value })
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm col-span-1"
+                      onClick={() => removeCustomField(idx)}
+                      aria-label="Remove custom field rule"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <label className="label">
             <span className="label-text">Last message after (ISO date)</span>
           </label>

@@ -32,6 +32,20 @@ export function DuplicatesModal({
     },
   });
 
+  const mergeAllMutation = useMutation({
+    mutationFn: async (payload: { primaryId: string; duplicateIds: string[] }) => {
+      for (const duplicateId of payload.duplicateIds) {
+        await contactsApi.merge({ primaryId: payload.primaryId, duplicateId });
+      }
+    },
+    onSuccess: () => {
+      onMerged();
+      setMergeGroup(null);
+      setPrimaryId(null);
+      refetch();
+    },
+  });
+
   const groups = data?.duplicateGroups ?? [];
 
   const handleMerge = (group: DuplicateGroup) => {
@@ -44,6 +58,15 @@ export function DuplicatesModal({
     const duplicate = mergeGroup.contacts.find((c) => c.id !== primaryId);
     if (!duplicate) return;
     mergeMutation.mutate({ primaryId, duplicateId: duplicate.id });
+  };
+
+  const handleConfirmMergeAll = () => {
+    if (!mergeGroup || !primaryId) return;
+    const duplicateIds = mergeGroup.contacts
+      .map((c) => c.id)
+      .filter((id) => id !== primaryId);
+    if (duplicateIds.length === 0) return;
+    mergeAllMutation.mutate({ primaryId, duplicateIds });
   };
 
   return (
@@ -86,19 +109,33 @@ export function DuplicatesModal({
                   setMergeGroup(null);
                   setPrimaryId(null);
                 }}
+                disabled={mergeMutation.isPending || mergeAllMutation.isPending}
               >
                 Back
               </button>
               <button
                 type="button"
+                className="btn btn-outline btn-primary"
+                onClick={handleConfirmMergeAll}
+                disabled={!primaryId || mergeMutation.isPending || mergeAllMutation.isPending}
+              >
+                {mergeAllMutation.isPending ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  "Merge All into Primary"
+                )}
+              </button>
+              <button
+                type="button"
                 className="btn btn-primary"
                 onClick={handleConfirmMerge}
-                disabled={!primaryId || mergeMutation.isPending}
+                disabled={!primaryId || mergeMutation.isPending || mergeAllMutation.isPending}
+                title="Merge one duplicate into the selected primary"
               >
                 {mergeMutation.isPending ? (
                   <span className="loading loading-spinner loading-sm" />
                 ) : (
-                  "Merge"
+                  "Merge one"
                 )}
               </button>
             </div>

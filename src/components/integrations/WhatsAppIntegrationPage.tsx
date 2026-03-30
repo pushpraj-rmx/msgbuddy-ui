@@ -3,9 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/axios";
 import { endpoints } from "@/lib/endpoints";
+import { WhatsAppOnboardingPanel } from "@/components/integrations/WhatsAppOnboardingPanel";
 import { whatsappApi, type WorkspaceCloudApiConfigResponse } from "@/lib/api";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosError } from "axios";
+
+const isDev = process.env.NODE_ENV === "development";
+
+function devLog(...args: unknown[]) {
+  if (isDev) console.log(...args);
+}
+
+function isMultiNumberPhoneIdRequiredMessage(message: string | null | undefined): boolean {
+  if (!message || typeof message !== "string") return false;
+  return message.includes("phone_number_id is required when the WABA has multiple");
+}
 
 const APP_ID = "303289632797814";
 const CONFIG_ID = "1592612271863244";
@@ -43,11 +55,14 @@ type ExchangeCodePayload = {
   code: string;
   waba_id: string;
   business_id?: string;
+  /** Optional: from Embedded Signup FINISH when user selected a number */
+  phone_number_id?: string;
 };
 
 type EmbeddedSignupContext = {
   waba_id: string | null;
   business_id: string | null;
+  phone_number_id: string | null;
 };
 
 type StatusErrorBody = { statusCode?: number; message?: string };
@@ -87,23 +102,123 @@ export function WhatsAppIntegrationPage({
   const [signupContext, setSignupContext] = useState<EmbeddedSignupContext>({
     waba_id: null,
     business_id: null,
+    phone_number_id: null,
   });
   const pendingCodeRef = useRef<string | null>(null);
   const signupContextRef = useRef(signupContext);
-  signupContextRef.current = signupContext;
+  const lastExchangeRef = useRef<{
+    code: string;
+    waba: string;
+    business: string | null;
+    phoneNumberId?: string;
+  } | null>(null);
+  const [needsPhoneNumberId, setNeedsPhoneNumberId] = useState(false);
+  const [retryPhoneNumberId, setRetryPhoneNumberId] = useState("");
 
-  // Clear "not finished yet" error once we have waba_id (e.g. FINISH arrived after the click)
+  const queryClient = useQueryClient();
+
+  const connectionQuery = useQuery({
+    queryKey: ["whatsapp", "connection"],
+    queryFn: () => whatsappApi.getConnection(),
+    enabled: status === "connected",
+    staleTime: 15_000,
+    retry: 1,
+  });
+
+  const phoneNumberId =
+    connectedDisplay.phoneNumberId ||
+    connectionQuery.data?.phoneNumberId ||
+    initialCloudApiConfig?.phoneNumberId ||
+    "";
+
+  const phoneStatusQuery = useQuery({
+    queryKey: ["whatsapp", "phone-status", phoneNumberId],
+    queryFn: () => whatsappApi.fetchPhoneStatus(phoneNumberId),
+    enabled: status === "connected" && Boolean(phoneNumberId.trim()),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const performExchange = useCallback(
+    (
+      code: string,
+      waba: string,
+      business: string | null,
+      phoneNumberIdOpt?: string | null
+    ) => {
+      setStatus("loading");
+      setNeedsPhoneNumberId(false);
+      const payload: ExchangeCodePayload = {
+        code,
+        waba_id: waba,
+        ...(business ? { business_id: business } : {}),
+        ...(phoneNumberIdOpt?.trim()
+          ? { phone_number_id: phoneNumberIdOpt.trim() }
+          : {}),
+      };
+      lastExchangeRef.current = {
+        code,
+        waba,
+        business,
+        phoneNumberId: phoneNumberIdOpt?.trim() || undefined,
+      };
+      devLog("[WhatsApp] POST /whatsapp/exchange-code (authorization code not logged)");
+      api
+        .post(endpoints.whatsapp.exchangeCode, payload)
+        .then(async (exchangeResponse) => {
+          const body = exchangeResponse?.data as {
+            phoneNumberId?: string;
+            wabaId?: string;
+          };
+          setConnectedDisplay({
+            wabaId: body?.wabaId ?? waba,
+            phoneNumberId: body?.phoneNumberId,
+          });
+          setStatus("connected");
+          setNeedsPhoneNumberId(false);
+          setRetryPhoneNumberId("");
+          await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connections"] });
+          await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connection"] });
+          onConnected?.();
+        })
+        .catch((error: unknown) => {
+          const details = (error as { response?: { data?: unknown; status?: number } })
+            ?.response;
+          const backendMessage =
+            (details?.data as { message?: string } | undefined)?.message ?? null;
+          if (isDev) {
+            devLog("[WhatsApp] exchange-code failed", details?.status);
+          }
+          if (
+            details?.status === 400 &&
+            isMultiNumberPhoneIdRequiredMessage(backendMessage)
+          ) {
+            setNeedsPhoneNumberId(true);
+            setExchangeError(
+              `${backendMessage} Paste the Meta phone number ID for the number you want, then retry. OAuth codes may be single-use — if retry fails, use Connect with Facebook again.`
+            );
+            setStatus("idle");
+            return;
+          }
+          setExchangeError(
+            typeof backendMessage === "string"
+              ? backendMessage
+              : "Failed to connect. Please try again."
+          );
+          setStatus("error");
+        });
+    },
+    [queryClient, onConnected]
+  );
+
   useEffect(() => {
-    if (signupContext.waba_id?.trim() && exchangeError?.includes("Embedded Signup not finished yet")) {
-      setExchangeError(null);
-    }
-  }, [signupContext.waba_id, exchangeError]);
+    signupContextRef.current = signupContext;
+  }, [signupContext]);
 
   // Load Facebook JS SDK asynchronously (do not remove fbAsyncInit in cleanup so script can call it after load)
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.FB) {
-      setSdkReady(true);
       return;
     }
     window.fbAsyncInit = () => {
@@ -127,7 +242,7 @@ export function WhatsAppIntegrationPage({
     };
     const firstScript = document.getElementsByTagName("script")[0];
     firstScript?.parentNode?.insertBefore(script, firstScript);
-  }, []);
+  }, [onConnected]);
 
   // Meta Embedded Signup session events
   useEffect(() => {
@@ -146,7 +261,7 @@ export function WhatsAppIntegrationPage({
             })()
           : rawData;
       if ((data as { type?: string } | null)?.type === "WA_EMBEDDED_SIGNUP") {
-        console.log("[WhatsApp][Meta Event] WA_EMBEDDED_SIGNUP:", data);
+        devLog("[WhatsApp][Meta Event] WA_EMBEDDED_SIGNUP type received");
 
         const eventName =
           (data as { event?: string })?.event ||
@@ -160,62 +275,34 @@ export function WhatsAppIntegrationPage({
             (data as { business_id?: string })?.business_id ||
             (data as { data?: { business_id?: string } })?.data?.business_id ||
             null;
+          const finishPhoneNumberId =
+            (data as { phone_number_id?: string })?.phone_number_id ||
+            (data as { data?: { phone_number_id?: string } })?.data?.phone_number_id ||
+            null;
 
           setSignupContext({
             waba_id: wabaId,
             business_id: businessId,
+            phone_number_id: finishPhoneNumberId,
           });
           setExchangeError(null);
-          console.log("[WhatsApp] Embedded Signup FINISH captured:", {
-            waba_id: wabaId,
-            business_id: businessId,
-          });
+          devLog("[WhatsApp] Embedded Signup FINISH (waba_id / business_id captured; phone_number_id not logged)");
 
           const wabaIdTrimmed = wabaId?.trim() || null;
-          const runExchange = (code: string, waba: string, business: string | null) => {
-            setStatus("loading");
-            const payload: ExchangeCodePayload = {
-              code,
-              waba_id: waba,
-              ...(business ? { business_id: business } : {}),
-            };
-            console.log("[WhatsApp] Exchanging code with backend:", payload);
-            api
-              .post(endpoints.whatsapp.exchangeCode, payload)
-              .then((exchangeResponse) => {
-                console.log(
-                  "[WhatsApp] Backend /whatsapp/exchange-code success:",
-                  exchangeResponse?.data
-                );
-                setConnectedDisplay({ wabaId: waba });
-                setStatus("connected");
-                onConnected?.();
-              })
-              .catch((error: unknown) => {
-                const details = (error as { response?: { data?: unknown; status?: number } })
-                  ?.response;
-                const backendMessage =
-                  (details?.data as { message?: string } | undefined)?.message ?? null;
-                console.error("[WhatsApp] Backend /whatsapp/exchange-code failed:", {
-                  status: details?.status,
-                  data: details?.data,
-                  error,
-                });
-                setExchangeError(
-                  typeof backendMessage === "string" ? backendMessage : "Failed to connect. Please try again."
-                );
-                setStatus("error");
-              });
-          };
 
           const pendingCode = pendingCodeRef.current;
           if (pendingCode && wabaIdTrimmed) {
             pendingCodeRef.current = null;
-            runExchange(pendingCode, wabaIdTrimmed, businessId ?? null);
+            performExchange(
+              pendingCode,
+              wabaIdTrimmed,
+              businessId ?? null,
+              finishPhoneNumberId
+            );
           } else if (wabaIdTrimmed && window.FB) {
             setStatus("loading");
             setExchangeError(null);
-            console.log("[WhatsApp] FINISH received with waba_id but no pending code; opening FB.login to get code.");
+            devLog("[WhatsApp] FINISH: opening FB.login for code");
             window.FB.login(
               (response) => {
                 const code = response.authResponse?.code;
@@ -228,7 +315,7 @@ export function WhatsAppIntegrationPage({
                   }
                   return;
                 }
-                runExchange(code, wabaIdTrimmed, businessId ?? null);
+                performExchange(code, wabaIdTrimmed, businessId ?? null, finishPhoneNumberId);
               },
               {
                 config_id: CONFIG_ID,
@@ -243,27 +330,27 @@ export function WhatsAppIntegrationPage({
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
+  }, [performExchange]);
 
   const handleConnect = useCallback(() => {
     if (!window.FB || !sdkReady) return;
     setCancelMessage(null);
     setExchangeError(null);
+    setNeedsPhoneNumberId(false);
+    setRetryPhoneNumberId("");
     setStatus("loading");
-    console.log("[WhatsApp] Opening Facebook login popup...");
+    devLog("[WhatsApp] Opening Facebook login popup");
     window.FB.login(
       (response) => {
-        console.log("[WhatsApp][FB.login] Callback response:", response);
+        devLog("[WhatsApp] FB.login callback (auth code not logged)");
         const code = response.authResponse?.code;
 
         if (!code) {
           setStatus("idle");
           if (response.status === "unknown" || !response.authResponse) {
             setCancelMessage("Connection cancelled.");
-            console.log("[WhatsApp] Connection cancelled or failed.", response);
           } else {
             setExchangeError("Facebook login did not return a code.");
-            console.warn("[WhatsApp] Meta login did not return auth code.", response);
           }
           return;
         }
@@ -276,49 +363,15 @@ export function WhatsAppIntegrationPage({
           setExchangeError(
             "Embedded Signup not finished yet. Complete the Meta flow first—or if you just did, connection will complete automatically when it finishes."
           );
-          console.warn("[WhatsApp] Got code but waba_id not set yet; storing code until FINISH.", {
-            signupContext: ctx,
-          });
           return;
         }
 
-        const payload: ExchangeCodePayload = {
+        performExchange(
           code,
-          waba_id: wabaId,
-          ...(ctx.business_id ? { business_id: ctx.business_id } : {}),
-        };
-        console.log("[WhatsApp] Sending exchange payload (both code and waba_id):", payload);
-        api
-          .post(endpoints.whatsapp.exchangeCode, payload)
-          .then((exchangeResponse) => {
-            console.log(
-              "[WhatsApp] Backend /whatsapp/exchange-code success:",
-              exchangeResponse?.data
-            );
-            setConnectedDisplay({ wabaId: wabaId });
-            setStatus("connected");
-            onConnected?.();
-          })
-          .catch((error: unknown) => {
-            const details = (error as { response?: { data?: unknown; status?: number } })
-              ?.response;
-            const backendMessage =
-              (details?.data as { message?: string } | undefined)?.message ??
-              null;
-            console.error("[WhatsApp] Backend /whatsapp/exchange-code failed:", {
-              status: details?.status,
-              data: details?.data,
-              error,
-            });
-            if (details?.status === 400 && backendMessage) {
-              setExchangeError(backendMessage);
-            } else if (backendMessage) {
-              setExchangeError(backendMessage);
-            } else {
-              setExchangeError("Failed to connect. Please try again.");
-            }
-            setStatus("error");
-          });
+          wabaId,
+          ctx.business_id ?? null,
+          ctx.phone_number_id?.trim() ? ctx.phone_number_id : null
+        );
       },
       {
         config_id: CONFIG_ID,
@@ -327,7 +380,15 @@ export function WhatsAppIntegrationPage({
         extras: { setup: {} },
       }
     );
-  }, [sdkReady]);
+  }, [performExchange, sdkReady]);
+
+  const handleRetryExchangeWithPhoneId = useCallback(() => {
+    const last = lastExchangeRef.current;
+    if (!last) return;
+    const extra =
+      retryPhoneNumberId.trim() || last.phoneNumberId || signupContextRef.current.phone_number_id?.trim();
+    performExchange(last.code, last.waba, last.business, extra || null);
+  }, [performExchange, retryPhoneNumberId]);
 
   if (variant === "connectOnly") {
     return (
@@ -340,6 +401,32 @@ export function WhatsAppIntegrationPage({
             </p>
             {cancelMessage && <p className="text-sm text-warning">{cancelMessage}</p>}
             {exchangeError && <p className="text-sm text-error">{exchangeError}</p>}
+            {needsPhoneNumberId ? (
+              <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
+                <p className="text-sm text-base-content/80">
+                  Enter the Meta phone number ID for the number you want to use, then retry. If this
+                  fails, start Connect with Facebook again — OAuth codes are often single-use.
+                </p>
+                <label className="input input-bordered flex items-center gap-2 w-full max-w-md">
+                  <span className="label text-xs whitespace-nowrap">Phone number ID</span>
+                  <input
+                    type="text"
+                    className="grow font-mono text-sm"
+                    value={retryPhoneNumberId}
+                    onChange={(e) => setRetryPhoneNumberId(e.target.value.trim())}
+                    placeholder="From Meta Business Suite"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={handleRetryExchangeWithPhoneId}
+                  disabled={!retryPhoneNumberId.trim()}
+                >
+                  Retry exchange with phone number ID
+                </button>
+              </div>
+            ) : null}
             <div className="card-actions">
               <button
                 type="button"
@@ -364,19 +451,6 @@ export function WhatsAppIntegrationPage({
   }
 
   if (status === "connected") {
-    const phoneNumberId =
-      connectedDisplay.phoneNumberId ||
-      initialCloudApiConfig?.phoneNumberId ||
-      "";
-
-    const phoneStatusQuery = useQuery({
-      queryKey: ["whatsapp", "phone-status", phoneNumberId],
-      queryFn: () => whatsappApi.fetchPhoneStatus(phoneNumberId),
-      enabled: Boolean(phoneNumberId?.trim()),
-      staleTime: 30_000,
-      retry: 1,
-    });
-
     const queryError = phoneStatusQuery.error as AxiosError<StatusErrorBody> | null;
     const errorStatus = queryError?.response?.status;
     const errorMessage =
@@ -518,6 +592,15 @@ export function WhatsAppIntegrationPage({
             )}
           </div>
         </div>
+
+        {phoneNumberId?.trim() ? (
+          <WhatsAppOnboardingPanel
+            phoneNumberId={phoneNumberId}
+            registrationPending={connectionQuery.data?.registrationPending}
+            metaPhoneStatus={connectionQuery.data?.metaPhoneStatus ?? undefined}
+            metaVerificationStatus={connectionQuery.data?.metaVerificationStatus ?? undefined}
+          />
+        ) : null}
       </div>
     );
   }
@@ -549,11 +632,43 @@ export function WhatsAppIntegrationPage({
                 {signupContext.business_id ?? "Not captured yet"}
               </span>
             </div>
+            <div>
+              Embedded Signup phone_number_id:{" "}
+              <span className="font-medium">
+                {signupContext.phone_number_id ?? "Not captured yet"}
+              </span>
+            </div>
           </div>
           {cancelMessage && (
             <p className="text-sm text-warning">{cancelMessage}</p>
           )}
           {exchangeError && <p className="text-sm text-error">{exchangeError}</p>}
+          {needsPhoneNumberId ? (
+            <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
+              <p className="text-sm text-base-content/80">
+                Enter the Meta phone number ID for the number you want to use, then retry. If this
+                fails, start Connect with Facebook again — OAuth codes are often single-use.
+              </p>
+              <label className="input input-bordered flex items-center gap-2 w-full max-w-md">
+                <span className="label text-xs whitespace-nowrap">Phone number ID</span>
+                <input
+                  type="text"
+                  className="grow font-mono text-sm"
+                  value={retryPhoneNumberId}
+                  onChange={(e) => setRetryPhoneNumberId(e.target.value.trim())}
+                  placeholder="From Meta Business Suite"
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleRetryExchangeWithPhoneId}
+                disabled={!retryPhoneNumberId.trim()}
+              >
+                Retry exchange with phone number ID
+              </button>
+            </div>
+          ) : null}
           <div className="card-actions">
             <button
               type="button"

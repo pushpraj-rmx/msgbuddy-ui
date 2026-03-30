@@ -314,17 +314,16 @@ export function TemplatesClient() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="card bg-base-200 shadow-sm">
-        <div className="card-body p-4">
-          <div className="flex flex-wrap items-end gap-3">
+      <div className="rounded-xl border border-base-300/80 bg-base-200 p-4">
+          <div className="flex flex-wrap items-end gap-2">
             <div className="form-control min-w-[200px]">
               <label className="label py-0">
-                <span className="label-text">Search</span>
+                <span className="label-text text-xs text-base-content/60">Search</span>
               </label>
               <input
                 type="search"
                 placeholder="Search templates…"
-                className="input input-bordered input-sm w-full"
+                className="input input-bordered input-sm w-full rounded-xl transition-all duration-150 focus:border-primary/50"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -334,10 +333,10 @@ export function TemplatesClient() {
             </div>
             <div className="form-control w-36">
               <label className="label py-0">
-                <span className="label-text">Channel</span>
+                <span className="label-text text-xs text-base-content/60">Channel</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full"
+                className="select select-bordered select-sm w-full rounded-xl"
                 value={channel}
                 onChange={(e) => {
                   setChannel(e.target.value);
@@ -354,10 +353,10 @@ export function TemplatesClient() {
             </div>
             <div className="form-control w-40">
               <label className="label py-0">
-                <span className="label-text">Category</span>
+                <span className="label-text text-xs text-base-content/60">Category</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full"
+                className="select select-bordered select-sm w-full rounded-xl"
                 value={category}
                 onChange={(e) => {
                   setCategory(e.target.value);
@@ -374,10 +373,10 @@ export function TemplatesClient() {
             </div>
             <div className="form-control w-28">
               <label className="label py-0">
-                <span className="label-text">Active</span>
+                <span className="label-text text-xs text-base-content/60">Active</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full"
+                className="select select-bordered select-sm w-full rounded-xl"
                 value={isActive}
                 onChange={(e) => {
                   setIsActive(e.target.value);
@@ -391,10 +390,10 @@ export function TemplatesClient() {
             </div>
             <div className="form-control w-28">
               <label className="label py-0">
-                <span className="label-text">Synced</span>
+                <span className="label-text text-xs text-base-content/60">Synced</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full"
+                className="select select-bordered select-sm w-full rounded-xl"
                 value={hasProviderId}
                 onChange={(e) => {
                   setHasProviderId(e.target.value);
@@ -408,10 +407,10 @@ export function TemplatesClient() {
             </div>
             <div className="form-control w-32">
               <label className="label py-0">
-                <span className="label-text">Sort</span>
+                <span className="label-text text-xs text-base-content/60">Sort</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full"
+                className="select select-bordered select-sm w-full rounded-xl"
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value);
@@ -427,7 +426,7 @@ export function TemplatesClient() {
             </div>
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
               onClick={() => {
                 setSortOrder((o) => (o === "desc" ? "asc" : "desc"));
                 setPage(1);
@@ -438,10 +437,10 @@ export function TemplatesClient() {
             </button>
             <div className="form-control w-20">
               <label className="label py-0">
-                <span className="label-text">Per page</span>
+                <span className="label-text text-xs text-base-content/60">Per page</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full"
+                className="select select-bordered select-sm w-full rounded-xl"
                 value={limit}
                 onChange={(e) => {
                   setLimit(Number(e.target.value));
@@ -464,7 +463,7 @@ export function TemplatesClient() {
               )}
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
+                className="btn btn-primary btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
                 onClick={() => setCreating(true)}
                 disabled={atLimit}
                 title={atLimit ? "Template limit reached" : undefined}
@@ -473,7 +472,7 @@ export function TemplatesClient() {
               </button>
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
+                className="btn btn-outline btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
                 onClick={handleImport}
                 disabled={importMutation.isPending}
               >
@@ -485,7 +484,7 @@ export function TemplatesClient() {
               </button>
               <button
                 type="button"
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
                 onClick={() => refetch()}
                 disabled={isFetching}
               >
@@ -497,7 +496,6 @@ export function TemplatesClient() {
               </button>
             </div>
           </div>
-        </div>
       </div>
 
       {importMutation.isSuccess && importMutation.data && (
@@ -522,9 +520,9 @@ export function TemplatesClient() {
       )}
 
       {/* Table */}
-      <div className="card bg-base-200 shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-base-300/80 bg-base-200">
         <div className="overflow-x-auto">
-          <table className="table table-zebra">
+          <table className="table table-sm table-zebra">
             <thead>
               {table.getHeaderGroups().map((hg) => (
                 <tr key={hg.id}>
@@ -535,8 +533,8 @@ export function TemplatesClient() {
                         ["name", "updatedAt", "createdAt", "category", "isActive", "providerStatus"].includes(
                           h.id
                         )
-                          ? "cursor-pointer select-none"
-                          : ""
+                          ? "cursor-pointer select-none text-xs font-medium text-base-content/60"
+                          : "text-xs font-medium text-base-content/60"
                       }
                       onClick={() =>
                         ["name", "updatedAt", "createdAt", "category", "isActive", "providerStatus"].includes(
@@ -574,7 +572,7 @@ export function TemplatesClient() {
                 table.getRowModel().rows.map((row) => (
                   <tr key={row.id}>
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id}>
+                      <td key={cell.id} className="align-middle text-sm">
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext()
@@ -590,7 +588,7 @@ export function TemplatesClient() {
 
         {/* Pagination */}
         {data && data.total > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-2 p-3 border-t border-base-300">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 p-3">
             <p className="text-sm text-base-content/70">
               Showing {(page - 1) * limit + 1}–{Math.min(page * limit, data.total)} of{" "}
               {data.total}
@@ -598,7 +596,7 @@ export function TemplatesClient() {
             <div className="join">
               <button
                 type="button"
-                className="btn btn-sm join-item"
+                className="btn btn-sm join-item rounded-xl transition-all duration-150 active:scale-[0.99]"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
               >
@@ -606,13 +604,13 @@ export function TemplatesClient() {
               </button>
               <button
                 type="button"
-                className="btn btn-sm join-item btn-disabled no-animation"
+                className="btn btn-sm join-item btn-disabled no-animation rounded-xl"
               >
                 Page {page} of {totalPages}
               </button>
               <button
                 type="button"
-                className="btn btn-sm join-item"
+                className="btn btn-sm join-item rounded-xl transition-all duration-150 active:scale-[0.99]"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
               >

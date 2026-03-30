@@ -21,14 +21,52 @@ const setAuthCookies = async ({
     maxAge,
   });
 
-  cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
-    path: "/",
-    sameSite: "lax",
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 30 * 24 * 60 * 60,
-  });
+  if (refreshToken) {
+    cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
+      path: "/",
+      sameSite: "lax",
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 30 * 24 * 60 * 60,
+    });
+  }
 };
+
+/** Exchange httpOnly refresh cookie for new tokens (used by client axios after 401). */
+export async function refreshSessionAction(): Promise<
+  | { success: true; accessToken: string; expiresIn?: number }
+  | { success: false }
+> {
+  const cookieStore = await cookies();
+  const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
+  if (!refreshToken) {
+    return { success: false };
+  }
+
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoints.auth.refresh}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      return { success: false };
+    }
+
+    const payload = (await response.json()) as AuthResponse;
+    await setAuthCookies(payload);
+
+    return {
+      success: true,
+      accessToken: payload.accessToken,
+      expiresIn: payload.expiresIn,
+    };
+  } catch {
+    return { success: false };
+  }
+}
 
 export async function loginAction(email: string, password: string) {
   try {

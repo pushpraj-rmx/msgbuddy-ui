@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { WhatsAppIntegrationPage } from "@/components/integrations/WhatsAppIntegrationPage";
+import { WhatsAppOnboardingPanel } from "@/components/integrations/WhatsAppOnboardingPanel";
 import {
   workspaceApi,
   whatsappApi,
@@ -134,6 +135,13 @@ function ConnectionRow({
             </div>
           </div>
         )}
+
+        <WhatsAppOnboardingPanel
+          phoneNumberId={connection.phoneNumberId}
+          registrationPending={connection.registrationPending}
+          metaPhoneStatus={connection.metaPhoneStatus ?? undefined}
+          metaVerificationStatus={connection.metaVerificationStatus ?? undefined}
+        />
       </div>
     </div>
   );

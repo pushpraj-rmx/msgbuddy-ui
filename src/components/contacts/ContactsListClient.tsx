@@ -8,8 +8,14 @@ import {
 } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { EyeIcon } from "@heroicons/react/24/outline";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { contactsApi, type ContactsListSort, tagsApi } from "@/lib/api";
+import {
+  isContactBulkUpdated,
+  isContactUpdated,
+  parseWorkspaceSseEvent,
+} from "@/lib/sseEvents";
 import type { Contact } from "@/lib/types";
 import { ContactDetailDrawer } from "./ContactDetailDrawer";
 import { ContactFormModal } from "./ContactFormModal";
@@ -82,12 +88,23 @@ function getApiError(err: unknown): string {
     ?.data?.message ?? "Something went wrong.";
 }
 
+function toCsvCell(value: string | number | boolean | null | undefined): string {
+  if (value == null) return "";
+  const text = String(value);
+  if (text.includes(",") || text.includes('"') || text.includes("\n")) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
+  return text;
+}
+
 export function ContactsListClient({
+  workspaceId,
   initialContacts,
   initialNextCursor,
   initialTotalCount,
   selectedSegmentId,
 }: {
+  workspaceId: string;
   initialContacts: Contact[];
   initialNextCursor?: string;
   initialTotalCount?: number;
@@ -117,6 +134,10 @@ export function ContactsListClient({
   const [bulkTagSelectedId, setBulkTagSelectedId] = useState<string | null>(
     null
   );
+  const [bulkSseNotice, setBulkSseNotice] = useState<{
+    imported: number;
+    failed: number;
+  } | null>(null);
 
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const segmentId = selectedSegmentId ?? null;
@@ -187,6 +208,40 @@ export function ContactsListClient({
   useEffect(() => {
     setDisplayPageIndex(0);
   }, [debouncedSearch, sortKey, sortDir]);
+
+  useEffect(() => {
+    if (!workspaceId?.trim()) return;
+    const source = new EventSource(`/api/sse/workspace/${workspaceId}`);
+    source.onmessage = (event) => {
+      const ev = parseWorkspaceSseEvent(event.data);
+      if (!ev) return;
+      if (isContactBulkUpdated(ev.type)) {
+        void queryClient.invalidateQueries({ queryKey: ["contacts", "list"] });
+        const imported = Number(ev.data.importedCount ?? 0);
+        const failed = Number(ev.data.failedCount ?? 0);
+        setBulkSseNotice({ imported, failed });
+        return;
+      }
+      if (isContactUpdated(ev.type)) {
+        const id =
+          typeof ev.data.contactId === "string" ? ev.data.contactId : undefined;
+        void queryClient.invalidateQueries({ queryKey: ["contacts", "list"] });
+        if (id) {
+          void queryClient.invalidateQueries({ queryKey: ["contacts", id] });
+        }
+      }
+    };
+    source.onerror = () => {
+      source.close();
+    };
+    return () => source.close();
+  }, [workspaceId, queryClient]);
+
+  useEffect(() => {
+    if (!bulkSseNotice) return;
+    const t = window.setTimeout(() => setBulkSseNotice(null), 8000);
+    return () => window.clearTimeout(t);
+  }, [bulkSseNotice]);
 
   const createMutation = useMutation({
     mutationFn: (payload: {
@@ -384,7 +439,45 @@ export function ContactsListClient({
     setExporting(true);
     setError(null);
     try {
-      await contactsApi.exportCsv();
+      if (selectedContactIds.size > 0) {
+        const selected = allLoadedContacts.filter((contact) =>
+          selectedContactIds.has(contact.id)
+        );
+        const header = [
+          "id",
+          "name",
+          "email",
+          "emailLabel",
+          "phone",
+          "phoneLabel",
+          "isBlocked",
+          "isOptedOut",
+          "tags",
+        ];
+        const rows = selected.map((contact) => [
+          toCsvCell(contact.id),
+          toCsvCell(contact.name ?? ""),
+          toCsvCell(contact.email ?? ""),
+          toCsvCell(contact.emailLabel ?? ""),
+          toCsvCell(contact.phone ?? ""),
+          toCsvCell(contact.phoneLabel ?? ""),
+          toCsvCell(contact.isBlocked ?? false),
+          toCsvCell(contact.isOptedOut ?? false),
+          toCsvCell((contact.tags ?? []).map((tag) => tag.name).join("|")),
+        ]);
+        const csv = [header.join(","), ...rows.map((row) => row.join(","))].join(
+          "\n"
+        );
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "contacts-selected.csv";
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        await contactsApi.exportCsv();
+      }
     } catch (err) {
       setError(getApiError(err));
     } finally {
@@ -480,12 +573,32 @@ export function ContactsListClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {bulkSseNotice ? (
+        <div role="status" className="alert alert-success alert-soft text-sm">
+          <span>
+            Contacts updated from import: {bulkSseNotice.imported} imported
+            {bulkSseNotice.failed > 0
+              ? `, ${bulkSseNotice.failed} failed`
+              : ""}
+            .
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            aria-label="Dismiss"
+            onClick={() => setBulkSseNotice(null)}
+          >
+            ✕
+          </button>
+        </div>
+      ) : null}
+      <div className="rounded-xl border border-base-300/80 bg-base-200 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <input
             type="text"
             placeholder="Search contacts…"
-            className="input input-bordered input-sm w-full sm:max-w-xs"
+            className="input input-bordered input-sm w-full rounded-xl transition-all duration-150 focus:border-primary/50"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
@@ -493,33 +606,35 @@ export function ContactsListClient({
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
             onClick={() => setImporting(true)}
           >
             Import
           </button>
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
             onClick={handleExport}
             disabled={exporting}
           >
             {exporting ? (
               <span className="loading loading-spinner loading-sm" />
             ) : (
-              "Export"
+              selectedContactIds.size > 0
+                ? `Export selected (${selectedContactIds.size})`
+                : "Export"
             )}
           </button>
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
             onClick={() => setDuplicatesOpen(true)}
           >
             Find duplicates
           </button>
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
             onClick={() => invalidateContacts()}
             disabled={loadingList}
           >
@@ -532,24 +647,25 @@ export function ContactsListClient({
           {selectedContactIds.size > 0 && (
             <button
               type="button"
-              className="btn btn-outline btn-sm"
+              className="btn btn-outline btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
               onClick={() => setBulkTagOpen(true)}
               disabled={bulkAssignTagMutation.isPending}
             >
               Add tag to {selectedContactIds.size} selected
             </button>
           )}
-          <Link href="/contacts/tags" className="btn btn-ghost btn-sm">
+          <Link href="/contacts/tags" className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]">
             Manage tags
           </Link>
           <button
             type="button"
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
             onClick={() => setCreating(true)}
           >
             Add Person
           </button>
         </div>
+      </div>
       </div>
 
       {error && (
@@ -603,8 +719,8 @@ export function ContactsListClient({
       {!loadingList && (totalCount > 0 || totalFiltered > 0) && <PaginationBar />}
 
       {loadingList && sorted.length === 0 && (
-        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-          <table className="table">
+        <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-100">
+          <table className="table table-sm">
             <thead>
               <tr>
                 <th>Summary</th>
@@ -636,8 +752,8 @@ export function ContactsListClient({
       )}
 
       {!loadingList && sorted.length > 0 && (
-        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-          <table className="table table-zebra">
+        <div className="overflow-x-auto rounded-xl border border-base-300/80 bg-base-100">
+          <table className="table table-sm table-zebra">
             <thead>
               <tr>
                 <th className="w-0 p-2" onClick={(e) => e.stopPropagation()}>
@@ -654,10 +770,10 @@ export function ContactsListClient({
                     aria-label="Select all on page"
                   />
                 </th>
-                <th>
+                <th className="text-xs font-medium text-base-content/60">
                   <button
                     type="button"
-                    className="font-semibold hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-base-content/70 hover:text-base-content"
                     onClick={() => handleSort("name")}
                   >
                     Summary{" "}
@@ -668,10 +784,10 @@ export function ContactsListClient({
                       : ""}
                   </button>
                 </th>
-                <th>
+                <th className="text-xs font-medium text-base-content/60">
                   <button
                     type="button"
-                    className="font-semibold hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-base-content/70 hover:text-base-content"
                     onClick={() => handleSort("email")}
                   >
                     Email Address{" "}
@@ -682,10 +798,10 @@ export function ContactsListClient({
                       : ""}
                   </button>
                 </th>
-                <th>
+                <th className="text-xs font-medium text-base-content/60">
                   <button
                     type="button"
-                    className="font-semibold hover:underline"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-base-content/70 hover:text-base-content"
                     onClick={() => handleSort("phone")}
                   >
                     Phone Number{" "}
@@ -696,7 +812,7 @@ export function ContactsListClient({
                       : ""}
                   </button>
                 </th>
-                <th>Location / Tags</th>
+                <th className="text-xs font-medium text-base-content/60">Location / Tags</th>
                 <th className="w-0" />
               </tr>
             </thead>
@@ -711,7 +827,7 @@ export function ContactsListClient({
                 return (
                   <tr
                     key={contact.id}
-                    className="cursor-pointer hover:bg-base-200 transition-colors"
+                    className="cursor-pointer transition-colors duration-150 hover:bg-base-200/70"
                     onClick={() => openDrawer(contact)}
                   >
                     <td
@@ -727,7 +843,7 @@ export function ContactsListClient({
                         aria-label={`Select ${name}`}
                       />
                     </td>
-                    <td>
+                    <td className="align-middle">
                       <div className="flex items-center gap-3">
                         <div className="avatar placeholder">
                           <div className="bg-primary text-primary-content w-10 rounded-full">
@@ -737,16 +853,16 @@ export function ContactsListClient({
                           </div>
                         </div>
                         <div>
-                          <p className="font-medium">{name}</p>
+                          <p className="text-sm font-medium text-base-content">{name}</p>
                           {email && (
-                            <p className="text-xs text-base-content/60">
+                            <p className="text-xs text-base-content/55">
                               {email}
                             </p>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td>
+                    <td className="align-middle text-sm text-base-content/80">
                       {"email" in contact ? (
                         <>
                           {contact.email || "—"}
@@ -761,7 +877,7 @@ export function ContactsListClient({
                         "—"
                       )}
                     </td>
-                    <td>
+                    <td className="align-middle text-sm text-base-content/85">
                       {contact.phone}
                       {"phoneLabel" in contact && contact.phoneLabel && (
                         <span className="ml-1 text-base-content/50 text-xs">
@@ -769,7 +885,7 @@ export function ContactsListClient({
                         </span>
                       )}
                     </td>
-                    <td>
+                    <td className="align-middle">
                       {tags.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {tags.slice(0, 3).map((tag) => (
@@ -798,26 +914,7 @@ export function ContactsListClient({
                         aria-label="Quick view"
                         title="Quick view"
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                          />
-                        </svg>
+                        <EyeIcon className="h-4 w-4" />
                       </button>
                     </td>
                   </tr>

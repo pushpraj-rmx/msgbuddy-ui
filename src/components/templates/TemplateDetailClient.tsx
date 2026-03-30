@@ -13,8 +13,10 @@ import {
   useRefreshTemplateStatus,
   useCreateTemplateVersion,
   useUpdateTemplateVersion,
+  useUpdateTemplate,
 } from "@/hooks/use-templates";
 import type {
+  TemplateCategory,
   TemplateVersionStatus,
   WorkspaceRole,
 } from "@/lib/types";
@@ -60,6 +62,11 @@ export function TemplateDetailClient({ templateId, userRole }: Props) {
   const [rejectModalVersion, setRejectModalVersion] = useState<number | null>(null);
   const [createVersionOpen, setCreateVersionOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [editTemplateOpen, setEditTemplateOpen] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [templateCategory, setTemplateCategory] = useState<TemplateCategory>("UTILITY");
+  const [templateActive, setTemplateActive] = useState(true);
 
   const templateQuery = useTemplate(templateId, {
     refetchInterval: (query) => {
@@ -105,6 +112,16 @@ export function TemplateDetailClient({ templateId, userRole }: Props) {
   const refreshStatusMutation = useRefreshTemplateStatus();
   const createVersionMutation = useCreateTemplateVersion();
   const updateVersionMutation = useUpdateTemplateVersion();
+  const updateTemplateMutation = useUpdateTemplate();
+
+  const openTemplateEditor = useCallback(() => {
+    if (!template) return;
+    setTemplateName(template.name);
+    setTemplateDescription(template.description ?? "");
+    setTemplateCategory(template.category);
+    setTemplateActive(template.isActive);
+    setEditTemplateOpen(true);
+  }, [template]);
 
   const handleSubmit = useCallback(() => {
     if (!activeVersionNumber) return;
@@ -216,6 +233,13 @@ export function TemplateDetailClient({ templateId, userRole }: Props) {
           disabled={refreshStatusMutation.isPending}
         >
           {refreshStatusMutation.isPending ? "Refreshing…" : "Refresh provider status"}
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={openTemplateEditor}
+        >
+          Edit template
         </button>
       </div>
 
@@ -439,7 +463,8 @@ export function TemplateDetailClient({ templateId, userRole }: Props) {
         rejectMutation.error ||
         syncMutation.error ||
         archiveMutation.error ||
-        refreshStatusMutation.error) && (
+        refreshStatusMutation.error ||
+        updateTemplateMutation.error) && (
         <div role="alert" className="alert alert-error">
           <span>
             {getApiError(
@@ -448,7 +473,8 @@ export function TemplateDetailClient({ templateId, userRole }: Props) {
                 rejectMutation.error ??
                 syncMutation.error ??
                 archiveMutation.error ??
-                refreshStatusMutation.error
+                refreshStatusMutation.error ??
+                updateTemplateMutation.error
             )}
           </span>
         </div>
@@ -476,12 +502,101 @@ export function TemplateDetailClient({ templateId, userRole }: Props) {
         />
       )}
 
+      {editTemplateOpen && (
+        <dialog open className="modal modal-middle">
+          <div className="modal-box">
+            <h3 className="font-semibold">Edit template</h3>
+            <div className="mt-3 space-y-3">
+              <label className="form-control">
+                <span className="label-text">Name</span>
+                <input
+                  className="input input-bordered"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                />
+              </label>
+              <label className="form-control">
+                <span className="label-text">Description</span>
+                <textarea
+                  className="textarea textarea-bordered"
+                  value={templateDescription}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                />
+              </label>
+              <label className="form-control">
+                <span className="label-text">Category</span>
+                <select
+                  className="select select-bordered"
+                  value={templateCategory}
+                  onChange={(e) => setTemplateCategory(e.target.value as TemplateCategory)}
+                >
+                  <option value="UTILITY">UTILITY</option>
+                  <option value="MARKETING">MARKETING</option>
+                  <option value="AUTHENTICATION">AUTHENTICATION</option>
+                </select>
+              </label>
+              <label className="label cursor-pointer justify-start gap-2">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm"
+                  checked={templateActive}
+                  onChange={(e) => setTemplateActive(e.target.checked)}
+                />
+                <span className="label-text">Active</span>
+              </label>
+            </div>
+            <div className="modal-action">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setEditTemplateOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={updateTemplateMutation.isPending || !templateName.trim()}
+                onClick={() => {
+                  updateTemplateMutation.mutate(
+                    {
+                      id: templateId,
+                      data: {
+                        name: templateName.trim(),
+                        description: templateDescription.trim() || undefined,
+                        category: templateCategory,
+                        isActive: templateActive,
+                      },
+                    },
+                    {
+                      onSuccess: () => {
+                        setEditTemplateOpen(false);
+                        templateQuery.refetch();
+                      },
+                    }
+                  );
+                }}
+              >
+                {updateTemplateMutation.isPending ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+          <form
+            method="dialog"
+            className="modal-backdrop"
+            onSubmit={() => setEditTemplateOpen(false)}
+          >
+            <button type="submit">close</button>
+          </form>
+        </dialog>
+      )}
+
       {rejectModalVersion != null && (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
             <h3 className="font-semibold">Reject version</h3>
             <p className="text-sm text-base-content/70 py-2">
-              Provide a reason for rejection (optional but recommended).
+              Provide a reason for rejection (required).
             </p>
             <textarea
               className="textarea textarea-bordered w-full mt-2"

@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import { mediaApi } from "@/lib/api";
+import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 
 export type MediaItem = {
   id: string;
   url: string;
   mimeType: string;
   size?: number;
+  fileName?: string;
+  providerStatus?: string;
+  createdAt?: string;
 };
 
 const LIMIT = 50;
@@ -25,6 +29,11 @@ export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [selectedMediaId, setSelectedMediaId] = useState<string | null>(null);
+  const [selectedMedia, setSelectedMedia] = useState<Record<string, unknown> | null>(
+    null
+  );
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -84,6 +93,46 @@ export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
     }
   };
 
+  const handleDetails = async (id: string) => {
+    setActionBusyId(id);
+    setError(null);
+    try {
+      const detail = (await mediaApi.getById(id)) as Record<string, unknown>;
+      setSelectedMediaId(id);
+      setSelectedMedia(detail);
+    } catch (err: unknown) {
+      setError(getApiError(err) || "Failed to fetch media details.");
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handleSync = async (id: string, provider: "whatsapp" | "telegram") => {
+    setActionBusyId(id);
+    setError(null);
+    try {
+      await mediaApi.syncToProvider(id, provider);
+      await refresh();
+    } catch (err: unknown) {
+      setError(getApiError(err) || "Sync failed.");
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      await mediaApi.retryFailedSyncs();
+      await refresh();
+    } catch (err: unknown) {
+      setError(getApiError(err) || "Failed to retry syncs.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -102,6 +151,14 @@ export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
           {uploading && <span className="loading loading-spinner" />}
         </div>
         <div className="flex gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={handleRetryFailed}
+            disabled={loading}
+          >
+            Retry failed syncs
+          </button>
           <button type="button" className="btn btn-ghost" onClick={refresh}>
             Refresh
           </button>
@@ -134,12 +191,15 @@ export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
                 // Media URLs are dynamic provider/CDN links; keep plain img preview here.
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={item.url}
+                  src={resolveMediaUrlForUi(item.url)}
                   alt="media"
                   className="h-full w-full object-cover"
                 />
               ) : item.mimeType.startsWith("video/") ? (
-                <video src={item.url} className="h-full w-full object-cover" />
+                <video
+                  src={resolveMediaUrlForUi(item.url)}
+                  className="h-full w-full object-cover"
+                />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-sm text-base-content/60">
                   {item.mimeType}
@@ -147,22 +207,78 @@ export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
               )}
             </figure>
             <div className="card-body p-3">
-              <p className="truncate text-sm">{item.url}</p>
+              <p className="truncate text-sm">{item.fileName || item.url}</p>
               <div className="flex items-center justify-between text-xs text-base-content/60">
                 <span>{item.mimeType}</span>
                 {item.size ? <span>{item.size} bytes</span> : null}
               </div>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm mt-2"
-                onClick={() => handleDelete(item.id)}
-              >
-                Delete
-              </button>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <a
+                  className="btn btn-sm btn-outline"
+                  href={mediaApi.downloadUrl(item.id)}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Download
+                </a>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => handleDetails(item.id)}
+                  disabled={actionBusyId === item.id}
+                >
+                  Details
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => handleSync(item.id, "whatsapp")}
+                  disabled={actionBusyId === item.id}
+                >
+                  Sync WA
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => handleSync(item.id, "telegram")}
+                  disabled={actionBusyId === item.id}
+                >
+                  Sync TG
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm col-span-2"
+                  onClick={() => handleDelete(item.id)}
+                  disabled={actionBusyId === item.id}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           </div>
         ))}
       </div>
+
+      {selectedMediaId && selectedMedia ? (
+        <div className="rounded-xl border border-base-300 bg-base-200 p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Media details</h3>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={() => {
+                setSelectedMediaId(null);
+                setSelectedMedia(null);
+              }}
+            >
+              Close
+            </button>
+          </div>
+          <pre className="max-h-64 overflow-auto rounded-lg bg-base-100 p-3 text-xs">
+            {JSON.stringify(selectedMedia, null, 2)}
+          </pre>
+        </div>
+      ) : null}
 
       {loading && (
         <div className="flex items-center gap-2 text-sm text-base-content/60">

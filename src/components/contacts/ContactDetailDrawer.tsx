@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { contactsApi, tagsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
 import { TagsPicker } from "./TagsPicker";
+import { CustomFieldsSection } from "./CustomFieldsSection";
 
 function getInitials(name?: string, phone?: string): string {
   if (name && name.trim()) {
@@ -138,6 +139,13 @@ export function ContactDetailDrawer({
                   removeTagsMutation.isPending) && (
                   <span className="loading loading-spinner loading-sm mt-1" />
                 )}
+              </section>
+
+              <section>
+                <h3 className="text-sm font-semibold text-base-content/70 mb-2">
+                  Custom fields
+                </h3>
+                <CustomFieldsSection contactId={contact.id} />
               </section>
 
               <div className="space-y-3 text-sm">

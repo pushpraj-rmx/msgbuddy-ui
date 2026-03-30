@@ -5,8 +5,10 @@ import {
   useAssignChannelAccount,
   useBspCredentials,
   useChannelAccounts,
+  useConnectedClientBusinesses,
   usePlatformUsageEvents,
   usePlatformUser,
+  usePlatformUserLoginHistory,
   usePlatformUsers,
   usePlatformWebhookLogs,
   usePlatformWorkspace,
@@ -25,7 +27,8 @@ type TabKey =
   | "webhookLogs"
   | "usageEvents"
   | "bspCredentials"
-  | "channelAccounts";
+  | "channelAccounts"
+  | "connectedClientBusinesses";
 
 function getApiError(err: unknown): string {
   return (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -68,6 +71,10 @@ export function PlatformConsoleClient({
             { key: "usageEvents", label: "Usage Events" },
             { key: "bspCredentials", label: "BSP Credentials" },
             { key: "channelAccounts", label: "Channel Accounts" },
+            {
+              key: "connectedClientBusinesses",
+              label: "Client Businesses",
+            },
           ] as Array<{ key: TabKey; label: string }>)
         : ([
             { key: "workspaces", label: "Workspaces" },
@@ -100,6 +107,9 @@ export function PlatformConsoleClient({
       {tab === "usageEvents" && <UsageEventsTab />}
       {tab === "bspCredentials" && superAdmin && <BspCredentialsTab />}
       {tab === "channelAccounts" && superAdmin && <ChannelAccountsTab />}
+      {tab === "connectedClientBusinesses" && superAdmin && (
+        <ConnectedClientBusinessesTab />
+      )}
     </div>
   );
 }
@@ -342,6 +352,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
     limit,
   });
   const detail = usePlatformUser(selectedUserId);
+  const loginHistory = usePlatformUserLoginHistory(selectedUserId);
   const updatePlatformRole = useUpdatePlatformRole();
 
   return (
@@ -507,6 +518,34 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
                       <li className="list-row text-base-content/60">No memberships.</li>
                     )}
                   </ul>
+                </div>
+                <div className="text-sm">
+                  <div className="font-medium">Login history</div>
+                  {loginHistory.isLoading ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : loginHistory.error ? (
+                    <div className="text-error text-xs">
+                      {getApiError(loginHistory.error)}
+                    </div>
+                  ) : (
+                    <ul className="list rounded-box border border-base-300 bg-base-100">
+                      {loginHistory.data?.slice(0, 20).map((entry, idx) => (
+                        <li
+                          className="list-row text-xs"
+                          key={String(entry.id ?? `${entry.createdAt ?? "unknown"}-${idx}`)}
+                        >
+                          <div>{formatDate(String(entry.createdAt ?? ""))}</div>
+                          <div className="truncate">{String(entry.ipAddress ?? "-")}</div>
+                          <div className="truncate">{String(entry.userAgent ?? "-")}</div>
+                        </li>
+                      ))}
+                      {!loginHistory.data?.length && (
+                        <li className="list-row text-base-content/60">
+                          No login history.
+                        </li>
+                      )}
+                    </ul>
+                  )}
                 </div>
                 {superAdmin ? (
                   <div className="flex flex-wrap items-center gap-2">
@@ -985,6 +1024,49 @@ function ChannelAccountsTab() {
               <tr>
                 <td colSpan={4} className="text-center text-base-content/60">
                   No channel accounts found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ConnectedClientBusinessesTab() {
+  const list = useConnectedClientBusinesses();
+
+  return (
+    <div className="space-y-4">
+      {list.error && (
+        <div role="alert" className="alert alert-error">
+          <span>{getApiError(list.error)}</span>
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+        <table className="table table-sm">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Verification</th>
+              <th>Business status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.data?.map((business) => (
+              <tr key={business.id}>
+                <td className="max-w-48 truncate">{business.id}</td>
+                <td>{business.name}</td>
+                <td>{business.verification_status || "-"}</td>
+                <td>{business.business_status || "-"}</td>
+              </tr>
+            ))}
+            {!list.isLoading && !list.data?.length && (
+              <tr>
+                <td colSpan={4} className="text-center text-base-content/60">
+                  No connected client businesses found.
                 </td>
               </tr>
             )}

@@ -1,19 +1,48 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Bars3Icon,
+  Bars3BottomLeftIcon,
+} from "@heroicons/react/24/outline";
 import type { MeResponse } from "@/lib/api";
 import { logoutAction } from "@/app/actions/auth";
 import { clearToken } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
 
+function getPageTitle(pathname: string): string {
+  if (pathname.startsWith("/dashboard")) return "Dashboard";
+  if (pathname.startsWith("/inbox")) return "Inbox";
+  if (pathname.startsWith("/contacts/segments")) return "Segments";
+  if (pathname.startsWith("/contacts/tags")) return "Tags";
+  if (pathname.startsWith("/contacts")) return "People & Organizations";
+  if (pathname.startsWith("/campaigns")) return "Campaigns";
+  if (pathname.startsWith("/templates")) return "Templates";
+  if (pathname.startsWith("/media")) return "Media";
+  if (pathname.startsWith("/analytics")) return "Analytics";
+  if (pathname.startsWith("/settings/integrations/whatsapp")) return "WhatsApp";
+  if (pathname.startsWith("/settings/integrations")) return "Integrations";
+  if (pathname.startsWith("/settings/team")) return "Team";
+  if (pathname.startsWith("/settings")) return "Settings";
+  if (pathname.startsWith("/platform")) return "Platform";
+  if (pathname.startsWith("/onboarding")) return "Onboarding";
+  return "MsgBuddy";
+}
+
 export function Topbar({
   drawerId,
   me,
+  isDesktopSidebarOpen,
+  onDesktopSidebarToggle,
 }: {
   drawerId: string;
   me: MeResponse;
+  isDesktopSidebarOpen: boolean;
+  onDesktopSidebarToggle: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const pageTitle = getPageTitle(pathname);
 
   const handleLogout = async () => {
     clearToken();
@@ -22,40 +51,40 @@ export function Topbar({
   };
 
   return (
-    <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-base-300 bg-base-100 px-3 shadow-sm sm:px-4">
+    <header className="sticky top-0 z-10 flex min-h-14 shrink-0 items-center justify-between gap-2 border-b border-base-300/80 bg-base-100 px-4 pt-[env(safe-area-inset-top,0px)]">
       <label
         htmlFor={drawerId}
         className="btn btn-ghost btn-square drawer-button lg:hidden"
         aria-label="open menu"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <line x1="3" x2="21" y1="6" y2="6" />
-          <line x1="3" x2="21" y1="12" y2="12" />
-          <line x1="3" x2="21" y1="18" y2="18" />
-        </svg>
+        <Bars3Icon className="h-6 w-6" />
       </label>
+      <button
+        type="button"
+        className="btn btn-ghost btn-square hidden lg:inline-flex"
+        aria-label={
+          isDesktopSidebarOpen ? "Collapse sidebar" : "Expand sidebar"
+        }
+        onClick={onDesktopSidebarToggle}
+      >
+        {isDesktopSidebarOpen ? (
+          <Bars3BottomLeftIcon className="h-5 w-5" />
+        ) : (
+          <Bars3Icon className="h-5 w-5" />
+        )}
+      </button>
       <div className="flex flex-1 items-center gap-2">
-        <div className="hidden text-sm font-medium text-base-content sm:block">
-          {me.workspace.name}
-        </div>
+        <h1 className="truncate text-sm font-medium text-base-content">
+          {pageTitle}
+        </h1>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <ThemeToggle />
         <div className="dropdown dropdown-end">
           <button
             tabIndex={0}
             role="button"
-            className="btn btn-ghost btn-circle avatar placeholder"
+            className="btn btn-ghost btn-circle avatar placeholder transition-all duration-150"
             aria-label="User menu"
           >
             <div className="bg-primary/20 text-primary w-9 rounded-full">
@@ -66,10 +95,12 @@ export function Topbar({
           </button>
           <ul
             tabIndex={0}
-            className="menu dropdown-content z-1 mt-2 w-56 rounded-box bg-base-100 p-2 shadow"
+            className="menu dropdown-content z-1 mt-2 w-56 rounded-xl border border-base-300/80 bg-base-200 p-2"
           >
             <li className="menu-title">
-              <span className="truncate">{me.user.email}</span>
+              <span className="truncate text-xs font-medium text-base-content/60">
+                {me.user.email}
+              </span>
             </li>
             <li>
               <button type="button" onClick={handleLogout}>

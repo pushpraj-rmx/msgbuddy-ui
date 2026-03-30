@@ -1,4 +1,4 @@
-import api from "./axios";
+import api, { fetchWithAuthRefresh } from "./axios";
 import { API_BASE_URL, endpoints } from "./endpoints";
 import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "./auth";
 import type {
@@ -73,6 +73,62 @@ export interface Workspace {
   name: string;
 }
 
+export type WorkspaceMemberResponseDto = {
+  id: string;
+  workspaceId: string;
+  role: WorkspaceRole | string;
+  isActive: boolean;
+  joinedAt: string;
+  user?: {
+    id?: string;
+    email?: string;
+    name?: string | null;
+  };
+};
+
+export type WorkspaceWithRoleDto = {
+  id: string;
+  slug: string;
+  name: string;
+  description?: string;
+  logoUrl?: string;
+  website?: string;
+  timezone: string;
+  locale: string;
+  businessName?: string;
+  industry?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  businessAddress?: string;
+  businessAbout?: string;
+  businessVertical?: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  role: WorkspaceRole | string;
+  joinedAt: string;
+};
+
+export type CreateWorkspaceDto = { name: string };
+
+export type UpdateWorkspaceDto = Partial<{
+  name: string;
+  description: string;
+  logoUrl: string;
+  website: string;
+  timezone: string;
+  locale: string;
+  businessName: string;
+  industry: string;
+  country: string;
+  phone: string;
+  email: string;
+  businessAddress: string;
+  businessAbout: string;
+  businessVertical: string;
+}>;
+
 export interface MeResponse {
   user: User;
   workspace: Workspace;
@@ -84,15 +140,19 @@ async function refreshServerAccessToken(
   cookieStore: Awaited<ReturnType<typeof import("next/headers").cookies>>
 ): Promise<string | null> {
   try {
+    const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
+    if (!refreshToken) return null;
+
     const response = await fetch(`${API_BASE_URL}${endpoints.auth.refresh}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refreshToken }),
       credentials: "include",
     });
 
     if (!response.ok) return null;
 
-    const { accessToken, refreshToken, expiresIn } =
+    const { accessToken, refreshToken: newRefresh, expiresIn } =
       (await response.json()) as Partial<AuthResponse>;
 
     if (!accessToken) return null;
@@ -107,8 +167,8 @@ async function refreshServerAccessToken(
         maxAge,
       });
 
-      if (refreshToken) {
-        cookieStore.set(REFRESH_TOKEN_COOKIE, refreshToken, {
+      if (newRefresh) {
+        cookieStore.set(REFRESH_TOKEN_COOKIE, newRefresh, {
           path: "/",
           sameSite: "lax",
           httpOnly: true,
@@ -134,17 +194,24 @@ export async function serverFetch<T>(
   const raw = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   const token = raw ? decodeURIComponent(raw) : null;
 
-  const doRequest = async (bearer: string | null) =>
-    fetch(`${API_BASE_URL}${path}`, {
+  const doRequest = async (bearer: string | null) => {
+    const headers = new Headers(init.headers || {});
+    if (bearer) {
+      headers.set("Authorization", `Bearer ${bearer}`);
+    } else {
+      headers.delete("Authorization");
+    }
+    if (init.body != null && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+
+    return fetch(`${API_BASE_URL}${path}`, {
       ...init,
-      headers: {
-        ...(init.headers || {}),
-        Authorization: bearer ? `Bearer ${bearer}` : "",
-        "Content-Type": "application/json",
-      },
+      headers,
       cache: "no-store",
       credentials: "include",
     });
+  };
 
   let response = await doRequest(token);
 
@@ -193,10 +260,97 @@ export interface ConversationFilters {
   cursor?: string;
 }
 
+/** WhatsApp Cloud outbound media kinds (see MESSAGE_CONTRACT / send-message.dto). */
+export type WhatsAppOutboundMediaType =
+  | "IMAGE"
+  | "VIDEO"
+  | "AUDIO"
+  | "DOCUMENT";
+
+export type ConversationSendPolicyDto = {
+  channel: "WHATSAPP";
+  freeformAllowed: boolean;
+  templateRequired: boolean;
+  windowHours: number;
+  latestInboundAt?: string | null;
+  windowClosesAt?: string | null;
+};
+
+export type ConversationPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+
+export type ConversationNote = {
+  id: string;
+  conversationId?: string;
+  content: string;
+  authorUserId?: string;
+  createdAt?: string;
+};
+
+export type InternalTargetType = "CONTACT" | "CONVERSATION" | "CAMPAIGN";
+
+export type InternalNote = {
+  id: string;
+  workspaceId?: string;
+  targetType: InternalTargetType;
+  targetId: string;
+  content: string;
+  isPinned?: boolean;
+  authorId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type InternalMessage = {
+  id: string;
+  workspaceId?: string;
+  conversationId: string;
+  senderUserId?: string;
+  text: string;
+  createdAt?: string;
+};
+
+/** POST /v2/messages — TEXT (default) vs WhatsApp media (mediaId + type). */
+export type SendMessagePayload =
+  | {
+      contactId: string;
+      text: string;
+      idempotencyKey?: string;
+      channel?: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
+      type?: "TEXT";
+    }
+  | {
+      contactId: string;
+      type: WhatsAppOutboundMediaType;
+      mediaId: string;
+      text?: string;
+      idempotencyKey?: string;
+      channel: "WHATSAPP";
+    }
+  | {
+      contactId: string;
+      channel: "WHATSAPP";
+      templateId: string;
+      templateVersionNum: number;
+      templateVariables?: Record<string, string>;
+      idempotencyKey?: string;
+    };
+
+/** POST /v2/media/:id/prepare-whatsapp */
+export type PrepareWhatsAppResponseDto = {
+  ok?: boolean;
+  synced?: boolean;
+  message?: string;
+};
+
 export const conversationsApi = {
   list: async (params: ConversationFilters = {}) => {
     const response = await api.get(endpoints.conversations.list, { params });
     return response.data;
+  },
+  /** GET /v2/conversations/stats — workspace-wide counts (shape is backend-defined). */
+  stats: async (): Promise<Record<string, unknown>> => {
+    const response = await api.get(endpoints.conversations.stats);
+    return response.data as Record<string, unknown>;
   },
   messages: async (conversationId: string) => {
     const response = await api.get(
@@ -204,13 +358,129 @@ export const conversationsApi = {
     );
     return response.data;
   },
-  sendMessage: async (data: {
-    contactId: string;
-    text: string;
-    idempotencyKey?: string;
-    channel?: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
-  }) => {
+  sendMessage: async (data: SendMessagePayload) => {
     const response = await api.post(endpoints.messages.send, data);
+    return response.data;
+  },
+  getSendPolicy: async (contactId: string): Promise<ConversationSendPolicyDto> => {
+    const response = await api.get<ConversationSendPolicyDto>(
+      endpoints.messages.policy(contactId)
+    );
+    return response.data;
+  },
+  getById: async (id: string) => {
+    const response = await api.get(endpoints.conversations.byId(id));
+    return response.data;
+  },
+  open: async (id: string) => {
+    const response = await api.put(endpoints.conversations.open(id));
+    return response.data;
+  },
+  close: async (id: string) => {
+    const response = await api.put(endpoints.conversations.close(id));
+    return response.data;
+  },
+  archive: async (id: string) => {
+    const response = await api.put(endpoints.conversations.archive(id));
+    return response.data;
+  },
+  read: async (id: string) => {
+    const response = await api.put(endpoints.conversations.read(id));
+    return response.data;
+  },
+  assign: async (id: string, userId: string) => {
+    const response = await api.put(endpoints.conversations.assign(id), { userId });
+    return response.data;
+  },
+  unassign: async (id: string) => {
+    const response = await api.put(endpoints.conversations.unassign(id));
+    return response.data;
+  },
+  setPriority: async (id: string, priority: ConversationPriority) => {
+    const response = await api.put(endpoints.conversations.priority(id), { priority });
+    return response.data;
+  },
+  listNotes: async (id: string): Promise<ConversationNote[]> => {
+    const response = await api.get<ConversationNote[]>(endpoints.conversations.notes(id));
+    return response.data;
+  },
+  createNote: async (id: string, content: string): Promise<ConversationNote> => {
+    const response = await api.post<ConversationNote>(endpoints.conversations.notes(id), {
+      content,
+    });
+    return response.data;
+  },
+  deleteNote: async (id: string, noteId: string): Promise<void> => {
+    await api.delete(endpoints.conversations.noteById(id, noteId));
+  },
+  searchMessages: async (params: {
+    q: string;
+    conversationId: string;
+    limit?: number;
+  }) => {
+    const response = await api.get(endpoints.messages.search, { params });
+    return response.data;
+  },
+  getMessageById: async (id: string) => {
+    const response = await api.get(endpoints.messages.byId(id));
+    return response.data;
+  },
+  updateMessageStatus: async (
+    id: string,
+    status: "PENDING" | "PROCESSING" | "QUEUED" | "SENT" | "DELIVERED" | "READ" | "FAILED"
+  ) => {
+    const response = await api.put(endpoints.messages.updateStatus(id), { status });
+    return response.data;
+  },
+};
+
+export const internalApi = {
+  listNotes: async (
+    targetType: InternalTargetType,
+    targetId: string
+  ): Promise<InternalNote[]> => {
+    const response = await api.get<InternalNote[]>(endpoints.internal.notes, {
+      params: { targetType, targetId },
+    });
+    return response.data;
+  },
+  createNote: async (data: {
+    targetType: InternalTargetType;
+    targetId: string;
+    content: string;
+    isPinned?: boolean;
+  }): Promise<InternalNote> => {
+    const response = await api.post<InternalNote>(endpoints.internal.notes, data);
+    return response.data;
+  },
+  updateNote: async (
+    id: string,
+    data: { content?: string; isPinned?: boolean }
+  ): Promise<InternalNote> => {
+    const response = await api.put<InternalNote>(
+      endpoints.internal.noteById(id),
+      data
+    );
+    return response.data;
+  },
+  deleteNote: async (id: string): Promise<void> => {
+    await api.delete(endpoints.internal.noteById(id));
+  },
+  toggleNotePin: async (id: string): Promise<InternalNote> => {
+    const response = await api.post<InternalNote>(endpoints.internal.toggleNotePin(id));
+    return response.data;
+  },
+  sendMessage: async (data: {
+    conversationId: string;
+    text: string;
+  }): Promise<InternalMessage> => {
+    const response = await api.post<InternalMessage>(endpoints.internal.messages, data);
+    return response.data;
+  },
+  listMessages: async (conversationId: string): Promise<InternalMessage[]> => {
+    const response = await api.get<InternalMessage[]>(
+      endpoints.internal.messagesByConversation(conversationId)
+    );
     return response.data;
   },
 };
@@ -666,6 +936,18 @@ export const campaignsApi = {
     const response = await api.post(endpoints.campaigns.create, data);
     return response.data;
   },
+  getById: async (id: string) => {
+    const response = await api.get(endpoints.campaigns.byId(id));
+    return response.data;
+  },
+  update: async (id: string, data: Record<string, unknown>) => {
+    const response = await api.put(endpoints.campaigns.update(id), data);
+    return response.data;
+  },
+  remove: async (id: string) => {
+    const response = await api.delete(endpoints.campaigns.remove(id));
+    return response.data;
+  },
   start: async (id: string) => {
     const response = await api.post(endpoints.campaigns.start(id));
     return response.data;
@@ -682,10 +964,22 @@ export const campaignsApi = {
     const response = await api.post(endpoints.campaigns.cancel(id));
     return response.data;
   },
+  duplicate: async (id: string) => {
+    const response = await api.post(endpoints.campaigns.duplicate(id));
+    return response.data;
+  },
   progress: async (id: string, runId?: string) => {
     const response = await api.get(endpoints.campaigns.progress(id), {
       params: runId ? { runId } : undefined,
     });
+    return response.data;
+  },
+  runs: async (id: string) => {
+    const response = await api.get(endpoints.campaigns.runs(id));
+    return response.data;
+  },
+  runJobs: async (id: string, runId: string) => {
+    const response = await api.get(endpoints.campaigns.runJobs(id, runId));
     return response.data;
   },
 };
@@ -708,7 +1002,7 @@ export interface InitUploadResponse {
 }
 
 export type UploadBytesResponse =
-  | { assetHandle: string }
+  | { assetHandle?: string; mediaId?: string }
   | { bytes_received: number };
 
 export interface UploadSessionStatus {
@@ -717,6 +1011,30 @@ export interface UploadSessionStatus {
   bytes_received: number;
   expires_at: string;
   state: "uploading" | "completed";
+}
+
+/** Nest / OpenAPI may use snake_case or camelCase; avoid defaulting to 0 when the key is missing. */
+function parseBytesReceivedFromPayload(data: unknown): number | undefined {
+  if (data == null || typeof data !== "object") return undefined;
+  const o = data as Record<string, unknown>;
+  const candidates = [
+    o.bytes_received,
+    o.bytesReceived,
+    o.newTotal,
+    o.totalBytes,
+  ];
+  for (const v of candidates) {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  const nested = o.data;
+  if (nested && typeof nested === "object") {
+    const inner = nested as Record<string, unknown>;
+    for (const k of ["bytes_received", "bytesReceived", "newTotal"]) {
+      const v = inner[k];
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+    }
+  }
+  return undefined;
 }
 
 export const mediaApi = {
@@ -748,8 +1066,39 @@ export const mediaApi = {
     const response = await api.delete(endpoints.media.remove(id));
     return response.data;
   },
+  getById: async (id: string) => {
+    const response = await api.get(endpoints.media.byId(id));
+    return response.data;
+  },
+  downloadUrl: (id: string) => `${API_BASE_URL}${endpoints.media.download(id)}`,
+  syncToProvider: async (id: string, provider: "whatsapp" | "telegram") => {
+    const response = await api.post(endpoints.media.sync(id, provider));
+    return response.data;
+  },
+  retryFailedSyncs: async () => {
+    const response = await api.post(endpoints.media.retryFailed);
+    return response.data;
+  },
+  prepareWhatsApp: async (
+    mediaId: string
+  ): Promise<PrepareWhatsAppResponseDto> => {
+    const response = await api.post<PrepareWhatsAppResponseDto>(
+      endpoints.media.prepareWhatsApp(mediaId)
+    );
+    return response.data;
+  },
 };
 
+/**
+ * Resumable file uploads (aligned with backend `express.raw` + session store).
+ *
+ * - Each chunk POST must use **`Content-Type: application/octet-stream`** (see `uploadBytes`).
+ * - While the file is incomplete, **do not** send **zero-length** bodies (except the single
+ *   request for a **0-byte** file, which completes in one call).
+ * - **202** responses should carry monotonically increasing **`bytes_received`** until **200**.
+ * - **`mediaId`** is always the stable reference when present; **`assetHandle`** may be omitted
+ *   for MIME types that do not use Meta Graph resumable upload (see `whatsappCloudMedia.ts`).
+ */
 export const uploadsApi = {
   initUpload: async (
     body: InitUploadBody
@@ -760,26 +1109,149 @@ export const uploadsApi = {
     );
     return response.data;
   },
+  /**
+   * Send one chunk via `fetch` (not axios) so the body is always raw bytes and
+   * `Content-Type: application/octet-stream` is not merged with `application/json`.
+   */
   uploadBytes: async (
     sessionId: string,
     chunk: ArrayBuffer
   ): Promise<
-    | { status: 200; assetHandle: string }
+    | { status: 200; assetHandle?: string; mediaId?: string }
     | { status: 202; bytes_received: number }
   > => {
-    const response = await api.post<UploadBytesResponse>(
-      endpoints.uploads.session(sessionId),
-      chunk,
-      { headers: { "Content-Type": "application/octet-stream" } }
-    );
-    if (response.status === 200 && "assetHandle" in response.data) {
-      return { status: 200, assetHandle: response.data.assetHandle };
+    const path = endpoints.uploads.session(sessionId);
+    const body: BodyInit =
+      chunk.byteLength === 0 ? new Blob([]) : new Uint8Array(chunk);
+
+    const response = await fetchWithAuthRefresh(path, {
+      method: "POST",
+      body,
+      headers: { "Content-Type": "application/octet-stream" },
+    });
+
+    const text = await response.text();
+    let json: unknown = {};
+    if (text.length) {
+      try {
+        json = JSON.parse(text) as unknown;
+      } catch {
+        json = {};
+      }
     }
-    return {
-      status: 202,
-      bytes_received:
-        "bytes_received" in response.data ? response.data.bytes_received : 0,
-    };
+
+    /** 200 OK or 201 Created — both mean this chunk/session step completed successfully. */
+    if (response.status === 200 || response.status === 201) {
+      const d = json as { assetHandle?: string; mediaId?: string };
+      return {
+        status: 200,
+        assetHandle: d.assetHandle,
+        mediaId: d.mediaId,
+      };
+    }
+
+    if (response.status === 202) {
+      let br = parseBytesReceivedFromPayload(json);
+      if (br == null) {
+        try {
+          const st = await uploadsApi.getSessionStatus(sessionId);
+          br =
+            parseBytesReceivedFromPayload(st) ??
+            (typeof st.bytes_received === "number" ? st.bytes_received : undefined);
+        } catch {
+          br = undefined;
+        }
+      }
+      return {
+        status: 202,
+        bytes_received: br ?? 0,
+      };
+    }
+
+    const msg =
+      typeof json === "object" &&
+      json !== null &&
+      "message" in json &&
+      typeof (json as { message: unknown }).message === "string"
+        ? (json as { message: string }).message
+        : `Upload request failed (${response.status})`;
+    throw new Error(msg);
+  },
+  /**
+   * Sends bytes from `fullBuffer` starting at `offset` until the session returns 200.
+   * Handles 202 partial responses by resuming from `bytes_received`.
+   */
+  uploadFullFile: async (
+    sessionId: string,
+    fullBuffer: ArrayBuffer,
+    onProgress?: (bytesReceived: number, totalBytes: number) => void
+  ): Promise<{ assetHandle: string; mediaId?: string }> => {
+    const total = fullBuffer.byteLength;
+    /** One empty body completes the session (0-byte file). */
+    if (total === 0) {
+      const res = await uploadsApi.uploadBytes(sessionId, new ArrayBuffer(0));
+      if (res.status === 200) {
+        const handle = res.assetHandle ?? "";
+        if (!res.mediaId && !handle) {
+          throw new Error("Upload completed without media reference");
+        }
+        onProgress?.(0, 0);
+        return { assetHandle: handle, mediaId: res.mediaId };
+      }
+      throw new Error("Upload incomplete (please retry)");
+    }
+
+    let offset = 0;
+    let guard = 0;
+    const maxSteps = Math.max(128, total / 4096 + 48);
+    while (guard++ < maxSteps) {
+      const chunk = fullBuffer.slice(offset);
+
+      if (chunk.byteLength === 0) {
+        if (offset !== total) {
+          throw new Error("Upload incomplete (please retry)");
+        }
+        /** Finalize: all bytes were accepted with 202 — many backends expect one more POST with an empty body. */
+        const fin = await uploadsApi.uploadBytes(sessionId, new ArrayBuffer(0));
+        if (fin.status === 200) {
+          const handle = fin.assetHandle ?? "";
+          if (!fin.mediaId && !handle) {
+            throw new Error("Upload completed without media reference");
+          }
+          onProgress?.(total, total);
+          return { assetHandle: handle, mediaId: fin.mediaId };
+        }
+        throw new Error("Upload incomplete (please retry)");
+      }
+
+      const res = await uploadsApi.uploadBytes(sessionId, chunk);
+      if (res.status === 200) {
+        const handle = res.assetHandle ?? "";
+        if (!res.mediaId && !handle) {
+          throw new Error("Upload completed without media reference");
+        }
+        onProgress?.(total, total);
+        return { assetHandle: handle, mediaId: res.mediaId };
+      }
+
+      let br = res.bytes_received;
+      if (br <= offset) {
+        try {
+          const st = await uploadsApi.getSessionStatus(sessionId);
+          if (st.bytes_received > offset) br = st.bytes_received;
+        } catch {
+          /* ignore — stall handled below */
+        }
+      }
+      if (br <= offset) {
+        throw new Error(
+          "Upload stalled (no progress). If this persists, check the network tab: each POST to the upload session must send raw bytes with Content-Type: application/octet-stream."
+        );
+      }
+      offset = br;
+      onProgress?.(Math.min(offset, total), total);
+    }
+    throw new Error("Upload took too many steps");
   },
   getSessionStatus: async (
     sessionId: string
@@ -791,6 +1263,13 @@ export const uploadsApi = {
   },
   cancelSession: async (sessionId: string): Promise<void> => {
     await api.delete(endpoints.uploads.session(sessionId));
+  },
+};
+
+export const opsApi = {
+  queueMetrics: async () => {
+    const response = await api.get(endpoints.metrics.queues);
+    return response.data;
   },
 };
 
@@ -815,6 +1294,105 @@ export const analyticsApi = {
     const response = await api.get(endpoints.analytics.timeseries, { params });
     return response.data;
   },
+  /** Top / ranked campaigns for a date range (`GET /analytics/campaigns`). */
+  campaigns: async (params?: {
+    start?: string;
+    end?: string;
+    limit?: number;
+  }) => {
+    const response = await api.get(endpoints.analytics.campaigns, { params });
+    return response.data;
+  },
+  /** Per-campaign analytics (`GET /analytics/campaigns/:id`). Shape is backend-defined. */
+  campaignReport: async (id: string) => {
+    const response = await api.get(endpoints.analytics.campaignById(id));
+    return response.data;
+  },
+  conversations: async (params?: { start?: string; end?: string }) => {
+    const response = await api.get(endpoints.analytics.conversations, { params });
+    return response.data;
+  },
+  contacts: async (params?: { start?: string; end?: string }) => {
+    const response = await api.get(endpoints.analytics.contacts, { params });
+    return response.data;
+  },
+  agents: async (params: { start: string; end: string }) => {
+    const response = await api.get(endpoints.analytics.agents, { params });
+    return response.data;
+  },
+  agentActivity: async (id: string, params: { start: string; end: string }) => {
+    const response = await api.get(endpoints.analytics.agentActivity(id), { params });
+    return response.data;
+  },
+  templates: async (params: { start: string; end: string; templateId: string }) => {
+    const response = await api.get(endpoints.analytics.templates, { params });
+    return response.data;
+  },
+  summaryByPeriod: async (period: "daily" | "weekly" | "monthly") => {
+    const response = await api.get(endpoints.analytics.summaryByPeriod(period));
+    return response.data;
+  },
+  exportCsv: async (params: {
+    type: string;
+    start: string;
+    end: string;
+  }): Promise<void> => {
+    const qp = new URLSearchParams({
+      type: params.type,
+      start: params.start,
+      end: params.end,
+    });
+    const res = await fetchWithAuthRefresh(
+      `${endpoints.analytics.exportCsv}?${qp.toString()}`
+    );
+    if (!res.ok) {
+      throw new Error(`Export failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `analytics-${params.type}-${params.start}-${params.end}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
+};
+
+export const usageApi = {
+  current: async () => {
+    const response = await api.get(endpoints.usage.current);
+    return response.data;
+  },
+  limits: async () => {
+    const response = await api.get(endpoints.usage.limits);
+    return response.data;
+  },
+  checkMessages: async (count = 1) => {
+    const response = await api.get(endpoints.usage.checkMessages, {
+      params: { count },
+    });
+    return response.data;
+  },
+  checkContacts: async (count = 1) => {
+    const response = await api.get(endpoints.usage.checkContacts, {
+      params: { count },
+    });
+    return response.data;
+  },
+  period: async (params?: { start?: string; end?: string }) => {
+    const response = await api.get(endpoints.usage.period, { params });
+    return response.data;
+  },
+  storage: async () => {
+    const response = await api.get(endpoints.usage.storage);
+    return response.data;
+  },
+  rebuild: async () => {
+    const response = await api.post(endpoints.usage.rebuild);
+    return response.data;
+  },
 };
 
 // TODO: BSP | Legacy provider; remove or keep when BSP support is finalized
@@ -823,7 +1401,21 @@ export type CloudApiConnectionStatus =
   | "ACTIVE"
   | "INACTIVE"
   | "EXPIRED"
-  | "ERROR";
+  | "ERROR"
+  | "DISCONNECTED";
+
+/** Matches Prisma `CloudApiOnboardingPhase` (WhatsApp Cloud API onboarding). */
+export type WhatsAppOnboardingPhase =
+  | "PENDING_CONNECT"
+  | "CONNECTED"
+  | "REGISTERING"
+  | "REGISTERED"
+  | "OTP_PENDING"
+  | "VERIFIED"
+  | "ACTIVE"
+  | "FAILED";
+
+export type VerificationCodeMethod = "SMS" | "VOICE";
 
 export interface WorkspaceSettingsPayload {
   timezone?: string;
@@ -864,6 +1456,24 @@ export type WhatsAppPhoneStatus = {
 
 export type CloudApiAccountStatus = "ACTIVE" | "INACTIVE" | "EXPIRED" | "ERROR" | string;
 
+/** GET /whatsapp/connection — default account summary (legacy single-number shape). */
+export type WhatsAppConnectionSummary = {
+  status: CloudApiConnectionStatus;
+  connected: boolean;
+  hasAccessToken: boolean;
+  phoneNumberId?: string;
+  wabaId?: string;
+  displayPhoneNumber?: string;
+  businessId?: string;
+  tokenExpiresAt?: string | null;
+  lastError?: string | null;
+  onboardingPhase?: WhatsAppOnboardingPhase;
+  metaPhoneStatus?: string | null;
+  metaVerificationStatus?: string | null;
+  lastOnboardingSyncAt?: string | null;
+  registrationPending?: boolean;
+};
+
 export type WhatsAppConnection = {
   id: string;
   workspaceId?: string;
@@ -874,17 +1484,87 @@ export type WhatsAppConnection = {
   tokenExpiresAt?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  onboardingPhase?: WhatsAppOnboardingPhase;
+  metaVerificationStatus?: string | null;
+  metaPhoneStatus?: string | null;
+  lastOnboardingSyncAt?: string | null;
+  /** True when Meta still needs Cloud API registration (PIN). */
+  registrationPending?: boolean;
+};
+
+/** GET /whatsapp/onboarding-status/:phoneNumberId */
+export type WhatsAppOnboardingStatus = {
+  phone_number_id: string;
+  onboarding_phase: WhatsAppOnboardingPhase;
+  cloud_api_account_status: string;
+  token_expires_at?: string | null;
+  meta: {
+    code_verification_status?: string;
+    status?: string;
+    display_phone_number?: string;
+    quality_rating?: string;
+    verified_name?: string;
+  };
+  webhooks_subscribed: boolean | null;
 };
 
 export const workspaceApi = {
+  listUserWorkspaces: async (): Promise<WorkspaceWithRoleDto[]> => {
+    const response = await api.get<WorkspaceWithRoleDto[]>(endpoints.workspaces.list);
+    return response.data;
+  },
+
+  createWorkspace: async (body: CreateWorkspaceDto): Promise<unknown> => {
+    const response = await api.post(endpoints.workspaces.list, body);
+    return response.data;
+  },
+
   getWorkspace: async (id: string) => {
     const response = await api.get(endpoints.workspaces.byId(id));
     return response.data;
   },
+
+  updateWorkspace: async (id: string, body: UpdateWorkspaceDto) => {
+    const response = await api.put(endpoints.workspaces.byId(id), body);
+    return response.data;
+  },
+
+  deleteWorkspace: async (id: string): Promise<void> => {
+    await api.delete(endpoints.workspaces.byId(id));
+  },
+
   getMembers: async (id: string) => {
     const response = await api.get(endpoints.workspaces.members(id));
     return response.data;
   },
+
+  addMember: async (
+    workspaceId: string,
+    body: { userId: string; role?: WorkspaceRole }
+  ): Promise<WorkspaceMemberResponseDto> => {
+    const response = await api.post<WorkspaceMemberResponseDto>(
+      endpoints.workspaces.members(workspaceId),
+      body
+    );
+    return response.data;
+  },
+
+  updateMemberRole: async (
+    workspaceId: string,
+    memberId: string,
+    body: { role: WorkspaceRole }
+  ): Promise<WorkspaceMemberResponseDto> => {
+    const response = await api.put<WorkspaceMemberResponseDto>(
+      endpoints.workspaces.memberRole(workspaceId, memberId),
+      body
+    );
+    return response.data;
+  },
+
+  removeMember: async (workspaceId: string, memberId: string): Promise<void> => {
+    await api.delete(endpoints.workspaces.memberById(workspaceId, memberId));
+  },
+
   getSettings: async (id: string) => {
     const response = await api.get(endpoints.workspaces.settings(id));
     return response.data;
@@ -940,8 +1620,171 @@ export const whatsappApi = {
     return Array.isArray(body) ? body : body.data;
   },
 
+  getConnection: async (): Promise<WhatsAppConnectionSummary> => {
+    const response = await api.get(endpoints.whatsapp.connection);
+    const raw = response.data as
+      | { success?: true; data: WhatsAppConnectionSummary }
+      | WhatsAppConnectionSummary;
+    if (raw && typeof raw === "object" && "data" in raw && raw.data !== undefined) {
+      return raw.data;
+    }
+    return raw as WhatsAppConnectionSummary;
+  },
+
   disconnect: async (cloudApiAccountId: string): Promise<void> => {
     await api.post(endpoints.whatsapp.disconnect(cloudApiAccountId));
+  },
+
+  getOnboardingStatus: async (
+    phoneNumberId: string
+  ): Promise<WhatsAppOnboardingStatus> => {
+    const response = await api.get<{
+      success: true;
+      data: WhatsAppOnboardingStatus;
+    }>(endpoints.whatsapp.onboardingStatus(phoneNumberId));
+    return response.data.data;
+  },
+
+  registerNumber: async (body: {
+    phone_number_id: string;
+    pin: string;
+  }): Promise<{
+    phone_number_id: string;
+    onboarding_phase: WhatsAppOnboardingPhase;
+    meta: { success: boolean };
+  }> => {
+    const response = await api.post<{
+      success: true;
+      data: {
+        phone_number_id: string;
+        onboarding_phase: WhatsAppOnboardingPhase;
+        meta: { success: boolean };
+      };
+    }>(endpoints.whatsapp.registerNumber, body);
+    return response.data.data;
+  },
+
+  requestVerificationCode: async (body: {
+    phone_number_id: string;
+    code_method: VerificationCodeMethod;
+    language: string;
+  }): Promise<{ phone_number_id: string; onboarding_phase: WhatsAppOnboardingPhase; otp_requested_at: string }> => {
+    const response = await api.post<{
+      success: true;
+      data: {
+        phone_number_id: string;
+        onboarding_phase: WhatsAppOnboardingPhase;
+        otp_requested_at: string;
+      };
+    }>(endpoints.whatsapp.requestVerificationCode, body);
+    return response.data.data;
+  },
+
+  verifyNumber: async (body: {
+    phone_number_id: string;
+    code: string;
+  }): Promise<{
+    phone_number_id: string;
+    onboarding_phase: WhatsAppOnboardingPhase;
+    meta_code_verification_status?: string;
+  }> => {
+    const response = await api.post<{
+      success: true;
+      data: {
+        phone_number_id: string;
+        onboarding_phase: WhatsAppOnboardingPhase;
+        meta_code_verification_status?: string;
+      };
+    }>(endpoints.whatsapp.verifyNumber, body);
+    return response.data.data;
+  },
+
+  ensureSubscription: async (body: { phone_number_id: string }): Promise<{
+    webhooks_subscribed: boolean;
+  }> => {
+    const response = await api.post<{
+      success: true;
+      data: { webhooks_subscribed: boolean };
+    }>(endpoints.whatsapp.ensureSubscription, body);
+    return response.data.data;
+  },
+};
+
+export type IntegrationRecord = {
+  id: string;
+  workspaceId?: string;
+  channel: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS" | string;
+  name?: string;
+  isActive?: boolean;
+  isDefault?: boolean;
+  status?: string;
+  config?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export const integrationsApi = {
+  list: async (): Promise<IntegrationRecord[]> => {
+    const response = await api.get<IntegrationRecord[]>(endpoints.integrations.list);
+    return response.data;
+  },
+  getById: async (id: string): Promise<IntegrationRecord> => {
+    const response = await api.get<IntegrationRecord>(endpoints.integrations.byId(id));
+    return response.data;
+  },
+  create: async (data: Record<string, unknown>): Promise<IntegrationRecord> => {
+    const response = await api.post<IntegrationRecord>(endpoints.integrations.list, data);
+    return response.data;
+  },
+  update: async (
+    id: string,
+    data: Record<string, unknown>
+  ): Promise<IntegrationRecord> => {
+    const response = await api.put<IntegrationRecord>(endpoints.integrations.byId(id), data);
+    return response.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(endpoints.integrations.byId(id));
+  },
+  setDefault: async (id: string): Promise<IntegrationRecord> => {
+    const response = await api.post<IntegrationRecord>(
+      endpoints.integrations.setDefault(id)
+    );
+    return response.data;
+  },
+  activate: async (id: string): Promise<IntegrationRecord> => {
+    const response = await api.post<IntegrationRecord>(endpoints.integrations.activate(id));
+    return response.data;
+  },
+  deactivate: async (id: string): Promise<IntegrationRecord> => {
+    const response = await api.post<IntegrationRecord>(
+      endpoints.integrations.deactivate(id)
+    );
+    return response.data;
+  },
+  setupWhatsApp: async (payload: Record<string, unknown>) => {
+    const response = await api.post(endpoints.integrations.setupWhatsApp, payload);
+    return response.data;
+  },
+  setupTelegram: async (payload: Record<string, unknown>) => {
+    const response = await api.post(endpoints.integrations.setupTelegram, payload);
+    return response.data;
+  },
+  setupEmail: async (payload: Record<string, unknown>) => {
+    const response = await api.post(endpoints.integrations.setupEmail, payload);
+    return response.data;
+  },
+  setupSms: async (payload: Record<string, unknown>) => {
+    const response = await api.post(endpoints.integrations.setupSms, payload);
+    return response.data;
+  },
+  getDefaultByChannel: async (
+    channel: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS"
+  ): Promise<IntegrationRecord> => {
+    const response = await api.get<IntegrationRecord>(
+      endpoints.integrations.defaultByChannel(channel)
+    );
+    return response.data;
   },
 };
 
@@ -980,6 +1823,23 @@ export interface PlatformUsageEventsParams {
   limit?: number;
   offset?: number;
 }
+
+export type PlatformLoginHistoryEntry = {
+  id?: string;
+  userId?: string;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  createdAt?: string;
+  [key: string]: unknown;
+};
+
+export type ConnectedClientBusiness = {
+  id: string;
+  name: string;
+  verification_status?: string;
+  business_status?: string;
+  [key: string]: unknown;
+};
 
 export const platformApi = {
   listWorkspaces: async (
@@ -1026,6 +1886,14 @@ export const platformApi = {
     const response = await api.get<PlatformUserDetail>(endpoints.platform.userById(id));
     return response.data;
   },
+  getUserLoginHistory: async (
+    id: string
+  ): Promise<PlatformLoginHistoryEntry[]> => {
+    const response = await api.get<PlatformLoginHistoryEntry[]>(
+      endpoints.platform.userLoginHistory(id)
+    );
+    return response.data;
+  },
   updateUserPlatformRole: async (
     id: string,
     role: PlatformRole
@@ -1050,6 +1918,12 @@ export const platformApi = {
     const response = await api.get<OffsetPaginatedResponse<PlatformUsageEvent>>(
       endpoints.platform.usageEvents,
       { params }
+    );
+    return response.data;
+  },
+  listConnectedClientBusinesses: async (): Promise<ConnectedClientBusiness[]> => {
+    const response = await api.get<ConnectedClientBusiness[]>(
+      endpoints.platform.connectedClientBusinesses
     );
     return response.data;
   },

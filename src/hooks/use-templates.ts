@@ -8,8 +8,10 @@ import {
 } from "@tanstack/react-query";
 import { templatesApi } from "@/lib/api";
 import type {
+  Template,
   TemplateChannel,
   TemplateCategory,
+  TemplateVersion,
   TemplateVersionPayload,
 } from "@/lib/types";
 
@@ -65,10 +67,10 @@ export function useTemplate(
   id: string | null,
   options?: {
     enabled?: boolean;
-    refetchInterval?: number | false | ((query: Query) => number | false | undefined);
+    refetchInterval?: number | false | ((query: Query<Template>) => number | false | undefined);
   }
 ) {
-  return useQuery({
+  return useQuery<Template>({
     queryKey: templateKeys.detail(id ?? ""),
     queryFn: () => templatesApi.get(id!, { include: "versions" }),
     enabled: !!id && (options?.enabled !== false),
@@ -81,10 +83,13 @@ export function useTemplateVersion(
   version: number | null,
   options?: {
     enabled?: boolean;
-    refetchInterval?: number | false | ((query: Query) => number | false | undefined);
+    refetchInterval?:
+      | number
+      | false
+      | ((query: Query<TemplateVersion>) => number | false | undefined);
   }
 ) {
-  return useQuery({
+  return useQuery<TemplateVersion>({
     queryKey: templateKeys.version(templateId ?? "", version ?? 0),
     queryFn: () =>
       templatesApi.getVersion(templateId!, version!),

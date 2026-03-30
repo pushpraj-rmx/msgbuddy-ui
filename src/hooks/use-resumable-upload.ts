@@ -2,16 +2,42 @@
 
 import { useState, useRef, useCallback } from "react";
 import { uploadsApi } from "@/lib/api";
+import {
+  inferMimeFromFilenameForWhatsApp,
+  maxBytesForWhatsappCloudMediaMime,
+  normalizeWhatsappMimeType,
+  WHATSAPP_CLOUD_API_MEDIA_MIME_WHITELIST,
+} from "@/lib/whatsappCloudMedia";
 
-const ALLOWED_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "video/mp4",
-  "application/pdf",
-] as const;
+function formatMaxLabel(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    const mb = bytes / (1024 * 1024);
+    return mb < 10 ? `${mb.toFixed(1)} MB` : `${Math.round(mb)} MB`;
+  }
+  return `${Math.round(bytes / 1024)} KB`;
+}
 
-const MAX_FILE_SIZE_BYTES = 16 * 1024 * 1024; // 16 MB
+function validateFile(file: File): string | null {
+  const raw = file.type?.trim() || "";
+  const normalized = normalizeWhatsappMimeType(raw);
+  const effective =
+    normalized && normalized !== "application/octet-stream"
+      ? normalized
+      : inferMimeFromFilenameForWhatsApp(file.name) ?? "";
+  if (!effective || !WHATSAPP_CLOUD_API_MEDIA_MIME_WHITELIST.has(effective)) {
+    return "Invalid file type. Use types supported by WhatsApp Cloud API (images, video, audio, PDF, Office, text).";
+  }
+  const max = maxBytesForWhatsappCloudMediaMime(effective);
+  if (file.size > max) {
+    return `File too large for this type (max ${formatMaxLabel(max)}).`;
+  }
+  return null;
+}
 
+/**
+ * Resumable upload for template headers / media library.
+ * Prefer **`mediaId`** when the API returns it; **`assetHandle`** may be absent for non–Graph-resumable MIME types.
+ */
 export function useResumableUpload(): {
   upload: (file: File) => Promise<string>;
   progress: number;
@@ -42,25 +68,22 @@ export function useResumableUpload(): {
       setProgress(0);
       cancelledRef.current = false;
 
-      if (!ALLOWED_TYPES.includes(file.type as (typeof ALLOWED_TYPES)[number])) {
-        const msg = `Invalid file type. Allowed: ${ALLOWED_TYPES.join(", ")}`;
-        setError(msg);
-        throw new Error(msg);
-      }
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        const msg = "File too large. Maximum size is 16 MB.";
-        setError(msg);
-        throw new Error(msg);
+      const validationError = validateFile(file);
+      if (validationError) {
+        setError(validationError);
+        throw new Error(validationError);
       }
 
       setUploading(true);
       sessionIdRef.current = null;
 
       try {
-        const { uploadSessionId, file_length } = await uploadsApi.initUpload({
+        const { uploadSessionId } = await uploadsApi.initUpload({
           file_name: file.name,
           file_length: file.size,
-          file_type: file.type,
+          file_type: normalizeWhatsappMimeType(
+            file.type || "application/octet-stream"
+          ),
         });
 
         if (cancelledRef.current) throw new Error("Cancelled");
@@ -70,24 +93,26 @@ export function useResumableUpload(): {
 
         if (cancelledRef.current) throw new Error("Cancelled");
 
-        const result = await uploadsApi.uploadBytes(uploadSessionId, buffer);
+        const result = await uploadsApi.uploadFullFile(
+          uploadSessionId,
+          buffer,
+          (received, total) => {
+            if (cancelledRef.current) return;
+            setProgress(
+              Math.min(99, Math.round((received / Math.max(total, 1)) * 100))
+            );
+          }
+        );
 
         if (cancelledRef.current) throw new Error("Cancelled");
 
-        if (result.status === 200) {
-          setProgress(100);
-          return result.assetHandle;
+        const ref = result.mediaId ?? result.assetHandle;
+        if (!ref) {
+          throw new Error("Upload completed without media reference");
         }
-        // 202 = partial; update progress. Single-shot send usually gets 200; if we get 202 we don't have assetHandle here.
-        setProgress(
-          Math.min(
-            100,
-            Math.round((result.bytes_received / file_length) * 100)
-          )
-        );
-        const msg = "Upload incomplete (please retry)";
-        setError(msg);
-        throw new Error(msg);
+
+        setProgress(100);
+        return ref;
       } catch (e) {
         const message =
           e instanceof Error ? e.message : "Upload failed";

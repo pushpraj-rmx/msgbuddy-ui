@@ -1,3 +1,5 @@
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SettingsClient } from "@/components/settings/SettingsClient";
 import type {
   Member,
@@ -34,20 +36,18 @@ export default async function SettingsPage() {
     ]);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-base-content/60">
-          Manage workspace details and access.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Settings"
+        description="Manage workspace details and access."
+      />
       <SettingsClient
-        workspaceId={me.workspace.id}
         workspace={workspace}
         settings={settings}
         members={members}
         cloudApiConfig={cloudApiConfig}
+        meRole={me.role}
       />
-    </div>
+    </PageContainer>
   );
 }

@@ -1,41 +1,46 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { loginAction } from "@/app/actions/auth";
 import { setAccessToken } from "@/lib/auth";
+import { ErrorState } from "@/components/ui/states";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const loginFeatureSlides = [
   {
     title: "Centralize conversations",
     description:
       "Keep every discussion with agents and teammates in one searchable place.",
-    imageSrc: "https://picsum.photos/seed/msgbuddy-login-1/400/240",
+    imageSrc: "https://picsum.photos/seed/msgbuddy-login-1/640/420",
     imageAlt: "Centralized conversations illustration",
   },
   {
-    title: "Integrate your tools",
+    title: "Move faster with context",
     description:
-      "Plug msgbuddy into your existing stack to automate status updates and handoffs.",
-    imageSrc: "https://picsum.photos/seed/msgbuddy-login-2/400/240",
+      "See history, metadata, and status in one calm, structured workspace.",
+    imageSrc: "https://picsum.photos/seed/msgbuddy-login-2/640/420",
+    imageAlt: "Contextual workspace illustration",
+  },
+  {
+    title: "Integrations that stay out of the way",
+    description:
+      "Connect channels and monitor health without UI noise or clutter.",
+    imageSrc: "https://picsum.photos/seed/msgbuddy-login-3/640/420",
     imageAlt: "Integrations illustration",
   },
   {
-    title: "Ship faster together",
+    title: "Operational clarity",
     description:
-      "Share prompts, workflows, and insights so your whole team benefits from AI.",
-    imageSrc: "https://picsum.photos/seed/msgbuddy-login-3/400/240",
-    imageAlt: "Team shipping faster illustration",
+      "Work with reliable status, clear actions, and consistent patterns.",
+    imageSrc: "https://picsum.photos/seed/msgbuddy-login-4/640/420",
+    imageAlt: "Operational clarity illustration",
   },
-  {
-    title: "Always in sync",
-    description:
-      "Log in from anywhere and pick up every thread exactly where you left it.",
-    imageSrc: "https://picsum.photos/seed/msgbuddy-login-4/400/240",
-    imageAlt: "Always in sync illustration",
-  },
-];
+] as const;
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +50,7 @@ export default function LoginPage() {
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % loginFeatureSlides.length);
-    }, 2000);
+    }, 3500);
     return () => window.clearInterval(intervalId);
   }, []);
 
@@ -60,157 +65,115 @@ export default function LoginPage() {
         setAccessToken(result.accessToken || null, {
           expiresInSeconds: result.expiresIn,
         });
-        window.location.href = "/dashboard";
+        router.replace("/dashboard");
       }
     });
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-base-100 px-4">
-      <div className="card w-full max-w-5xl bg-base-200 shadow-xl rounded-3xl overflow-hidden">
+    <div className="min-h-screen bg-base-100 p-6 grid place-items-center">
+      <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-base-300/80 bg-base-200">
         <div className="grid grid-cols-1 md:grid-cols-2">
-          {/* Left form panel */}
-          <div className="bg-base-100 px-8 py-10 md:px-10">
-            <div className="mb-8">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                Welcome 👋
-              </h1>
-              <p className="mt-1 text-sm text-base-content/70">
-                Let&apos;s log in to your account.
+          <div className="bg-base-100 p-6 space-y-6">
+            <div className="space-y-2">
+              <div className="flex items-center">
+                <BrandLogo className="h-7 w-auto" priority />
+              </div>
+              <h1 className="text-xl font-medium">Sign in</h1>
+              <p className="text-sm text-base-content/70">
+                Access your workspace and inbox.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div role="alert" className="alert alert-error">
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <div className="form-control">
-                <label className="label block mb-1 px-0">
-                  <span className="label-text text-sm font-medium">
-                    Email address
-                  </span>
-                </label>
+              {error ? <ErrorState message={error} /> : null}
+              <div className="space-y-2">
+                <label className="text-sm text-base-content/70">Email</label>
                 <input
                   type="email"
                   placeholder="you@example.com"
-                  className="input input-bordered w-full"
+                  className="input input-bordered w-full rounded-xl transition-all duration-150 focus:border-primary/50"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
-
-              <div className="form-control">
-                <label className="label block mb-1 px-0">
-                  <span className="label-text text-sm font-medium">
-                    Password
-                  </span>
-                </label>
+              <div className="space-y-2">
+                <label className="text-sm text-base-content/70">Password</label>
                 <input
                   type="password"
                   placeholder="Enter your password"
-                  className="input input-bordered w-full"
+                  className="input input-bordered w-full rounded-xl transition-all duration-150 focus:border-primary/50"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
-                <div className="mt-2 flex items-center justify-between text-xs text-base-content/70">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" className="checkbox checkbox-xs" />
-                    <span>Remember me</span>
-                  </label>
-                  <button
-                    type="button"
-                    className="link link-primary text-xs"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
               </div>
 
-              <div className="form-control mt-6 space-y-3">
+              <div className="space-y-3 pt-2">
                 <button
                   type="submit"
-                  className="btn btn-primary w-full"
+                  className="btn btn-primary w-full rounded-xl transition-all duration-150 active:scale-[0.99]"
                   disabled={isPending}
                 >
                   {isPending ? (
                     <>
-                      <span className="loading loading-spinner" />
-                      Logging in...
+                      <span className="loading loading-spinner loading-sm" />
+                      Signing in...
                     </>
                   ) : (
-                    "Login"
+                    "Sign in"
                   )}
                 </button>
-
                 <button
                   type="button"
-                  className="btn btn-ghost border border-base-300 w-full"
-                  onClick={() => {
-                    window.location.href = "/register";
-                  }}
+                  className="btn btn-ghost w-full rounded-xl transition-all duration-150 active:scale-[0.99]"
+                  onClick={() => router.push("/register")}
                 >
-                  Create a new account
+                  Create account
                 </button>
               </div>
             </form>
           </div>
 
-          {/* Right features carousel */}
-          <div className="hidden md:flex bg-primary text-primary-content px-10 py-10 items-center justify-center">
-            <div className="w-full max-w-md">
-              <div className="mb-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary-content/10">
-                    <span className="text-2xl font-bold">M</span>
-                  </span>
-                  <span className="text-xl font-semibold tracking-tight">
-                    msgbuddy
-                  </span>
-                </div>
-                <p className="text-sm opacity-90">
-                  Connect your team, tools, and AI agents in one focused
-                  workspace.
-                </p>
-              </div>
+          <div className="hidden md:flex flex-col justify-between bg-base-200 p-6">
+            <div className="space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-base-content/60">
+                Preview
+              </p>
+              <h2 className="text-base font-medium text-base-content">
+                {loginFeatureSlides[activeSlide].title}
+              </h2>
+              <p className="text-sm text-base-content/60">
+                {loginFeatureSlides[activeSlide].description}
+              </p>
+            </div>
 
-              <div className="carousel w-full">
-                <div className="carousel-item w-full">
-                  <div className="card w-full bg-primary/20 shadow-sm">
-                    <figure className="px-4 pt-4">
-                      <img
-                        src={loginFeatureSlides[activeSlide].imageSrc}
-                        alt={loginFeatureSlides[activeSlide].imageAlt}
-                        className="w-full rounded-xl object-cover"
-                      />
-                    </figure>
-                    <div className="card-body">
-                      <h3 className="card-title text-base">
-                        {loginFeatureSlides[activeSlide].title}
-                      </h3>
-                      <p className="text-xs opacity-90">
-                        {loginFeatureSlides[activeSlide].description}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="mt-6 overflow-hidden rounded-xl border border-base-300/80 bg-base-100">
+              <Image
+                src={loginFeatureSlides[activeSlide].imageSrc}
+                alt={loginFeatureSlides[activeSlide].imageAlt}
+                width={640}
+                height={420}
+                className="h-64 w-full object-cover"
+                priority
+              />
+            </div>
 
-              <div className="mt-4 flex gap-2">
-                {loginFeatureSlides.map((_, index) => (
-                  <span
-                    key={index}
-                    className={`h-1.5 w-4 rounded-full transition-all ${
-                      index === activeSlide
-                        ? "bg-primary-content"
-                        : "bg-primary-content/40"
-                    }`}
-                  />
-                ))}
+            <div className="mt-4 flex items-center gap-2">
+              {loginFeatureSlides.map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  className={`h-1.5 w-6 rounded-full transition-all duration-150 ${
+                    idx === activeSlide ? "bg-primary" : "bg-base-300"
+                  }`}
+                  onClick={() => setActiveSlide(idx)}
+                  aria-label={`Go to slide ${idx + 1}`}
+                />
+              ))}
+              <div className="ml-auto text-xs text-base-content/50">
+                {activeSlide + 1} / {loginFeatureSlides.length}
               </div>
             </div>
           </div>
