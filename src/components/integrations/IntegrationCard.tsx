@@ -18,7 +18,7 @@ export function IntegrationCard({
   return (
     <Link
       href={href}
-      className="block rounded-xl border border-base-300 bg-base-200 p-4 space-y-3 transition-all duration-150 hover:border-primary/50"
+      className="block rounded-box border border-base-300 bg-base-100 p-4 space-y-3 hover:bg-base-200"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-2">
@@ -34,7 +34,7 @@ export function IntegrationCard({
         </span>
       </div>
       <div>
-        <span className="btn btn-sm btn-outline rounded-xl">{actionLabel}</span>
+        <span className="btn btn-sm btn-outline">{actionLabel}</span>
       </div>
     </Link>
   );

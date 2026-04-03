@@ -12,13 +12,14 @@ import type { AxiosError } from "axios";
 const ONBOARDING_QUERY_KEY = "onboarding-status";
 
 function defaultMetaLanguage(): string {
-  if (typeof navigator === "undefined") return "en_US";
+  if (typeof navigator === "undefined") return "en";
   const tag = navigator.language || "en-US";
   const [lang, region] = tag.split(/[-_]/);
+  if (lang?.toLowerCase() === "en") return "en";
   if (region && region.length === 2) {
     return `${lang.toLowerCase()}_${region.toUpperCase()}`;
   }
-  return lang?.toLowerCase() === "en" ? "en_US" : `${lang || "en"}_${(region || "US").toUpperCase()}`;
+  return `${lang || "en"}_${(region || "US").toUpperCase()}`;
 }
 
 function getErrorMessage(err: unknown): string {
@@ -96,7 +97,7 @@ export function WhatsAppOnboardingPanel({
       whatsappApi.requestVerificationCode({
         phone_number_id: trimmedId,
         code_method: codeMethod,
-        language: language.trim() || "en_US",
+        language: language.trim() || "en",
       }),
     onSuccess: async () => {
       setLocalError(null);
@@ -355,7 +356,7 @@ export function WhatsAppOnboardingPanel({
                         className="input input-bordered input-sm"
                         value={language}
                         onChange={(e) => setLanguage(e.target.value)}
-                        placeholder="en_US"
+                        placeholder="en"
                         disabled={requestCodeMutation.isPending}
                       />
                     </label>

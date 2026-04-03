@@ -9,7 +9,7 @@ export function PageContainer({
 }) {
   return (
     <div
-      className={`space-y-1 px-1 py-1 sm:space-y-1 sm:p-1 ${className}`.trim()}
+      className={`flex min-h-0 flex-1 flex-col overflow-auto space-y-3 sm:space-y-3 ${className}`.trim()}
     >
       {children}
     </div>

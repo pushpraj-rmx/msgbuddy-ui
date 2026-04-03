@@ -6,11 +6,11 @@ import type {
   Workspace,
   WorkspaceSettings,
 } from "@/components/settings/SettingsClient";
-import {
-  serverFetch,
-  type MeResponse,
-  type WorkspaceCloudApiConfigResponse,
+import type {
+  MeResponse,
+  WorkspaceCloudApiConfigResponse,
 } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 
 async function getCloudApiSafe(

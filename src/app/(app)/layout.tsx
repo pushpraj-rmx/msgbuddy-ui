@@ -1,5 +1,6 @@
 import { AppLayout } from "@/components/AppLayout";
-import { serverFetch, type MeResponse } from "@/lib/api";
+import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import Link from "next/link";
 
@@ -16,13 +17,13 @@ export default async function AppGroupLayout({
       err instanceof Error ? err.message : "Failed to load current user.";
     return (
       <div className="min-h-[60dvh] p-6">
-        <div className="mx-auto max-w-xl space-y-3 rounded-xl border border-base-300 bg-base-200 p-5">
+        <div className="mx-auto max-w-xl space-y-3 rounded-box border border-base-300 bg-base-100 p-5">
           <h1 className="text-lg font-semibold">Session error</h1>
           <p className="text-sm text-base-content/70">
             We couldn’t load your session profile. This is usually a temporary
             backend error (not a logout).
           </p>
-          <pre className="max-h-56 overflow-auto rounded-lg border border-base-300 bg-base-100 p-3 text-xs">
+          <pre className="max-h-56 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 text-xs">
             {message}
           </pre>
           <div className="flex flex-wrap gap-2 pt-2">

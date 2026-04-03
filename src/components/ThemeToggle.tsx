@@ -1,36 +1,30 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import {
-  ComputerDesktopIcon,
-  MoonIcon,
-  SunIcon,
-} from "@heroicons/react/24/outline";
+import DarkModeRounded from "@mui/icons-material/DarkModeRounded";
+import LightModeRounded from "@mui/icons-material/LightModeRounded";
 
 const STORAGE_KEY = "theme-preference";
-type ThemePreference = "system" | "dark" | "light";
+type ThemePreference = "dark" | "light";
 
 function getStored(): ThemePreference {
-  if (typeof window === "undefined") return "system";
+  if (typeof window === "undefined") return "dark";
   const v = localStorage.getItem(STORAGE_KEY);
-  if (v === "dark" || v === "light" || v === "system") return v;
-  return "system";
+  if (v === "dark" || v === "light") return v;
+  return "dark";
 }
 
 function applyTheme(preference: ThemePreference) {
-  const resolved = preference === "system"
-    ? (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
-    : preference;
   if (typeof document !== "undefined") {
-    document.documentElement.setAttribute("data-theme", resolved);
+    document.documentElement.setAttribute("data-theme", preference);
   }
 }
 
-const ORDER: ThemePreference[] = ["system", "dark", "light"];
+const ORDER: ThemePreference[] = ["dark", "light"];
 
 export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
-  const [preference, setPreference] = useState<ThemePreference>("system");
+  const [preference, setPreference] = useState<ThemePreference>("dark");
 
   useEffect(() => {
     const stored = getStored();
@@ -42,11 +36,6 @@ export function ThemeToggle() {
   useEffect(() => {
     if (!mounted) return;
     applyTheme(preference);
-    if (preference !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => applyTheme("system");
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
   }, [mounted, preference]);
 
   const cycle = useCallback(() => {
@@ -57,13 +46,9 @@ export function ThemeToggle() {
     applyTheme(next);
   }, [preference]);
 
-  const displayPreference: ThemePreference = mounted ? preference : "system";
+  const displayPreference: ThemePreference = mounted ? preference : "dark";
   const label =
-    displayPreference === "system"
-      ? "System"
-      : displayPreference === "dark"
-        ? "Dark"
-        : "Light";
+    displayPreference === "dark" ? "Dark" : "Light";
 
   return (
     <button
@@ -73,9 +58,8 @@ export function ThemeToggle() {
       aria-label={`Theme: ${label}. Click to switch.`}
       title={`Theme: ${label}`}
     >
-      {displayPreference === "system" && <ComputerDesktopIcon className="h-5 w-5" />}
-      {displayPreference === "light" && <SunIcon className="h-5 w-5" />}
-      {displayPreference === "dark" && <MoonIcon className="h-5 w-5" />}
+      {displayPreference === "light" && <LightModeRounded className="h-5 w-5" />}
+      {displayPreference === "dark" && <DarkModeRounded className="h-5 w-5" />}
     </button>
   );
 }

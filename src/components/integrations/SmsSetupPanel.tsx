@@ -30,7 +30,7 @@ export function SmsSetupPanel({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-2">
+    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
       <h3 className="text-sm font-semibold">SMS setup</h3>
       <textarea
         className="textarea textarea-bordered w-full min-h-28 font-mono text-xs"

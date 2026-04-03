@@ -1,7 +1,8 @@
 import { InboxClient, type Conversation } from "@/components/inbox/InboxClient";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { serverFetch, type MeResponse } from "@/lib/api";
+import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 
 export default async function InboxPage() {
@@ -11,7 +12,7 @@ export default async function InboxPage() {
   );
 
   return (
-    <PageContainer className="flex min-h-0 flex-1 flex-col">
+    <PageContainer className="flex min-h-0 flex-1 flex-col overflow-hidden !space-y-0">
       <PageHeader
         title="Inbox"
         description="Manage conversations and reply in real-time."

@@ -19,9 +19,9 @@ export function SegmentPicker() {
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value;
     if (value === "") {
-      router.push("/contacts");
+      router.push("/people/contacts");
     } else {
-      router.push(`/contacts?segment=${value}`);
+      router.push(`/people/contacts?segment=${value}`);
     }
   };
 

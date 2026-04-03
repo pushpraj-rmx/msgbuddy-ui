@@ -121,7 +121,7 @@ export function TeamClient({
   };
 
   return (
-    <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-4">
+    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-4">
       {error ? (
         <div role="alert" className="alert alert-error alert-soft">
           <span className="text-sm">{error}</span>
@@ -180,7 +180,7 @@ export function TeamClient({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-100">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
         <table className="table">
           <thead>
             <tr>

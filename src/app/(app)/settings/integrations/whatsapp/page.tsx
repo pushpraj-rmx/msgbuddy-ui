@@ -1,12 +1,12 @@
 import { WhatsAppSettingsClient } from "@/components/integrations/WhatsAppSettingsClient";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import {
-  serverFetch,
-  type MeResponse,
-  type WorkspaceCloudApiConfigResponse,
-  type WorkspaceMessagingConfigPayload,
+import type {
+  MeResponse,
+  WorkspaceCloudApiConfigResponse,
+  WorkspaceMessagingConfigPayload,
 } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import type { WorkspaceSettings } from "@/components/settings/SettingsClient";
 

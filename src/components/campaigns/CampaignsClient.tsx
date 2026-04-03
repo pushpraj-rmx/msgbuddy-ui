@@ -1,13 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLatestApprovedVersion } from "@/hooks/use-templates";
-import { analyticsApi, campaignsApi, contactsApi } from "@/lib/api";
+import {
+  analyticsApi,
+  campaignsApi,
+  contactsApi,
+  channelTemplatesApi,
+} from "@/lib/api";
+import type { ChannelTemplateVersion } from "@/lib/types";
 import {
   campaignOutcomeLine,
   campaignStatusTone,
   completionPercent,
-  formatCampaignHeroTitle,
   formatCampaignListTitle,
   mergeReportWithProgress,
   parseReportMetrics,
@@ -15,24 +19,33 @@ import {
   showPause,
   showResume,
   showStart,
-  statusBadgeClasses,
   statusDotClasses,
-  statusHeroClasses,
 } from "@/lib/campaignUi";
+import {
+  isMediaHeaderType,
+  uploadMediaRowIdAndPrepareWhatsApp,
+} from "@/lib/whatsappTemplateMedia";
+import { useRightPanel } from "@/components/right-panel/useRightPanel";
+import { CampaignDetailView } from "./CampaignDetailView";
 
 export type Campaign = {
   id: string;
   name: string;
   status: string;
   channel: string;
-  templateId?: string;
-  templateVersion?: number;
+  channelTemplateVersionId?: string;
+  /** Backend: header media, staticVariables, carouselCardMediaIds */
+  templateBindings?: Record<string, unknown> | null;
 };
 
 export type Template = {
   id: string;
   name: string;
-  channel: string;
+  channelTemplates?: Array<{
+    id: string;
+    channel: string;
+    deletedAt?: string | null;
+  }>;
 };
 
 type Contact = {
@@ -60,7 +73,24 @@ type CampaignRun = {
   failedJobs?: number;
 };
 
-const AUDIENCE_TYPES = ["ALL", "CONTACTS", "QUERY"] as const;
+type CampaignRunJob = {
+  id: string;
+  campaignRunId: string;
+  contactId: string;
+  chunkIndex?: number;
+  status?: string;
+  idempotencyKey?: string;
+  messageId?: string | null;
+  attempts?: number;
+  lastError?: string | null;
+  lastAttemptAt?: string | null;
+  scheduledAt?: string | null;
+  processedAt?: string | null;
+  createdAt?: string | null;
+};
+
+/** Matches API CampaignAudienceType (SEGMENT needs audienceQuery — use API for now). */
+const AUDIENCE_TYPES = ["ALL", "SPECIFIC", "SEGMENT"] as const;
 
 function getApiError(err: unknown): string {
   return (err as { response?: { data?: { message?: string } } })?.response
@@ -78,35 +108,6 @@ function formatReportValue(value: unknown): string {
   } catch {
     return String(value);
   }
-}
-
-function MetricCard({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  accent?: "default" | "success" | "warning" | "error";
-}) {
-  const valueClass =
-    accent === "success"
-      ? "text-success"
-      : accent === "warning"
-        ? "text-warning"
-        : accent === "error"
-          ? "text-error"
-          : "text-base-content";
-  return (
-    <div className="rounded-box border border-base-300/60 bg-base-100 px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-base-content/55">
-        {label}
-      </p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${valueClass}`}>
-        {value}
-      </p>
-    </div>
-  );
 }
 
 export function CampaignsClient({
@@ -130,7 +131,7 @@ export function CampaignsClient({
   const [showRawReport, setShowRawReport] = useState(false);
   const [runs, setRuns] = useState<CampaignRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
-  const [runJobs, setRunJobs] = useState<Record<string, unknown>[]>([]);
+  const [runJobs, setRunJobs] = useState<CampaignRunJob[]>([]);
   const [runJobsLoading, setRunJobsLoading] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
@@ -143,6 +144,23 @@ export function CampaignsClient({
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [scheduledAt, setScheduledAt] = useState("");
   const [timezone, setTimezone] = useState("UTC");
+  const [channelTemplateVersionId, setChannelTemplateVersionId] = useState("");
+  const [channelWaTemplateId, setChannelWaTemplateId] = useState<string | null>(
+    null
+  );
+  const [versionDetail, setVersionDetail] = useState<ChannelTemplateVersion | null>(
+    null
+  );
+  const [versionDetailLoading, setVersionDetailLoading] = useState(false);
+  const [headerMediaId, setHeaderMediaId] = useState<string | null>(null);
+  const [carouselCardMediaIds, setCarouselCardMediaIds] = useState<string[]>(
+    []
+  );
+  const [staticVariablesText, setStaticVariablesText] = useState("{}");
+  const [bindingUploadBusy, setBindingUploadBusy] = useState(false);
+  const [bindingFieldError, setBindingFieldError] = useState<string | null>(
+    null
+  );
 
   const selectedCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedId) ?? null,
@@ -162,11 +180,10 @@ export function CampaignsClient({
     ? campaignStatusTone(selectedCampaign.status)
     : "neutral";
 
-  const { data: latestApproved, isLoading: latestApprovedLoading } =
-    useLatestApprovedVersion(templateId, { enabled: !!templateId && wizardOpen });
-  const canUseSelectedTemplate = !!latestApproved?.version;
+  const canUseSelectedTemplate =
+    !!templateId && channelTemplateVersionId.trim().length > 0;
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -178,21 +195,156 @@ export function CampaignsClient({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const openWizard = async () => {
     setWizardOpen(true);
     setStep(1);
     setSelectedContacts([]);
+    setChannelTemplateVersionId("");
+    setChannelWaTemplateId(null);
+    setVersionDetail(null);
+    setHeaderMediaId(null);
+    setCarouselCardMediaIds([]);
+    setStaticVariablesText("{}");
+    setBindingFieldError(null);
     if (!contacts.length) {
       const data = await contactsApi.list({});
       setContacts(data.contacts ?? []);
     }
   };
 
+  useEffect(() => {
+    if (!wizardOpen || !templateId) {
+      setChannelWaTemplateId(null);
+      return;
+    }
+    const tpl = templates.find((t) => t.id === templateId) ?? null;
+    const wa = (tpl?.channelTemplates ?? []).find(
+      (ct) => ct.channel === "WHATSAPP" && !ct.deletedAt
+    );
+    setChannelWaTemplateId(wa?.id ?? null);
+    if (!wa?.id) {
+      setChannelTemplateVersionId("");
+      return;
+    }
+    let cancelled = false;
+    void channelTemplatesApi
+      .state(wa.id)
+      .then((state) => {
+        if (cancelled) return;
+        const v = state.activeVersion ?? state.latestSendableVersion;
+        setChannelTemplateVersionId(v?.id ?? "");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setChannelTemplateVersionId("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardOpen, templateId, templates]);
+
+  useEffect(() => {
+    if (
+      !wizardOpen ||
+      !channelWaTemplateId ||
+      !channelTemplateVersionId.trim()
+    ) {
+      setVersionDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setVersionDetailLoading(true);
+    void channelTemplatesApi
+      .listVersions(channelWaTemplateId)
+      .then((versions) => {
+        if (cancelled) return;
+        const v = versions.find((x) => x.id === channelTemplateVersionId);
+        setVersionDetail(v ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVersionDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setVersionDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [wizardOpen, channelWaTemplateId, channelTemplateVersionId]);
+
+  useEffect(() => {
+    const cards = versionDetail?.carouselCards;
+    if (versionDetail?.layoutType === "CAROUSEL" && Array.isArray(cards)) {
+      const n = cards.length;
+      setCarouselCardMediaIds((prev) => {
+        if (prev.length === n) return prev;
+        return Array.from({ length: n }, (_, i) => prev[i] ?? "");
+      });
+    } else {
+      setCarouselCardMediaIds([]);
+    }
+  }, [versionDetail]);
+
+  const needsHeaderMedia =
+    versionDetail != null && isMediaHeaderType(versionDetail.headerType);
+  const carouselCardCount =
+    versionDetail?.layoutType === "CAROUSEL" &&
+    Array.isArray(versionDetail.carouselCards)
+      ? versionDetail.carouselCards.length
+      : 0;
+  const bindingsStepReady =
+    !versionDetailLoading &&
+    versionDetail != null &&
+    (!needsHeaderMedia || !!headerMediaId?.trim()) &&
+    (carouselCardCount === 0 ||
+      (carouselCardMediaIds.length >= carouselCardCount &&
+        carouselCardMediaIds
+          .slice(0, carouselCardCount)
+          .every((id) => String(id ?? "").trim().length > 0)));
+
   const createCampaign = async () => {
-    if (!templateId || !latestApproved?.version) {
-      setError("Template must be provider-approved before use in campaigns.");
+    if (!templateId || !channelTemplateVersionId.trim()) {
+      setError("Pick a message and provide a channelTemplateVersionId.");
+      return;
+    }
+    if (audienceType === "SPECIFIC" && selectedContacts.length === 0) {
+      setError("Select at least one contact, or choose audience “All contacts”.");
+      return;
+    }
+    if (audienceType === "SEGMENT") {
+      setError(
+        "Segment campaigns need an audience query. Create via API or choose “All contacts” / “Selected contacts”."
+      );
+      return;
+    }
+    let staticVariables: Record<string, string> | undefined;
+    const trimmedStatic = staticVariablesText.trim();
+    if (trimmedStatic && trimmedStatic !== "{}") {
+      try {
+        const parsed = JSON.parse(trimmedStatic) as unknown;
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          Array.isArray(parsed)
+        ) {
+          setError("Static variables must be a JSON object, e.g. {\"code\":\"SAVE\"}.");
+          return;
+        }
+        staticVariables = Object.fromEntries(
+          Object.entries(parsed as Record<string, unknown>).filter(
+            ([, v]) => typeof v === "string"
+          ) as [string, string][]
+        );
+      } catch {
+        setError("Static variables must be valid JSON.");
+        return;
+      }
+    }
+    if (!bindingsStepReady) {
+      setError("Upload required template media (header or carousel cards) before creating.");
       return;
     }
     setLoading(true);
@@ -202,13 +354,26 @@ export function CampaignsClient({
         dateStyle: "medium",
         timeStyle: "short",
       })}`;
+      const templateBindings: Record<string, unknown> = {};
+      if (headerMediaId?.trim()) templateBindings.headerMediaId = headerMediaId.trim();
+      if (carouselCardCount > 0) {
+        templateBindings.carouselCardMediaIds = carouselCardMediaIds
+          .slice(0, carouselCardCount)
+          .map((id) => id.trim());
+      }
+      if (staticVariables && Object.keys(staticVariables).length > 0) {
+        templateBindings.staticVariables = staticVariables;
+      }
       await campaignsApi.create({
         name: friendlyName,
-        channel: templates.find((tpl) => tpl.id === templateId)?.channel,
-        templateId,
-        templateVersion: latestApproved.version,
+        channel: "WHATSAPP",
+        channelTemplateVersionId: channelTemplateVersionId.trim(),
+        ...(Object.keys(templateBindings).length > 0 && {
+          templateBindings,
+        }),
         audienceType,
-        contactIds: audienceType === "CONTACTS" ? selectedContacts : undefined,
+        contactIds:
+          audienceType === "SPECIFIC" ? selectedContacts : undefined,
         scheduledAt: scheduledAt || undefined,
         timezone,
       });
@@ -290,7 +455,7 @@ export function CampaignsClient({
       const data = (await campaignsApi.runJobs(
         selectedCampaign.id,
         selectedRunId
-      )) as Record<string, unknown>[];
+      )) as CampaignRunJob[];
       setRunJobs(Array.isArray(data) ? data : []);
     } catch {
       setRunJobs([]);
@@ -311,32 +476,35 @@ export function CampaignsClient({
     void loadRunJobs();
   }, [loadRunJobs]);
 
-  const handleAction = async (
-    action: "start" | "pause" | "resume" | "cancel" | "duplicate" | "delete"
-  ) => {
-    if (!selectedCampaign) return;
-    setLoading(true);
-    setError(null);
-    try {
-      if (action === "start") await campaignsApi.start(selectedCampaign.id);
-      if (action === "pause") await campaignsApi.pause(selectedCampaign.id);
-      if (action === "resume") await campaignsApi.resume(selectedCampaign.id);
-      if (action === "cancel") await campaignsApi.cancel(selectedCampaign.id);
-      if (action === "duplicate") await campaignsApi.duplicate(selectedCampaign.id);
-      if (action === "delete") await campaignsApi.remove(selectedCampaign.id);
-      await refresh();
-      await loadProgress();
-      await fetchReport();
-      await loadRuns();
-      await loadRunJobs();
-    } catch (err: unknown) {
-      setError(getApiError(err) || "Campaign action failed.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const handleAction = useCallback(
+    async (
+      action: "start" | "pause" | "resume" | "cancel" | "duplicate" | "delete"
+    ) => {
+      if (!selectedCampaign) return;
+      setLoading(true);
+      setError(null);
+      try {
+        if (action === "start") await campaignsApi.start(selectedCampaign.id);
+        if (action === "pause") await campaignsApi.pause(selectedCampaign.id);
+        if (action === "resume") await campaignsApi.resume(selectedCampaign.id);
+        if (action === "cancel") await campaignsApi.cancel(selectedCampaign.id);
+        if (action === "duplicate") await campaignsApi.duplicate(selectedCampaign.id);
+        if (action === "delete") await campaignsApi.remove(selectedCampaign.id);
+        await refresh();
+        await loadProgress();
+        await fetchReport();
+        await loadRuns();
+        await loadRunJobs();
+      } catch (err: unknown) {
+        setError(getApiError(err) || "Campaign action failed.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedCampaign, refresh, loadProgress, fetchReport, loadRuns, loadRunJobs]
+  );
 
-  const handleRename = async () => {
+  const handleRename = useCallback(async () => {
     if (!selectedCampaign) return;
     const nextName = window.prompt("Campaign name", selectedCampaign.name)?.trim();
     if (!nextName || nextName === selectedCampaign.name) return;
@@ -350,7 +518,7 @@ export function CampaignsClient({
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCampaign, refresh]);
 
   const progressBarPercent = useMemo(() => {
     const p = completionPercent(mergedMetrics);
@@ -400,9 +568,101 @@ export function CampaignsClient({
   const statusLabel = selectedCampaign?.status ?? "";
   const channelLabel = selectedCampaign?.channel ?? "";
 
+  const { setContent: setRightPanelContent, clearContent: clearRightPanelContent } =
+    useRightPanel();
+
+  const campaignDetailPanel = useMemo(() => {
+    if (!selectedCampaign) return null;
+    return (
+      <CampaignDetailView
+        selectedCampaign={selectedCampaign}
+        tone={tone}
+        outcomeLine={outcomeLine}
+        channelLabel={channelLabel}
+        statusLabel={statusLabel}
+        mergedMetrics={mergedMetrics}
+        progress={progress}
+        progressLoading={progressLoading}
+        completionPct={completionPct}
+        progressBarPercent={progressBarPercent}
+        progressBarCaption={progressBarCaption}
+        loading={loading}
+        handleAction={handleAction}
+        handleRename={handleRename}
+        loadProgress={loadProgress}
+        runs={runs}
+        runsLoading={runsLoading}
+        runJobs={runJobs}
+        runJobsLoading={runJobsLoading}
+        selectedRunId={selectedRunId}
+        setSelectedRunId={setSelectedRunId}
+        loadRuns={loadRuns}
+        loadRunJobs={loadRunJobs}
+        reportLoading={reportLoading}
+        reportError={reportError}
+        fetchReport={fetchReport}
+        hasSummaryCards={hasSummaryCards}
+        reportMetrics={reportMetrics}
+        showRawReport={showRawReport}
+        setShowRawReport={setShowRawReport}
+      />
+    );
+  }, [
+    selectedCampaign,
+    tone,
+    outcomeLine,
+    channelLabel,
+    statusLabel,
+    mergedMetrics,
+    progress,
+    progressLoading,
+    completionPct,
+    progressBarPercent,
+    progressBarCaption,
+    loading,
+    handleAction,
+    handleRename,
+    loadProgress,
+    runs,
+    runsLoading,
+    runJobs,
+    runJobsLoading,
+    selectedRunId,
+    setSelectedRunId,
+    loadRuns,
+    loadRunJobs,
+    reportLoading,
+    reportError,
+    fetchReport,
+    hasSummaryCards,
+    reportMetrics,
+    showRawReport,
+  ]);
+
+  useEffect(() => {
+    if (!selectedCampaign) {
+      clearRightPanelContent("campaigns");
+      return;
+    }
+    setRightPanelContent({
+      source: "campaigns",
+      title: formatCampaignListTitle(selectedCampaign.name),
+      openAfter: true,
+      content: campaignDetailPanel,
+    });
+  }, [
+    selectedCampaign,
+    campaignDetailPanel,
+    clearRightPanelContent,
+    setRightPanelContent,
+  ]);
+
+  useEffect(() => {
+    return () => clearRightPanelContent("campaigns");
+  }, [clearRightPanelContent]);
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(280px,340px)_1fr] lg:gap-10">
-      {/* Control panel */}
+    <div className="flex max-w-md flex-col gap-6 lg:max-w-[min(100%,420px)]">
       <aside className="flex flex-col gap-5">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold tracking-tight text-base-content">
@@ -434,8 +694,8 @@ export function CampaignsClient({
                 onClick={() => setSelectedId(campaign.id)}
                 className={`group flex w-full flex-col gap-2 rounded-box border px-3 py-3 text-left transition-all ${
                   active
-                    ? "border-primary/45 bg-primary/[0.08] shadow-sm ring-1 ring-primary/20"
-                    : "border-base-300/55 bg-base-100 hover:border-base-300 hover:bg-base-200/90 hover:shadow-sm"
+                    ? "border-base-300 bg-base-200 ring-1 ring-base-300"
+                    : "border-base-300 bg-base-100 hover:bg-base-200"
                 }`}
               >
                 <div className="flex items-start gap-2.5">
@@ -470,389 +730,6 @@ export function CampaignsClient({
         </button>
       </aside>
 
-      {/* Focused view */}
-      <main className="flex min-w-0 flex-col gap-10">
-        {!selectedCampaign ? (
-          <div className="rounded-box border border-dashed border-base-300 bg-base-100/50 px-6 py-16 text-center">
-            <p className="text-lg font-medium text-base-content">
-              Select a campaign
-            </p>
-            <p className="mt-2 text-sm text-base-content/65">
-              Choose one on the left to see status, actions, and delivery metrics.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* Header + status hero */}
-            <section className="flex flex-col gap-8">
-              <header className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-base-content/45">
-                  Campaign · {channelLabel}
-                </p>
-                <h1 className="text-3xl font-bold leading-tight tracking-tight text-base-content md:text-4xl">
-                  {formatCampaignHeroTitle(selectedCampaign.name, 120)}
-                </h1>
-                {outcomeLine ? (
-                  <p className="max-w-2xl text-lg font-medium leading-snug text-base-content/90">
-                    {outcomeLine}
-                  </p>
-                ) : null}
-              </header>
-
-              <div className={`px-5 py-6 md:px-7 md:py-7 ${statusHeroClasses(tone)}`}>
-                <div className="flex flex-wrap items-start justify-between gap-4">
-                  <div className="space-y-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`badge ${statusBadgeClasses(tone)} gap-1 border-0 px-3 text-sm`}
-                      >
-                        {statusLabel}
-                      </span>
-                      {tone === "running" || progressLoading ? (
-                        <span className="loading loading-spinner loading-md text-info" />
-                      ) : null}
-                    </div>
-                    {(completionPct != null ||
-                      (mergedMetrics.completed != null &&
-                        mergedMetrics.totalJobs != null)) && (
-                      <p className="text-base font-semibold text-base-content">
-                        {completionPct != null ? (
-                          <span className="text-success">{completionPct}%</span>
-                        ) : null}
-                        {completionPct != null &&
-                        mergedMetrics.completed != null &&
-                        mergedMetrics.totalJobs != null
-                          ? " · "
-                          : null}
-                        {mergedMetrics.completed != null &&
-                        mergedMetrics.totalJobs != null ? (
-                          <span className="text-base-content/85">
-                            {mergedMetrics.completed} / {mergedMetrics.totalJobs}{" "}
-                            delivered
-                          </span>
-                        ) : null}
-                      </p>
-                    )}
-                    {tone === "running" && progress ? (
-                      <p className="text-sm text-base-content/75">
-                        Run #{progress.runNumber ?? "—"}
-                      </p>
-                    ) : null}
-                  </div>
-                </div>
-
-                {progressBarPercent != null && progressBarCaption ? (
-                  <div className="mt-6">
-                    <p className="mb-2 text-sm font-medium text-base-content/80">
-                      {progressBarCaption}
-                    </p>
-                    <progress
-                      className="progress progress-primary h-5 w-full max-w-2xl"
-                      value={progressBarPercent}
-                      max={100}
-                    />
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  {showStart(selectedCampaign.status) ? (
-                    <button
-                      type="button"
-                      className="btn btn-primary gap-1"
-                      onClick={() => void handleAction("start")}
-                      disabled={loading}
-                    >
-                      <span aria-hidden>▶</span> Start
-                    </button>
-                  ) : null}
-                  {showResume(selectedCampaign.status) ? (
-                    <button
-                      type="button"
-                      className="btn btn-secondary btn-outline gap-1"
-                      onClick={() => void handleAction("resume")}
-                      disabled={loading}
-                    >
-                      <span aria-hidden>↻</span> Resume
-                    </button>
-                  ) : null}
-                  {showPause(selectedCampaign.status) ? (
-                    <button
-                      type="button"
-                      className="btn btn-outline gap-1"
-                      onClick={() => void handleAction("pause")}
-                      disabled={loading}
-                    >
-                      <span aria-hidden>⏸</span> Pause
-                    </button>
-                  ) : null}
-                  {showCancel(selectedCampaign.status) ? (
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-error gap-1"
-                      onClick={() => void handleAction("cancel")}
-                      disabled={loading}
-                    >
-                      <span aria-hidden>✕</span> Cancel
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-ghost gap-1"
-                    onClick={() => void handleAction("duplicate")}
-                    disabled={loading}
-                  >
-                    <span aria-hidden>⧉</span> Duplicate
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost gap-1"
-                    onClick={() => void handleRename()}
-                    disabled={loading}
-                  >
-                    <span aria-hidden>✎</span> Rename
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-error gap-1"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete campaign "${selectedCampaign.name}"?`
-                        )
-                      ) {
-                        void handleAction("delete");
-                      }
-                    }}
-                    disabled={loading}
-                  >
-                    <span aria-hidden>🗑</span> Delete
-                  </button>
-                  {loading ? (
-                    <span className="loading loading-spinner loading-sm" />
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm gap-1.5 sm:shrink-0"
-                  onClick={() => void loadProgress()}
-                  disabled={progressLoading}
-                  aria-label="Sync latest progress from server"
-                >
-                  {progressLoading ? (
-                    <span className="loading loading-spinner loading-xs" />
-                  ) : (
-                    <span aria-hidden className="text-base">
-                      ↻
-                    </span>
-                  )}
-                  Sync state
-                </button>
-              </div>
-            </section>
-
-            <div className="divider my-0" />
-
-            <section className="space-y-4">
-              <div className="flex items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight text-base-content">
-                    Runs & jobs
-                  </h2>
-                  <p className="mt-1.5 text-sm text-base-content/70">
-                    Operational visibility for each campaign run.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    void loadRuns();
-                    void loadRunJobs();
-                  }}
-                  disabled={runsLoading || runJobsLoading}
-                >
-                  Refresh
-                </button>
-              </div>
-
-              <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-                <div className="rounded-box border border-base-300 bg-base-100 p-2">
-                  {runsLoading ? (
-                    <div className="flex justify-center py-4">
-                      <span className="loading loading-spinner loading-sm" />
-                    </div>
-                  ) : runs.length ? (
-                    <ul className="space-y-1">
-                      {runs.map((run) => (
-                        <li key={run.id}>
-                          <button
-                            type="button"
-                            className={`w-full rounded-lg border px-3 py-2 text-left ${
-                              selectedRunId === run.id
-                                ? "border-primary/40 bg-primary/10"
-                                : "border-base-300 bg-base-100 hover:bg-base-200"
-                            }`}
-                            onClick={() => setSelectedRunId(run.id)}
-                          >
-                            <p className="text-sm font-medium">Run {run.id}</p>
-                            <p className="text-xs text-base-content/65">
-                              {run.status || "unknown"}
-                            </p>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="p-3 text-sm text-base-content/65">No runs yet.</p>
-                  )}
-                </div>
-
-                <div className="rounded-box border border-base-300 bg-base-100 p-3">
-                  <h3 className="mb-2 text-sm font-medium">Run jobs</h3>
-                  {runJobsLoading ? (
-                    <div className="flex justify-center py-4">
-                      <span className="loading loading-spinner loading-sm" />
-                    </div>
-                  ) : runJobs.length ? (
-                    <pre className="max-h-72 overflow-auto rounded-lg border border-base-300 p-3 text-xs">
-                      {JSON.stringify(runJobs, null, 2)}
-                    </pre>
-                  ) : (
-                    <p className="text-sm text-base-content/65">
-                      No jobs available for this run.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </section>
-
-            <div className="divider my-0" />
-
-            {/* Report — structured metrics */}
-            <section className="flex flex-col gap-5">
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-semibold tracking-tight text-base-content">
-                    Results &amp; delivery
-                  </h2>
-                  <p className="mt-1.5 text-sm text-base-content/70">
-                    Per-send outcomes and volume for this campaign.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {reportLoading ? (
-                    <span className="loading loading-spinner loading-sm" />
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => void fetchReport()}
-                    disabled={reportLoading}
-                  >
-                    Refresh
-                  </button>
-                </div>
-              </div>
-
-              {reportError ? (
-                <div role="alert" className="alert alert-warning">
-                  <span>{reportError}</span>
-                </div>
-              ) : null}
-
-              <>
-                  {hasSummaryCards ? (
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {mergedMetrics.totalJobs != null ? (
-                        <MetricCard
-                          label="Total jobs"
-                          value={mergedMetrics.totalJobs}
-                        />
-                      ) : null}
-                      {mergedMetrics.completed != null ? (
-                        <MetricCard
-                          label="Completed"
-                          value={mergedMetrics.completed}
-                          accent="success"
-                        />
-                      ) : null}
-                      {mergedMetrics.failed != null ? (
-                        <MetricCard
-                          label="Failed"
-                          value={mergedMetrics.failed}
-                          accent={
-                            mergedMetrics.failed > 0 ? "error" : "default"
-                          }
-                        />
-                      ) : null}
-                      {mergedMetrics.delivered != null ? (
-                        <MetricCard
-                          label="Delivered"
-                          value={mergedMetrics.delivered}
-                          accent="success"
-                        />
-                      ) : null}
-                      {mergedMetrics.read != null ? (
-                        <MetricCard label="Read" value={mergedMetrics.read} />
-                      ) : null}
-                      {mergedMetrics.messagesSent != null ? (
-                        <MetricCard
-                          label="Messages sent"
-                          value={mergedMetrics.messagesSent}
-                        />
-                      ) : null}
-                      {completionPct != null ? (
-                        <MetricCard
-                          label="Success rate"
-                          value={`${completionPct}%`}
-                          accent="success"
-                        />
-                      ) : null}
-                    </div>
-                  ) : !reportLoading ? (
-                    <p className="text-sm text-base-content/70">
-                      Totals will fill in as sends complete — use{" "}
-                      <span className="font-medium">Sync state</span> for the
-                      latest run.
-                    </p>
-                  ) : null}
-
-                  {Object.keys(reportMetrics.extras).length > 0 ? (
-                    <div className="rounded-box border border-base-300/40 bg-base-200/30 p-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setShowRawReport((v) => !v)}
-                        >
-                          {showRawReport ? "Hide" : "View"} technical details
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => {
-                            void navigator.clipboard.writeText(
-                              formatReportValue(reportMetrics.extras)
-                            );
-                          }}
-                        >
-                          Copy
-                        </button>
-                      </div>
-                      {showRawReport ? (
-                        <pre className="mt-3 max-h-64 overflow-auto rounded-box border border-base-300/60 bg-base-100 p-3 font-mono text-xs leading-relaxed text-base-content/90">
-                          {formatReportValue(reportMetrics.extras)}
-                        </pre>
-                      ) : null}
-                    </div>
-                  ) : null}
-              </>
-            </section>
-          </>
-        )}
-      </main>
 
       {wizardOpen && (
         <dialog open className="modal modal-middle">
@@ -862,44 +739,202 @@ export function CampaignsClient({
               {step === 1 && (
                 <div className="space-y-2">
                   <p className="text-sm text-base-content/60">
-                    Step 1: Choose a template (provider-approved only)
+                    Step 1: Choose a message (WhatsApp)
                   </p>
                   <select
                     className="select select-bordered w-full"
                     value={templateId || ""}
                     onChange={(event) => setTemplateId(event.target.value || null)}
                   >
-                    <option value="">Select a template</option>
+                    <option value="">Select a message</option>
                     {templates.map((template) => (
                       <option key={template.id} value={template.id}>
                         {template.name}
                       </option>
                     ))}
                   </select>
-                  {templateId && latestApprovedLoading && (
-                    <p className="text-sm text-base-content/60">
-                      Checking approved version…
-                    </p>
-                  )}
-                  {templateId && !latestApprovedLoading && !canUseSelectedTemplate && (
+                  {templateId && !canUseSelectedTemplate && (
                     <div role="alert" className="alert alert-warning alert-soft text-sm">
                       <span>
-                        This template has no provider-approved version. Approve
-                        and sync a version in Templates first.
+                        No approved WhatsApp version available yet.
                       </span>
                     </div>
-                  )}
-                  {templateId && canUseSelectedTemplate && (
-                    <p className="text-sm text-success">
-                      Using version {latestApproved?.version} (provider-approved).
-                    </p>
                   )}
                 </div>
               )}
               {step === 2 && (
+                <div className="space-y-3">
+                  <p className="text-sm text-base-content/60">
+                    Step 2: Template media & variables
+                  </p>
+                  {versionDetailLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-base-content/70">
+                      <span className="loading loading-spinner loading-sm" />
+                      Loading template details…
+                    </div>
+                  ) : !versionDetail ? (
+                    <div role="alert" className="alert alert-warning alert-soft text-sm">
+                      <span>
+                        Could not load template version. Go back and re-select a
+                        message.
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      {needsHeaderMedia ? (
+                        <div className="rounded-box border border-base-300 bg-base-100 p-3">
+                          <p className="text-sm font-medium text-base-content">
+                            Header media ({versionDetail.headerType})
+                          </p>
+                          <p className="mt-1 text-xs text-base-content/60">
+                            Upload an image, video, or document. It is sent to
+                            WhatsApp and linked to this campaign for every
+                            recipient.
+                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <input
+                              type="file"
+                              className="file-input file-input-bordered file-input-sm w-full max-w-xs"
+                              accept={
+                                versionDetail.headerType === "VIDEO"
+                                  ? "video/mp4,video/3gpp"
+                                  : versionDetail.headerType === "DOCUMENT"
+                                    ? "application/pdf,application/*"
+                                    : "image/jpeg,image/png,image/webp,image/gif"
+                              }
+                              disabled={bindingUploadBusy}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (!file) return;
+                                setBindingFieldError(null);
+                                setBindingUploadBusy(true);
+                                try {
+                                  const id =
+                                    await uploadMediaRowIdAndPrepareWhatsApp(
+                                      file
+                                    );
+                                  setHeaderMediaId(id);
+                                } catch (err: unknown) {
+                                  setBindingFieldError(
+                                    getApiError(err) ||
+                                      "Upload failed. Try a smaller file or supported format."
+                                  );
+                                } finally {
+                                  setBindingUploadBusy(false);
+                                }
+                              }}
+                            />
+                            {headerMediaId ? (
+                              <span className="badge badge-success badge-outline">
+                                Ready
+                              </span>
+                            ) : (
+                              <span className="text-xs text-warning">
+                                Required
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-base-content/55">
+                          This template has no media header (text or none only).
+                        </p>
+                      )}
+
+                      {carouselCardCount > 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-base-content">
+                            Carousel cards ({carouselCardCount})
+                          </p>
+                          <p className="text-xs text-base-content/60">
+                            Each card needs header media uploaded for WhatsApp.
+                          </p>
+                          {Array.from(
+                            { length: carouselCardCount },
+                            (_, idx) => (
+                              <div
+                                key={idx}
+                                className="rounded-box border border-base-300 bg-base-100 p-3"
+                              >
+                                <p className="text-xs font-medium text-base-content/80">
+                                  Card {idx + 1}
+                                </p>
+                                <input
+                                  type="file"
+                                  className="file-input file-input-bordered file-input-sm mt-2 w-full max-w-xs"
+                                  accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp"
+                                  disabled={bindingUploadBusy}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    e.target.value = "";
+                                    if (!file) return;
+                                    setBindingFieldError(null);
+                                    setBindingUploadBusy(true);
+                                    try {
+                                      const id =
+                                        await uploadMediaRowIdAndPrepareWhatsApp(
+                                          file
+                                        );
+                                      setCarouselCardMediaIds((prev) => {
+                                        const next = [...prev];
+                                        next[idx] = id;
+                                        return next;
+                                      });
+                                    } catch (err: unknown) {
+                                      setBindingFieldError(
+                                        getApiError(err) ||
+                                          "Upload failed for this card."
+                                      );
+                                    } finally {
+                                      setBindingUploadBusy(false);
+                                    }
+                                  }}
+                                />
+                                {carouselCardMediaIds[idx] ? (
+                                  <span className="mt-1 inline-block text-xs text-success">
+                                    Uploaded
+                                  </span>
+                                ) : null}
+                              </div>
+                            )
+                          )}
+                        </div>
+                      ) : null}
+
+                      <div className="space-y-1">
+                        <label className="text-sm font-medium text-base-content">
+                          Static variables (optional JSON)
+                        </label>
+                        <textarea
+                          className="textarea textarea-bordered w-full font-mono text-xs"
+                          rows={4}
+                          placeholder='{"promo_code":"SUMMER"}'
+                          value={staticVariablesText}
+                          onChange={(e) => setStaticVariablesText(e.target.value)}
+                        />
+                        <p className="text-xs text-base-content/55">
+                          Keys must match this template&apos;s placeholders (body,
+                          header text, buttons, carousel). The server only applies
+                          keys the template uses; extras are ignored. Same value for
+                          every recipient; contact data overrides when both set.
+                          String values only.
+                        </p>
+                      </div>
+
+                      {bindingFieldError ? (
+                        <div role="alert" className="alert alert-error text-sm">
+                          {bindingFieldError}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              )}
+              {step === 3 && (
                 <div className="space-y-2">
                   <p className="text-sm text-base-content/60">
-                    Step 2: Choose an audience
+                    Step 3: Choose an audience
                   </p>
                   <select
                     className="select select-bordered w-full"
@@ -912,12 +947,16 @@ export function CampaignsClient({
                   >
                     {AUDIENCE_TYPES.map((type) => (
                       <option key={type} value={type}>
-                        {type}
+                        {type === "ALL"
+                          ? "All contacts"
+                          : type === "SPECIFIC"
+                            ? "Selected contacts"
+                            : "Segment (API only)"}
                       </option>
                     ))}
                   </select>
-                  {audienceType === "CONTACTS" && (
-                    <div className="max-h-48 overflow-y-auto rounded-xl border border-base-300 bg-base-100 p-2">
+                  {audienceType === "SPECIFIC" && (
+                    <div className="max-h-48 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2">
                       {contacts.map((contact) => (
                         <label
                           key={contact.id}
@@ -942,12 +981,18 @@ export function CampaignsClient({
                       ))}
                     </div>
                   )}
+                  {audienceType === "SEGMENT" ? (
+                    <p className="text-xs text-warning">
+                      Segment audiences require a saved query. Create this
+                      campaign with the API or pick another audience.
+                    </p>
+                  ) : null}
                 </div>
               )}
-              {step === 3 && (
+              {step === 4 && (
                 <div className="space-y-2">
                   <p className="text-sm text-base-content/60">
-                    Step 3: Schedule
+                    Step 4: Schedule
                   </p>
                   <input
                     type="datetime-local"
@@ -982,24 +1027,30 @@ export function CampaignsClient({
                   Back
                 </button>
               )}
-              {step < 3 && (
+              {step < 4 && (
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={() => setStep((prev) => prev + 1)}
                   disabled={
-                    step === 1 &&
-                    (!templateId || !canUseSelectedTemplate || latestApprovedLoading)
+                    (step === 1 &&
+                      (!templateId || !canUseSelectedTemplate)) ||
+                    (step === 2 && !bindingsStepReady) ||
+                    (step === 3 &&
+                      audienceType === "SPECIFIC" &&
+                      selectedContacts.length === 0) ||
+                    (step === 3 && audienceType === "SEGMENT")
                   }
                 >
                   Next
                 </button>
               )}
-              {step === 3 && (
+              {step === 4 && (
                 <button
                   type="button"
                   className="btn btn-primary"
                   onClick={createCampaign}
+                  disabled={loading}
                 >
                   Create
                 </button>

@@ -72,7 +72,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-base-100 p-6 grid place-items-center">
-      <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-base-300/80 bg-base-200">
+      <div className="w-full max-w-5xl overflow-hidden rounded-box border border-base-300 bg-base-100">
         <div className="grid grid-cols-1 md:grid-cols-2">
           <div className="bg-base-100 p-6 space-y-6">
             <div className="space-y-2">
@@ -92,7 +92,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   placeholder="you@example.com"
-                  className="input input-bordered w-full rounded-xl transition-all duration-150 focus:border-primary/50"
+                  className="input input-bordered w-full"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -103,7 +103,7 @@ export default function LoginPage() {
                 <input
                   type="password"
                   placeholder="Enter your password"
-                  className="input input-bordered w-full rounded-xl transition-all duration-150 focus:border-primary/50"
+                  className="input input-bordered w-full"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -113,7 +113,7 @@ export default function LoginPage() {
               <div className="space-y-3 pt-2">
                 <button
                   type="submit"
-                  className="btn btn-primary w-full rounded-xl transition-all duration-150 active:scale-[0.99]"
+                  className="btn btn-primary w-full"
                   disabled={isPending}
                 >
                   {isPending ? (
@@ -127,7 +127,7 @@ export default function LoginPage() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost w-full rounded-xl transition-all duration-150 active:scale-[0.99]"
+                  className="btn btn-ghost w-full"
                   onClick={() => router.push("/register")}
                 >
                   Create account
@@ -149,7 +149,7 @@ export default function LoginPage() {
               </p>
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-xl border border-base-300/80 bg-base-100">
+            <div className="mt-6 overflow-hidden rounded-box border border-base-300 bg-base-100">
               <Image
                 src={loginFeatureSlides[activeSlide].imageSrc}
                 alt={loginFeatureSlides[activeSlide].imageAlt}

@@ -60,7 +60,7 @@ export function SegmentPreviewModal({
           </button>
         </div>
 
-        <div className="mt-4 overflow-x-auto rounded-xl border border-base-300 bg-base-100">
+        <div className="mt-4 overflow-x-auto rounded-box border border-base-300 bg-base-100">
           <table className="table table-sm">
             <thead>
               <tr>

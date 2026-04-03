@@ -1,46 +1,68 @@
 "use client";
 
 import { useState } from "react";
-import type { TemplateChannel, TemplateCategory } from "@/lib/types";
 
 type Props = {
   onClose: () => void;
   onSave: (payload: {
     name: string;
     description?: string;
-    channel: TemplateChannel;
-    category: TemplateCategory;
   }) => void;
   isPending?: boolean;
+  errorMessage?: string | null;
+  onClearError?: () => void;
 };
 
 export function TemplateCreateModal({
   onClose,
   onSave,
   isPending = false,
+  errorMessage = null,
+  onClearError,
 }: Props) {
-  const [name, setName] = useState("");
+  const [rawName, setRawName] = useState("");
   const [description, setDescription] = useState("");
-  const [channel, setChannel] =
-    useState<TemplateChannel>("WHATSAPP");
-  const [category, setCategory] =
-    useState<TemplateCategory>("UTILITY");
+
+  const toMetaTemplateName = (raw: string): string =>
+    (raw ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "");
+
+  const metaName = toMetaTemplateName(rawName);
 
   return (
     <dialog open className="modal modal-middle">
       <div className="modal-box">
-        <h3 className="text-lg font-semibold">Create template</h3>
+        <h3 className="text-lg font-semibold">Create message</h3>
+        {errorMessage && (
+          <div role="alert" className="alert alert-error mt-3 text-sm">
+            <span>{errorMessage}</span>
+          </div>
+        )}
         <div className="mt-4 space-y-3">
           <label className="label">
             <span className="label-text">Name</span>
           </label>
           <input
             type="text"
-            placeholder="Template name"
+            placeholder="e.g. Order update"
             className="input input-bordered w-full"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={rawName}
+            onChange={(e) => {
+              onClearError?.();
+              setRawName(e.target.value);
+            }}
           />
+          <div className="text-xs text-base-content/60">
+            Meta template name:{" "}
+            <span className="font-mono">{metaName || "—"}</span>
+            <span className="ml-2">
+              (allowed: lowercase letters, numbers, underscores)
+            </span>
+          </div>
           <label className="label">
             <span className="label-text">Description (optional)</span>
           </label>
@@ -49,38 +71,11 @@ export function TemplateCreateModal({
             placeholder="Description"
             className="input input-bordered w-full"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => {
+              onClearError?.();
+              setDescription(e.target.value);
+            }}
           />
-          <label className="label">
-            <span className="label-text">Channel</span>
-          </label>
-          <select
-            className="select select-bordered w-full"
-            value={channel}
-            onChange={(e) =>
-              setChannel(e.target.value as TemplateChannel)
-            }
-          >
-            <option value="WHATSAPP">WhatsApp</option>
-            <option value="TELEGRAM">Telegram</option>
-            <option value="MSGBUDDY">MsgBuddy</option>
-            <option value="EMAIL">Email</option>
-            <option value="SMS">SMS</option>
-          </select>
-          <label className="label">
-            <span className="label-text">Category</span>
-          </label>
-          <select
-            className="select select-bordered w-full"
-            value={category}
-            onChange={(e) =>
-              setCategory(e.target.value as TemplateCategory)
-            }
-          >
-            <option value="UTILITY">Utility</option>
-            <option value="MARKETING">Marketing</option>
-            <option value="AUTHENTICATION">Authentication</option>
-          </select>
         </div>
         <div className="modal-action">
           <button
@@ -96,13 +91,11 @@ export function TemplateCreateModal({
             className="btn btn-primary"
             onClick={() =>
               onSave({
-                name: name.trim(),
+                name: metaName,
                 description: description.trim() || undefined,
-                channel,
-                category,
               })
             }
-            disabled={!name.trim() || isPending}
+            disabled={!metaName || isPending}
           >
             {isPending ? (
               <>

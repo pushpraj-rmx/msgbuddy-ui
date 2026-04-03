@@ -71,7 +71,7 @@ export function UsageClient() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-base-300 bg-base-200 p-4">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4">
         <div className="flex flex-wrap items-end gap-2">
           <label className="form-control">
             <span className="label-text text-xs">Period start</span>
@@ -123,7 +123,7 @@ function JsonCard({ title, data }: { title: string; data: unknown }) {
     <div className="card bg-base-200 shadow-sm">
       <div className="card-body">
         <h2 className="card-title text-base">{title}</h2>
-        <pre className="max-h-64 overflow-auto rounded-xl border border-base-300 bg-base-100 p-3 text-xs">
+        <pre className="max-h-64 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 text-xs">
           {data == null ? "—" : JSON.stringify(data, null, 2)}
         </pre>
       </div>

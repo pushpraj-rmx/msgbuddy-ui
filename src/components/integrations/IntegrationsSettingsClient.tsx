@@ -74,7 +74,7 @@ export function IntegrationsSettingsClient({
         <SmsSetupPanel onDone={refresh} />
       </div>
 
-      <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-3">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold">Existing integrations</h2>
           <button
@@ -89,7 +89,7 @@ export function IntegrationsSettingsClient({
         {loading ? (
           <span className="loading loading-spinner loading-sm" />
         ) : rows.length ? (
-          <div className="overflow-x-auto rounded-xl border border-base-300 bg-base-100">
+          <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
             <table className="table table-sm">
               <thead>
                 <tr>

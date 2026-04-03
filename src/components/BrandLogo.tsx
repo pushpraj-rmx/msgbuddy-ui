@@ -8,7 +8,7 @@ type BrandLogoProps = Omit<ComponentProps<typeof Image>, "src" | "alt"> & {
 export function BrandLogo({ alt, ...props }: BrandLogoProps) {
   return (
     <Image
-      src="/logo.png"
+      src="/logo.svg"
       alt={alt ?? "MsgBuddy"}
       width={160}
       height={32}

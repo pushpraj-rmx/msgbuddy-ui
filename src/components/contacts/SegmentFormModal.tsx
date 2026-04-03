@@ -181,7 +181,7 @@ export function SegmentFormModal({
             </label>
           </div>
 
-          <div className="mt-2 rounded-xl border border-base-300 bg-base-100 p-3">
+          <div className="mt-2 rounded-box border border-base-300 bg-base-100 p-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-medium">Custom field filters</div>
               <button

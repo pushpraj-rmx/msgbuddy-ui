@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export function LoadingState({ label = "Loading..." }: { label?: string }) {
   return (
-    <div className="rounded-xl border border-base-300/70 bg-base-100 p-4">
+    <div className="rounded-box border border-base-300 bg-base-100 p-4">
       <div className="flex items-center gap-2 text-sm text-base-content/70">
         <span className="loading loading-spinner loading-sm" />
         <span>{label}</span>
@@ -21,7 +21,7 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-base-300/70 bg-base-100 p-4 space-y-2">
+    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
       <p className="text-sm font-medium text-base-content">{title}</p>
       {description ? (
         <p className="text-xs text-base-content/60">{description}</p>
@@ -39,7 +39,7 @@ export function ErrorState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-error/30 bg-error/10 p-4 space-y-2">
+    <div className="rounded-box border border-error/40 bg-error/10 p-4 space-y-2">
       <p className="text-sm font-medium text-error">{message}</p>
       {action ? <div>{action}</div> : null}
     </div>

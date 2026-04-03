@@ -1,15 +1,5 @@
-import { SegmentsPageClient } from "@/components/contacts/SegmentsPageClient";
-import { PageContainer } from "@/components/ui/PageContainer";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { redirect } from "next/navigation";
 
 export default function ContactsSegmentsPage() {
-  return (
-    <PageContainer>
-      <PageHeader
-        title="Segments"
-        description="Create and manage saved contact segments."
-      />
-      <SegmentsPageClient />
-    </PageContainer>
-  );
+  redirect("/people/segments");
 }

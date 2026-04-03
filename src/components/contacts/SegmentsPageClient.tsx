@@ -123,7 +123,7 @@ export function SegmentsPageClient() {
                 <tr key={seg.id}>
                   <td className="font-medium">
                     <Link
-                      href={`/contacts?segment=${seg.id}`}
+                      href={`/people/contacts?segment=${seg.id}`}
                       className="link link-hover"
                     >
                       {seg.name}

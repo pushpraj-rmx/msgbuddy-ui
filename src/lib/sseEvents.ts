@@ -7,8 +7,12 @@ export const SseWireType = {
   messageCreated: "message.created",
   messageStatusUpdated: "message.status_updated",
   conversationUpdated: "conversation.updated",
+  conversationPresenceUpdated: "conversation.presence.updated",
   contactUpdated: "contact.updated",
   contactBulkUpdated: "contact.bulk_updated",
+  channelTemplateCategoryPending: "channel_template.category.pending",
+  whatsappAccountRestriction: "whatsapp.account.restriction",
+  notificationCreated: "notification.created",
 } as const;
 
 /** Parse `EventSource` `event.data` JSON — supports flat `{ type, data? }` and nested `{ data: { type, data } }`. */
@@ -82,9 +86,36 @@ export function isContactUpdated(type: string): boolean {
   return type === SseWireType.contactUpdated || type === "CONTACT_UPDATED";
 }
 
+export function isConversationPresenceUpdated(type: string): boolean {
+  return (
+    type === SseWireType.conversationPresenceUpdated ||
+    type === "CONVERSATION_PRESENCE_UPDATED"
+  );
+}
+
 export function isContactBulkUpdated(type: string): boolean {
   return (
     type === SseWireType.contactBulkUpdated ||
     type === "CONTACT_BULK_UPDATED"
+  );
+}
+
+export function isChannelTemplateCategoryPending(type: string): boolean {
+  return (
+    type === SseWireType.channelTemplateCategoryPending ||
+    type === "CHANNEL_TEMPLATE_CATEGORY_PENDING"
+  );
+}
+
+export function isWhatsAppAccountRestriction(type: string): boolean {
+  return (
+    type === SseWireType.whatsappAccountRestriction ||
+    type === "WHATSAPP_ACCOUNT_RESTRICTION"
+  );
+}
+
+export function isNotificationCreated(type: string): boolean {
+  return (
+    type === SseWireType.notificationCreated || type === "NOTIFICATION_CREATED"
   );
 }

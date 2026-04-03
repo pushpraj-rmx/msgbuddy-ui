@@ -9,14 +9,15 @@ import {
   useState,
   type ChangeEvent,
 } from "react";
-import {
-  ArrowLeftIcon,
-  UserCircleIcon,
-} from "@heroicons/react/24/outline";
+import { useSearchParams } from "next/navigation";
+import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
+import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
 import {
   conversationsApi,
   contactsApi,
+  presenceApi,
   templatesApi,
+  channelTemplatesApi,
   workspaceApi,
   type ConversationPriority,
   type ConversationNote,
@@ -33,30 +34,53 @@ import {
   useInboxWhatsAppMediaUpload,
 } from "@/hooks/use-inbox-whatsapp-media-upload";
 import { type InboxMessage } from "@/lib/messaging";
-import type { Contact, Template } from "@/lib/types";
+import type { ChannelTemplateVersion, Contact, Template } from "@/lib/types";
+import {
+  carouselCardFileAccept,
+  isMediaHeaderType,
+  uploadWhatsAppAttachmentIdAndPrepareWhatsApp,
+} from "@/lib/whatsappTemplateMedia";
 import { extractApiErrorMessage } from "@/lib/messageApiErrors";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import {
   isContactBulkUpdated,
   isContactUpdated,
+  isConversationPresenceUpdated,
   isConversationUpdated,
   isMessageCreated,
   isMessageStatusUpdated,
   parseWorkspaceSseEvent,
 } from "@/lib/sseEvents";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { ContactAvatar } from "@/components/ui/ContactAvatar";
+import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 export type Conversation = {
   id: string;
   contactId: string;
   channel: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
   status: "OPEN" | "CLOSED" | "ARCHIVED";
+  awaitingReply?: boolean;
+  turn?: "YOUR_TURN" | "WAITING_ON_CUSTOMER";
+  snoozedUntil?: string | null;
   priority?: ConversationPriority;
   assignedUserId?: string | null;
   unreadCount?: number;
   lastMessageAt?: string;
-  contact?: { name?: string; phone?: string; email?: string };
-  lastMessage?: { text?: string; type?: string };
+  lastMessage?: {
+    text?: string;
+    type?: string;
+    status?: string;
+    direction?: "INBOUND" | "OUTBOUND";
+    errorMessage?: string;
+    failedAt?: string;
+  };
+  contact?: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    avatarUrl?: string | null;
+  };
 };
 
 function lastMessagePreview(lastMessage?: Conversation["lastMessage"]): string {
@@ -112,9 +136,6 @@ const STATUS_TABS: Array<Conversation["status"]> = [
 
 const LIMIT = 50;
 
-/** Pixels from bottom — if the user is within this band, new messages auto-scroll. */
-const NEAR_BOTTOM_PX = 120;
-
 type TemplateVariableRow = {
   id: string;
   key: string;
@@ -133,12 +154,22 @@ export function InboxClient({
   initialConversations,
   workspaceId,
   currentUserId,
+  mode = "inbox",
 }: {
   initialConversations: Conversation[];
   workspaceId: string;
   currentUserId: string;
+  mode?: "inbox" | "contactsQueue";
 }) {
+  const {
+    setContent: setRightPanelContent,
+    clearContent: clearRightPanelContent,
+    open: openRightPanel,
+  } = useRightPanel();
   const [status, setStatus] = useState<Conversation["status"]>("OPEN");
+  const [queueFilter, setQueueFilter] = useState<
+    "all" | "awaiting" | "unread" | "snoozed"
+  >("all");
   const [conversations, setConversations] =
     useState<Conversation[]>(initialConversations);
   const [listError, setListError] = useState<string | null>(null);
@@ -165,11 +196,8 @@ export function InboxClient({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const draftInputRef = useRef<HTMLInputElement>(null);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const messagesBottomSentinelRef = useRef<HTMLDivElement>(null);
-  /** After switching threads, jump to bottom; after local send, smooth scroll; else only if already near bottom. */
+  /** After switching threads, jump to bottom once; after local send, smooth scroll. No auto-scroll on later SSE/poll. */
   const scrollThreadIntentRef = useRef<"none" | "auto" | "smooth">("none");
-  /** Ids seen after last scroll effect — used to detect newly arrived messages (SSE / poll). */
-  const messageIdsSnapshotRef = useRef<Set<string>>(new Set());
   const contactDialogRef = useRef<HTMLDialogElement>(null);
   const startChatDialogRef = useRef<HTMLDialogElement>(null);
   const mediaUpload = useInboxWhatsAppMediaUpload();
@@ -190,13 +218,30 @@ export function InboxClient({
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [templateOptions, setTemplateOptions] = useState<Template[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [selectedTemplateVersionNum, setSelectedTemplateVersionNum] = useState<
-    number | null
-  >(null);
+  const [selectedTemplateVersion, setSelectedTemplateVersion] = useState<{
+    id: string;
+    version: number;
+    status: string;
+  } | null>(null);
   const [templateVersionLoading, setTemplateVersionLoading] = useState(false);
   const [templateVariables, setTemplateVariables] = useState<
     TemplateVariableRow[]
   >([]);
+  const [inboxTemplateVersionDetail, setInboxTemplateVersionDetail] =
+    useState<ChannelTemplateVersion | null>(null);
+  const [inboxTemplateVersionDetailLoading, setInboxTemplateVersionDetailLoading] =
+    useState(false);
+  const [templateHeaderMediaId, setTemplateHeaderMediaId] = useState<
+    string | null
+  >(null);
+  const [templateCarouselMediaIds, setTemplateCarouselMediaIds] = useState<
+    string[]
+  >([]);
+  const [templateBindingUploadBusy, setTemplateBindingUploadBusy] =
+    useState(false);
+  const [templateBindingError, setTemplateBindingError] = useState<
+    string | null
+  >(null);
   const [conversationActionBusy, setConversationActionBusy] = useState(false);
   const [conversationNotes, setConversationNotes] = useState<ConversationNote[]>(
     []
@@ -210,18 +255,92 @@ export function InboxClient({
   const [messageSearchResult, setMessageSearchResult] = useState<InboxMessage | null>(
     null
   );
+  const [viewersByConversation, setViewersByConversation] = useState<
+    Record<string, string[]>
+  >({});
+  const [draftsByConversation, setDraftsByConversation] = useState<
+    Record<string, string>
+  >({});
 
+  const searchParams = useSearchParams();
   const isLgUp = useMediaQuery("(min-width: 1024px)");
   const [mobilePane, setMobilePane] = useState<"list" | "thread">("list");
+  const handledHandoffKeyRef = useRef<string | null>(null);
+  const preserveStartContactSelectionRef = useRef(false);
+  const draftSyncConversationRef = useRef<string | null>(null);
+  const handoffContactId = searchParams.get("contactId");
+  const handoffConversationId = searchParams.get("conversationId");
+  const shouldFocusReply = searchParams.get("focus") === "reply";
 
   const selectedConversation = useMemo(
     () => conversations.find((c) => c.id === selectedId) ?? null,
     [conversations, selectedId]
   );
+  const draftsStorageKey = `inbox-drafts:${workspaceId}:${currentUserId}:${mode}`;
+  const selectedViewers = selectedId ? viewersByConversation[selectedId] ?? [] : [];
+  const otherViewers = selectedViewers.filter((id) => id !== currentUserId);
   const activeContactId =
     selectedConversation?.contactId ?? startContact?.id ?? null;
   const activeChannel =
     selectedConversation?.channel ?? (startContact ? "WHATSAPP" : null);
+
+  const waChannelTemplateId = useMemo(() => {
+    if (!selectedTemplateId) return null;
+    const tpl = templateOptions.find((t) => t.id === selectedTemplateId);
+    const wa = (tpl?.channelTemplates ?? []).find(
+      (ct) => ct.channel === "WHATSAPP"
+    );
+    return wa?.id ?? null;
+  }, [selectedTemplateId, templateOptions]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftsStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Record<string, string>;
+      if (parsed && typeof parsed === "object") {
+        setDraftsByConversation(parsed);
+      }
+    } catch {
+      // ignore malformed local storage
+    }
+  }, [draftsStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(draftsStorageKey, JSON.stringify(draftsByConversation));
+    } catch {
+      // ignore
+    }
+  }, [draftsByConversation, draftsStorageKey]);
+
+  useLayoutEffect(() => {
+    if (selectedId) {
+      setDraft(draftsByConversation[selectedId] ?? "");
+      draftSyncConversationRef.current = null;
+      return;
+    }
+    setDraft("");
+    draftSyncConversationRef.current = null;
+  }, [draftsByConversation, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    if (draftSyncConversationRef.current !== selectedId) {
+      draftSyncConversationRef.current = selectedId;
+      return;
+    }
+    setDraftsByConversation((prev) => {
+      if (!draft.trim()) {
+        if (!(selectedId in prev)) return prev;
+        const next = { ...prev };
+        delete next[selectedId];
+        return next;
+      }
+      if (prev[selectedId] === draft) return prev;
+      return { ...prev, [selectedId]: draft };
+    });
+  }, [draft, selectedId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,20 +379,18 @@ export function InboxClient({
 
   useLayoutEffect(() => {
     scrollThreadIntentRef.current = "auto";
-    messageIdsSnapshotRef.current = new Set();
   }, [selectedId]);
 
   useLayoutEffect(() => {
     if (!selectedId || messageLoading) return;
 
     const container = messagesScrollRef.current;
-    const bottom = messagesBottomSentinelRef.current;
     const scrollToBottom = (behavior: ScrollBehavior) => {
-      bottom?.scrollIntoView({ block: "end", behavior });
+      if (!container) return;
+      container.scrollTo({ top: container.scrollHeight, behavior });
     };
 
     if (!sortedMessages.length) {
-      messageIdsSnapshotRef.current = new Set();
       const intent = scrollThreadIntentRef.current;
       if (intent === "auto" || intent === "smooth") {
         scrollToBottom(intent === "smooth" ? "smooth" : "auto");
@@ -282,17 +399,7 @@ export function InboxClient({
       return;
     }
 
-    const prevIds = messageIdsSnapshotRef.current;
-    const newcomers = sortedMessages.filter((m) => !prevIds.has(m.id));
-
-    const commitSnapshot = () => {
-      messageIdsSnapshotRef.current = new Set(
-        sortedMessages.map((m) => m.id)
-      );
-    };
-
-    if (!container || !bottom) {
-      commitSnapshot();
+    if (!container) {
       return;
     }
 
@@ -300,33 +407,13 @@ export function InboxClient({
     if (intent === "auto") {
       scrollToBottom("auto");
       scrollThreadIntentRef.current = "none";
-      commitSnapshot();
       return;
     }
     if (intent === "smooth") {
       scrollToBottom("smooth");
       scrollThreadIntentRef.current = "none";
-      commitSnapshot();
       return;
     }
-
-    const nearBottom =
-      container.scrollHeight -
-        container.scrollTop -
-        container.clientHeight <
-      NEAR_BOTTOM_PX;
-    if (nearBottom) {
-      scrollToBottom("smooth");
-      commitSnapshot();
-      return;
-    }
-
-    /* New ids (SSE / poll / refetch) — scroll even when not near bottom so arrivals stay visible. */
-    if (newcomers.length > 0) {
-      scrollToBottom("smooth");
-    }
-
-    commitSnapshot();
   }, [selectedId, sortedMessages, messageLoading]);
 
   useEffect(() => {
@@ -335,6 +422,19 @@ export function InboxClient({
     clearPendingMediaPreview();
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, [selectedId, clearPendingMediaPreview]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== "r") return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || target?.isContentEditable) return;
+      event.preventDefault();
+      draftInputRef.current?.focus({ preventScroll: true });
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const loadStartChatContacts = useCallback(
     async (search = "") => {
@@ -369,7 +469,7 @@ export function InboxClient({
 
   useEffect(() => {
     setSelectedTemplateId("");
-    setSelectedTemplateVersionNum(null);
+    setSelectedTemplateVersion(null);
     setTemplateVariables([]);
     setTemplatesError(null);
     setPolicyError(null);
@@ -416,13 +516,18 @@ export function InboxClient({
     setTemplatesError(null);
     try {
       const res = await templatesApi.list({
-        channel: "WHATSAPP",
         isActive: true,
         limit: 50,
         sortBy: "updatedAt",
         sortOrder: "desc",
       });
-      setTemplateOptions((res.items ?? []).filter((t) => t.isActive));
+      setTemplateOptions(
+        (res.items ?? [])
+          .filter((t) => t.isActive)
+          .filter((t) =>
+            (t.channelTemplates ?? []).some((ct) => ct.channel === "WHATSAPP")
+          )
+      );
     } catch (error: unknown) {
       setTemplatesError(
         extractApiErrorMessage(error) || "Failed to load templates."
@@ -450,20 +555,33 @@ export function InboxClient({
 
   useEffect(() => {
     if (!selectedTemplateId) {
-      setSelectedTemplateVersionNum(null);
+      setSelectedTemplateVersion(null);
       return;
     }
     let cancelled = false;
     setTemplateVersionLoading(true);
-    void templatesApi
-      .latestApproved(selectedTemplateId)
-      .then((version) => {
+    const tpl = templateOptions.find((t) => t.id === selectedTemplateId);
+    const wa = (tpl?.channelTemplates ?? []).find((ct) => ct.channel === "WHATSAPP");
+    if (!wa?.id) {
+      setSelectedTemplateVersion(null);
+      setTemplateVersionLoading(false);
+      return;
+    }
+
+    void channelTemplatesApi
+      .state(wa.id)
+      .then((state) => {
         if (cancelled) return;
-        setSelectedTemplateVersionNum(version.version);
+        const v = state.latestSendableVersion;
+        if (!v) {
+          setSelectedTemplateVersion(null);
+          return;
+        }
+        setSelectedTemplateVersion({ id: v.id, version: v.version, status: v.status });
       })
       .catch(() => {
         if (cancelled) return;
-        setSelectedTemplateVersionNum(null);
+        setSelectedTemplateVersion(null);
       })
       .finally(() => {
         if (cancelled) return;
@@ -472,7 +590,61 @@ export function InboxClient({
     return () => {
       cancelled = true;
     };
-  }, [selectedTemplateId]);
+  }, [selectedTemplateId, templateOptions]);
+
+  useEffect(() => {
+    setTemplateHeaderMediaId(null);
+    setTemplateCarouselMediaIds([]);
+    setTemplateBindingError(null);
+    setInboxTemplateVersionDetail(null);
+  }, [selectedTemplateId, selectedTemplateVersion?.id]);
+
+  useEffect(() => {
+    if (
+      !useTemplateSend ||
+      !waChannelTemplateId ||
+      !selectedTemplateVersion?.id
+    ) {
+      setInboxTemplateVersionDetail(null);
+      setInboxTemplateVersionDetailLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setInboxTemplateVersionDetailLoading(true);
+    void channelTemplatesApi
+      .listVersions(waChannelTemplateId)
+      .then((versions) => {
+        if (cancelled) return;
+        const v = versions.find((x) => x.id === selectedTemplateVersion.id);
+        setInboxTemplateVersionDetail(v ?? null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setInboxTemplateVersionDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setInboxTemplateVersionDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useTemplateSend, waChannelTemplateId, selectedTemplateVersion?.id]);
+
+  useEffect(() => {
+    const cards = inboxTemplateVersionDetail?.carouselCards;
+    if (
+      inboxTemplateVersionDetail?.layoutType === "CAROUSEL" &&
+      Array.isArray(cards)
+    ) {
+      const n = cards.length;
+      setTemplateCarouselMediaIds((prev) => {
+        if (prev.length === n) return prev;
+        return Array.from({ length: n }, (_, i) => prev[i] ?? "");
+      });
+    } else {
+      setTemplateCarouselMediaIds([]);
+    }
+  }, [inboxTemplateVersionDetail]);
 
   useEffect(() => {
     if (!useTemplateSend) return;
@@ -489,15 +661,37 @@ export function InboxClient({
     setListLoading(true);
     setListError(null);
     try {
-      const data = (await conversationsApi.list({
-        status: nextStatus,
-        limit: LIMIT,
-        cursor: nextCursor || undefined,
-      })) as Conversation[];
+      const queueFilterParams = {
+        unreadOnly: queueFilter === "unread",
+        awaitingReplyOnly: queueFilter === "awaiting",
+        snoozedOnly: queueFilter === "snoozed",
+        includeSnoozed: queueFilter === "all",
+      };
+      const params =
+        mode === "contactsQueue"
+          ? {
+            status: "OPEN" as const,
+            limit: LIMIT,
+            cursor: nextCursor || undefined,
+            ...queueFilterParams,
+            sort: "lastMessageAt" as const,
+          }
+          : {
+            status: nextStatus,
+            limit: LIMIT,
+            cursor: nextCursor || undefined,
+            ...queueFilterParams,
+          };
+
+      const data = (await conversationsApi.list(params)) as Conversation[];
       setConversations((prev) => (append ? [...prev, ...data] : data));
       setCursor(data.length ? data.at(-1)?.id ?? null : null);
       if (!append && data.length) {
-        setSelectedId((current) => current ?? data[0].id);
+        setSelectedId((current) => {
+          if (current) return current;
+          if (preserveStartContactSelectionRef.current) return null;
+          return data[0].id;
+        });
       }
       if (!append && !data.length) {
         setSelectedId(null);
@@ -507,7 +701,7 @@ export function InboxClient({
     } finally {
       setListLoading(false);
     }
-  }, [status]);
+  }, [mode, queueFilter, status]);
 
   const fetchMessages = useCallback(
     async (conversationId: string, options?: { silent?: boolean }) => {
@@ -556,12 +750,100 @@ export function InboxClient({
     }
   }, []);
 
+  const focusReplyComposer = useCallback(() => {
+    window.setTimeout(() => {
+      draftInputRef.current?.focus({ preventScroll: true });
+    }, 0);
+  }, []);
+
+  useEffect(() => {
+    if (mode !== "inbox") return;
+    if (!handoffContactId && !handoffConversationId) return;
+    const handoffKey = `${handoffConversationId ?? ""}:${handoffContactId ?? ""}:${shouldFocusReply ? "1" : "0"}`;
+    if (handledHandoffKeyRef.current === handoffKey) return;
+    handledHandoffKeyRef.current = handoffKey;
+
+    let cancelled = false;
+    const upsertConversation = (next: Conversation) => {
+      setConversations((prev) => {
+        const rest = prev.filter((c) => c.id !== next.id);
+        return [next, ...rest];
+      });
+    };
+
+    const applyHandoff = async () => {
+      if (!isLgUp) setMobilePane("thread");
+      setStatus("OPEN");
+      try {
+        if (handoffConversationId) {
+          const conversation = (await conversationsApi.getById(
+            handoffConversationId
+          )) as Conversation;
+          if (cancelled) return;
+          upsertConversation(conversation);
+          preserveStartContactSelectionRef.current = false;
+          setStartContact(null);
+          setSelectedId(conversation.id);
+          if (shouldFocusReply) focusReplyComposer();
+          return;
+        }
+
+        if (!handoffContactId) return;
+        const byContact = (await conversationsApi.listByContact(
+          handoffContactId
+        )) as Conversation[];
+        if (cancelled) return;
+
+        const existing =
+          byContact.find((conversation) => conversation.status === "OPEN") ??
+          byContact[0];
+        if (existing) {
+          upsertConversation(existing);
+          preserveStartContactSelectionRef.current = false;
+          setStartContact(null);
+          setSelectedId(existing.id);
+          if (shouldFocusReply) focusReplyComposer();
+          return;
+        }
+
+        const contact = await contactsApi.getOne(handoffContactId);
+        if (cancelled) return;
+        preserveStartContactSelectionRef.current = true;
+        setSelectedId(null);
+        setMessages([]);
+        setStartContact(contact);
+        if (shouldFocusReply) focusReplyComposer();
+      } catch (error: unknown) {
+        if (cancelled) return;
+        setMessageError(
+          extractApiErrorMessage(error) || "Failed to open chat in inbox."
+        );
+      }
+    };
+
+    void applyHandoff();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mode,
+    handoffContactId,
+    handoffConversationId,
+    shouldFocusReply,
+    isLgUp,
+    focusReplyComposer,
+  ]);
+
   useEffect(() => {
     if (selectedId) {
       /** Clear immediately so scroll logic doesn’t run against the previous thread’s messages. */
       setMessages([]);
       void fetchMessages(selectedId);
       void loadNotes(selectedId);
+      window.setTimeout(() => {
+        draftInputRef.current?.focus({ preventScroll: true });
+      }, 0);
     } else {
       setMessages([]);
       setConversationNotes([]);
@@ -632,6 +914,27 @@ export function InboxClient({
           return;
         }
 
+        if (isConversationPresenceUpdated(ev.type)) {
+          const conversationId =
+            typeof ev.data.conversationId === "string"
+              ? ev.data.conversationId
+              : "";
+          if (!conversationId) return;
+          const viewersRaw = Array.isArray(ev.data.viewers) ? ev.data.viewers : [];
+          const viewerIds = viewersRaw
+            .map((v) =>
+              v && typeof v === "object" && typeof (v as { userId?: unknown }).userId === "string"
+                ? (v as { userId: string }).userId
+                : ""
+            )
+            .filter(Boolean);
+          setViewersByConversation((prev) => ({
+            ...prev,
+            [conversationId]: viewerIds,
+          }));
+          return;
+        }
+
         if (isContactUpdated(ev.type) || isContactBulkUpdated(ev.type)) {
           fetchConversations(status, null, false);
         }
@@ -658,6 +961,67 @@ export function InboxClient({
     };
   }, [fetchConversations, fetchMessages, selectedId, status, workspaceId]);
 
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    const beat = async () => {
+      try {
+        await presenceApi.heartbeatConversationView(selectedId);
+      } catch {
+        // best effort only
+      }
+    };
+    void beat();
+    const timer = window.setInterval(() => {
+      if (!cancelled) void beat();
+    }, 15_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      void presenceApi.clearConversationView(selectedId).catch(() => { });
+    };
+  }, [selectedId]);
+
+  const needsTemplateHeaderMedia = useMemo(
+    () =>
+      inboxTemplateVersionDetail != null &&
+      isMediaHeaderType(inboxTemplateVersionDetail.headerType),
+    [inboxTemplateVersionDetail]
+  );
+
+  const templateCarouselCardCount = useMemo(() => {
+    if (inboxTemplateVersionDetail?.layoutType !== "CAROUSEL") return 0;
+    const cards = inboxTemplateVersionDetail.carouselCards;
+    return Array.isArray(cards) ? cards.length : 0;
+  }, [inboxTemplateVersionDetail]);
+
+  const templateMediaBindingsReady = useMemo(() => {
+    if (!useTemplateSend || !selectedTemplateVersion?.id) return true;
+    if (inboxTemplateVersionDetailLoading) return false;
+    if (!inboxTemplateVersionDetail) return false;
+    if (needsTemplateHeaderMedia && !templateHeaderMediaId?.trim()) {
+      return false;
+    }
+    if (templateCarouselCardCount > 0) {
+      if (templateCarouselMediaIds.length < templateCarouselCardCount) {
+        return false;
+      }
+      for (let i = 0; i < templateCarouselCardCount; i++) {
+        if (!templateCarouselMediaIds[i]?.trim()) return false;
+      }
+    }
+    return true;
+  }, [
+    useTemplateSend,
+    selectedTemplateVersion?.id,
+    inboxTemplateVersionDetailLoading,
+    inboxTemplateVersionDetail,
+    needsTemplateHeaderMedia,
+    templateHeaderMediaId,
+    templateCarouselCardCount,
+    templateCarouselMediaIds,
+  ]);
+
   const templateVariablesPayload = useMemo(() => {
     const entries = templateVariables
       .map((row) => ({
@@ -665,9 +1029,48 @@ export function InboxClient({
         value: row.value.trim(),
       }))
       .filter((row) => row.key && row.value);
-    if (!entries.length) return undefined;
-    return Object.fromEntries(entries.map((row) => [row.key, row.value]));
-  }, [templateVariables]);
+    const fromRows: Record<string, string> = entries.length
+      ? Object.fromEntries(entries.map((row) => [row.key, row.value]))
+      : {};
+    const merged: Record<string, string> = { ...fromRows };
+
+    if (
+      inboxTemplateVersionDetail &&
+      isMediaHeaderType(inboxTemplateVersionDetail.headerType) &&
+      templateHeaderMediaId?.trim()
+    ) {
+      const ht = inboxTemplateVersionDetail.headerType;
+      const id = templateHeaderMediaId.trim();
+      if (ht === "IMAGE") merged.header_image = id;
+      else if (ht === "VIDEO") merged.header_video = id;
+      else if (ht === "DOCUMENT") merged.header_document = id;
+    }
+
+    if (
+      inboxTemplateVersionDetail?.layoutType === "CAROUSEL" &&
+      Array.isArray(inboxTemplateVersionDetail.carouselCards)
+    ) {
+      const cards = inboxTemplateVersionDetail.carouselCards as unknown[];
+      cards.forEach((card, idx) => {
+        const mid = templateCarouselMediaIds[idx]?.trim();
+        if (!mid) return;
+        const fmt = String(
+          (card as { headerFormat?: string })?.headerFormat ?? "IMAGE"
+        ).toUpperCase();
+        const suffix =
+          fmt === "VIDEO" ? "video" : fmt === "DOCUMENT" ? "document" : "image";
+        merged[`card_${idx + 1}_header_${suffix}`] = mid;
+      });
+    }
+
+    if (Object.keys(merged).length === 0) return undefined;
+    return merged;
+  }, [
+    templateVariables,
+    inboxTemplateVersionDetail,
+    templateHeaderMediaId,
+    templateCarouselMediaIds,
+  ]);
 
   const templateVarsAreValid = useMemo(() => {
     if (!useTemplateSend) return true;
@@ -676,6 +1079,15 @@ export function InboxClient({
       (row) => row.key.trim().length > 0 && row.value.trim().length > 0
     );
   }, [templateVariables, useTemplateSend]);
+
+  const clearDraftForConversation = useCallback((conversationId: string) => {
+    setDraftsByConversation((prev) => {
+      if (!(conversationId in prev)) return prev;
+      const next = { ...prev };
+      delete next[conversationId];
+      return next;
+    });
+  }, []);
 
   const refreshThreadAfterSend = useCallback(
     async (contactId: string, channel: Conversation["channel"]) => {
@@ -690,12 +1102,15 @@ export function InboxClient({
           (c) => c.contactId === contactId && c.channel === channel
         ) ?? null;
       if (created) {
+        preserveStartContactSelectionRef.current = false;
+        clearDraftForConversation(created.id);
+        setDraft("");
         setSelectedId(created.id);
         setStartContact(null);
         await fetchMessages(created.id, { silent: true });
       }
     },
-    [fetchMessages]
+    [clearDraftForConversation, fetchMessages]
   );
 
   const runConversationAction = useCallback(
@@ -742,6 +1157,36 @@ export function InboxClient({
       status,
     ]
   );
+
+  const toggleSnooze = useCallback(async () => {
+    if (!selectedConversation || conversationActionBusy) return;
+    setConversationActionBusy(true);
+    try {
+      const isSnoozed =
+        !!selectedConversation.snoozedUntil &&
+        new Date(selectedConversation.snoozedUntil).getTime() > Date.now();
+      if (isSnoozed) {
+        await conversationsApi.unsnooze(selectedConversation.id);
+      } else {
+        const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+        await conversationsApi.snooze(selectedConversation.id, until);
+      }
+      await refreshConversationById(selectedConversation.id);
+      await fetchConversations(status, null, false);
+    } catch (error: unknown) {
+      setMessageError(
+        extractApiErrorMessage(error) || "Failed to update snooze state."
+      );
+    } finally {
+      setConversationActionBusy(false);
+    }
+  }, [
+    conversationActionBusy,
+    fetchConversations,
+    refreshConversationById,
+    selectedConversation,
+    status,
+  ]);
 
   const createConversationNote = useCallback(async () => {
     if (!selectedId || !noteDraft.trim()) return;
@@ -800,12 +1245,22 @@ export function InboxClient({
     if (!activeContactId || !activeChannel || sending || mediaUpload.uploading) return;
 
     if (useTemplateSend) {
-      if (!selectedTemplateId || !selectedTemplateVersionNum) {
-        setMessageError("Select a template before sending.");
+      if (!selectedTemplateId || !selectedTemplateVersion?.id) {
+        setMessageError("Select a WhatsApp template before sending.");
         return;
       }
       if (!templateVarsAreValid) {
         setMessageError("Fill all template variables before sending.");
+        return;
+      }
+      if (!templateMediaBindingsReady) {
+        setMessageError(
+          "Upload required template media (header or carousel cards) before sending."
+        );
+        return;
+      }
+      if (selectedTemplateVersion.status !== "PROVIDER_APPROVED") {
+        setMessageError("Selected WhatsApp template is not approved yet.");
         return;
       }
       setSending(true);
@@ -813,8 +1268,7 @@ export function InboxClient({
         await conversationsApi.sendMessage({
           contactId: activeContactId,
           channel: "WHATSAPP",
-          templateId: selectedTemplateId,
-          templateVersionNum: selectedTemplateVersionNum,
+          channelTemplateVersionId: selectedTemplateVersion.id,
           templateVariables: templateVariablesPayload,
           idempotencyKey:
             typeof crypto !== "undefined" ? crypto.randomUUID() : undefined,
@@ -832,7 +1286,7 @@ export function InboxClient({
           void conversationsApi
             .getSendPolicy(activeContactId)
             .then(setSendPolicy)
-            .catch(() => {});
+            .catch(() => { });
         }
         setMessageError(
           extractApiErrorMessage(error) || "Failed to send message."
@@ -875,7 +1329,7 @@ export function InboxClient({
           void conversationsApi
             .getSendPolicy(activeContactId)
             .then(setSendPolicy)
-            .catch(() => {});
+            .catch(() => { });
         }
         setMessageError(
           extractApiErrorMessage(error) || "Failed to send message."
@@ -911,7 +1365,7 @@ export function InboxClient({
         void conversationsApi
           .getSendPolicy(activeContactId)
           .then(setSendPolicy)
-          .catch(() => {});
+          .catch(() => { });
       }
       setMessageError(
         extractApiErrorMessage(error) || "Failed to send message."
@@ -923,6 +1377,29 @@ export function InboxClient({
       }, 0);
     }
   };
+
+  const retryFailedLastMessage = useCallback(
+    async (conversation: Conversation) => {
+      const text = conversation.lastMessage?.text?.trim();
+      if (!text) return;
+      try {
+        await conversationsApi.sendMessage({
+          contactId: conversation.contactId,
+          text,
+          idempotencyKey:
+            typeof crypto !== "undefined" ? crypto.randomUUID() : undefined,
+          channel: conversation.channel,
+        });
+        await fetchConversations(status, null, false);
+        if (selectedId === conversation.id) {
+          await fetchMessages(conversation.id, { silent: true });
+        }
+      } catch (error: unknown) {
+        setMessageError(extractApiErrorMessage(error) || "Failed to retry message.");
+      }
+    },
+    [fetchConversations, fetchMessages, selectedId, status]
+  );
 
   const handleMediaFileChange = async (
     event: ChangeEvent<HTMLInputElement>
@@ -972,82 +1449,270 @@ export function InboxClient({
     !mediaUpload.uploading &&
     (useTemplateSend
       ? !!selectedTemplateId &&
-        !!selectedTemplateVersionNum &&
-        templateVarsAreValid
+      !!selectedTemplateVersion?.id &&
+      selectedTemplateVersion.status === "PROVIDER_APPROVED" &&
+      templateVarsAreValid &&
+      templateMediaBindingsReady &&
+      !templateBindingUploadBusy
       : (pendingMediaId &&
-          pendingKind &&
-          activeChannel === "WHATSAPP") ||
-        (!!draft.trim() && !pendingMediaId));
+        pendingKind &&
+        activeChannel === "WHATSAPP") ||
+      (!!draft.trim() && !pendingMediaId));
 
   const showWhatsAppMediaTools =
     activeChannel === "WHATSAPP";
 
-  const contactForDetails = selectedConversation?.contact
-    ? {
-        name: selectedConversation.contact.name,
-        phone: selectedConversation.contact.phone,
-        email: selectedConversation.contact.email,
-        status: selectedConversation.status,
-      }
-    : startContact
-      ? {
-          name: startContact.name,
-          phone: startContact.phone,
-          email: startContact.email,
-          status: "NEW",
+  const contactForDetails = useMemo(
+    () =>
+      selectedConversation?.contact
+        ? {
+          name: selectedConversation.contact.name,
+          phone: selectedConversation.contact.phone,
+          email: selectedConversation.contact.email,
+          status: selectedConversation.status,
         }
-      : null;
+        : startContact
+          ? {
+            name: startContact.name,
+            phone: startContact.phone,
+            email: startContact.email,
+            status: "NEW",
+          }
+          : null,
+    [selectedConversation, startContact]
+  );
 
-  const contactDetailsEl =
-    !contactForDetails ? (
-      <EmptyState
-        title="No contact selected"
-        description="Contact details appear when you open a conversation."
-      />
-    ) : (
-      <div className="divide-y divide-base-300/70 rounded-xl bg-base-100">
-        <div className="space-y-2 p-4">
-          <p className="text-xs text-base-content/55">Name</p>
-          <p className="text-sm text-base-content">
-            {contactForDetails.name || "Unknown"}
-          </p>
+  const contactDetailsEl = useMemo(
+    () =>
+      !contactForDetails ? (
+        <EmptyState
+          title="No contact selected"
+          description="Contact details appear when you open a conversation."
+        />
+      ) : (
+        <div className="rounded-none bg-base-100 p-4 space-y-6">
+          <div className="space-y-2">
+            <p className="text-xs text-base-content/55">Name</p>
+            <p className="text-sm text-base-content">
+              {contactForDetails.name || "Unknown"}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-base-content/55">Phone</p>
+            <p className="text-sm text-base-content">
+              {contactForDetails.phone || "—"}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-base-content/55">Email</p>
+            <p className="text-sm text-base-content">
+              {contactForDetails.email || "—"}
+            </p>
+          </div>
+          <div className="space-y-2">
+            <p className="text-xs text-base-content/55">Status</p>
+            <p className="text-sm text-base-content">
+              {contactForDetails.status}
+            </p>
+          </div>
         </div>
-        <div className="space-y-2 p-4">
-          <p className="text-xs text-base-content/55">Phone</p>
-          <p className="text-sm text-base-content">
-            {contactForDetails.phone || "—"}
-          </p>
-        </div>
-        <div className="space-y-2 p-4">
-          <p className="text-xs text-base-content/55">Email</p>
-          <p className="text-sm text-base-content">
-            {contactForDetails.email || "—"}
-          </p>
-        </div>
-        <div className="space-y-2 p-4">
-          <p className="text-xs text-base-content/55">Status</p>
-          <p className="text-sm text-base-content">
-            {contactForDetails.status}
-          </p>
-        </div>
+      ),
+    [contactForDetails]
+  );
+
+  const rightPanelContent = useMemo(
+    () => (
+      <div className="space-y-3">
+        {contactDetailsEl}
+        {selectedConversation ? (
+          <>
+            <div className="rounded-none bg-base-100 p-3 space-y-2">
+              <h3 className="text-sm font-medium">Message search</h3>
+              <div className="flex items-center gap-2">
+                <input
+                  className="input input-bordered input-sm w-full"
+                  placeholder="Search in this conversation"
+                  value={messageSearchQuery}
+                  onChange={(e) => setMessageSearchQuery(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={runMessageSearch}
+                  disabled={messageSearchBusy || !messageSearchQuery.trim()}
+                >
+                  {messageSearchBusy ? "..." : "Find"}
+                </button>
+              </div>
+              {messageSearchResult ? (
+                <div className="rounded-none p-2 text-xs space-y-1">
+                  <div className="font-mono text-base-content/70">
+                    {messageSearchResult.id}
+                  </div>
+                  <div className="line-clamp-2">{messageSearchResult.text || "—"}</div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      className="select select-bordered select-xs"
+                      value={String(messageSearchResult.status || "SENT").toUpperCase()}
+                      onChange={async (event) => {
+                        try {
+                          const updated = (await conversationsApi.updateMessageStatus(
+                            messageSearchResult.id,
+                            event.target.value as
+                            | "PENDING"
+                            | "PROCESSING"
+                            | "QUEUED"
+                            | "SENT"
+                            | "DELIVERED"
+                            | "READ"
+                            | "FAILED"
+                          )) as InboxMessage;
+                          setMessageSearchResult(updated);
+                          if (selectedId) {
+                            void fetchMessages(selectedId, { silent: true });
+                          }
+                        } catch (error: unknown) {
+                          setMessageError(
+                            extractApiErrorMessage(error) ||
+                            "Failed to update message status."
+                          );
+                        }
+                      }}
+                    >
+                      <option value="PENDING">PENDING</option>
+                      <option value="PROCESSING">PROCESSING</option>
+                      <option value="QUEUED">QUEUED</option>
+                      <option value="SENT">SENT</option>
+                      <option value="DELIVERED">DELIVERED</option>
+                      <option value="READ">READ</option>
+                      <option value="FAILED">FAILED</option>
+                    </select>
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-ghost"
+                      onClick={() => {
+                        setSelectedId(selectedConversation.id);
+                        void fetchMessages(selectedConversation.id, {
+                          silent: false,
+                        });
+                      }}
+                    >
+                      Refresh thread
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-none bg-base-100 p-3 space-y-2">
+              <h3 className="text-sm font-medium">Conversation notes</h3>
+              <div className="flex items-center gap-2">
+                <input
+                  className="input input-bordered input-sm w-full"
+                  placeholder="Add internal note"
+                  value={noteDraft}
+                  onChange={(e) => setNoteDraft(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={createConversationNote}
+                  disabled={conversationActionBusy || !noteDraft.trim()}
+                >
+                  Add
+                </button>
+              </div>
+              {notesLoading ? (
+                <span className="loading loading-spinner loading-sm" />
+              ) : conversationNotes.length ? (
+                <ul className="space-y-2">
+                  {conversationNotes.map((note) => (
+                    <li
+                      key={note.id}
+                      className="rounded-none p-2"
+                    >
+                      <p className="text-xs">{note.content}</p>
+                      <div className="mt-1 flex items-center justify-between text-xs text-base-content/60">
+                        <span>{note.authorUserId || "unknown"}</span>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => deleteConversationNote(note.id)}
+                          disabled={conversationActionBusy}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-base-content/60">No notes yet.</p>
+              )}
+            </div>
+
+            <InternalNotesPanel conversationId={selectedConversation.id} />
+            <InternalMessagesPanel conversationId={selectedConversation.id} />
+          </>
+        ) : null}
       </div>
-    );
+    ),
+    [
+      contactDetailsEl,
+      conversationActionBusy,
+      conversationNotes,
+      createConversationNote,
+      deleteConversationNote,
+      fetchMessages,
+      messageSearchBusy,
+      messageSearchQuery,
+      messageSearchResult,
+      noteDraft,
+      notesLoading,
+      runMessageSearch,
+      selectedConversation,
+      selectedId,
+    ]
+  );
+
+  useEffect(() => {
+    setRightPanelContent({
+      source: "inbox",
+      title: "Contact",
+      content: rightPanelContent,
+      openAfter: false,
+    });
+  }, [rightPanelContent, setRightPanelContent]);
+
+  /** Open panel when user selects a conversation or starts a chat with a contact (not on every panel content sync). */
+  const detailSelectionKey =
+    selectedConversation?.id ?? startContact?.id ?? null;
+  useEffect(() => {
+    if (!detailSelectionKey) return;
+    openRightPanel();
+  }, [detailSelectionKey, openRightPanel]);
+
+  useEffect(() => {
+    return () => clearRightPanelContent("inbox");
+  }, [clearRightPanelContent]);
 
   return (
     <>
-    <div className="flex min-h-[50dvh] flex-1 flex-col gap-3 lg:min-h-[70vh] lg:grid lg:grid-cols-[minmax(240px,1fr)_minmax(0,2.2fr)_minmax(240px,1fr)] lg:gap-1">
-      <div
-        className={`flex min-h-0 flex-1 flex-col space-y-3 rounded-xl border border-base-300/80 bg-base-200 p-3 sm:p-4 max-lg:min-h-[38vh] lg:min-h-0 ${
-          !isLgUp && mobilePane === "thread" ? "hidden" : "flex"
-        }`}
-      >
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-base font-medium">Conversations</h2>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(240px,1fr)_minmax(0,2.2fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:gap-1">
+        <div
+          className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-base-content/15 bg-base-200 shadow-sm lg:min-h-0 lg:max-h-full ${!isLgUp && mobilePane === "thread" ? "hidden" : "flex"
+            }`}
+        >
+          <div className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-base-300 bg-base-200 px-3">
+            <h2 className="truncate text-sm font-medium text-base-content/80">
+              Conversation
+            </h2>
             <div className="flex items-center gap-2">
               {listLoading && <span className="loading loading-spinner" />}
               <button
                 type="button"
-                className="btn btn-ghost btn-sm rounded-xl"
+                className="btn btn-ghost btn-sm"
                 onClick={() => {
                   setStartChatSearch("");
                   void loadStartChatContacts("");
@@ -1058,133 +1723,218 @@ export function InboxClient({
               </button>
             </div>
           </div>
-          <div role="tablist" className="tabs tabs-box w-full">
-            {STATUS_TABS.map((tab) => (
-              <button
-                key={tab}
-                role="tab"
-                className={`tab min-h-11 flex-1 sm:min-h-0 sm:flex-none ${
-                  status === tab ? "tab-active" : ""
-                }`}
-                onClick={() => setStatus(tab)}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4">
+            <div className="shrink-0 space-y-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <button
+                  type="button"
+                  className={`btn btn-xs ${queueFilter === "all" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setQueueFilter("all")}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-xs ${queueFilter === "awaiting" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setQueueFilter("awaiting")}
+                >
+                  Awaiting reply
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-xs ${queueFilter === "unread" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setQueueFilter("unread")}
+                >
+                  Unread
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-xs ${queueFilter === "snoozed" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setQueueFilter("snoozed")}
+                >
+                  Snoozed
+                </button>
+              </div>
+              {mode !== "contactsQueue" ? (
+                <div role="tablist" className="tabs tabs-box w-full rounded-none">
+                  {STATUS_TABS.map((tab) => (
+                    <button
+                      key={tab}
+                      role="tab"
+                      className={`tab min-h-11 flex-1 sm:min-h-0 sm:flex-none ${status === tab ? "tab-active" : ""
+                        }`}
+                      onClick={() => setStatus(tab)}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
 
-          {listError ? (
-            <div className="space-y-2">
-              <ErrorState message={listError} />
+            {listError ? (
+              <div className="shrink-0 space-y-2">
+                <ErrorState message={listError} />
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm w-full"
+                  onClick={() => fetchConversations(status, null, false)}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
+
+            {!listLoading && !conversations.length && !listError ? (
+              <div className="shrink-0">
+                <EmptyState
+                  title="No conversations"
+                  description="No conversations for this filter."
+                />
+              </div>
+            ) : null}
+
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain pr-1">
+              <ul className="space-y-1">
+                {conversations.map((conversation) => {
+                  const isActive = conversation.id === selectedId;
+                  const hasUnread = (conversation.unreadCount ?? 0) > 0;
+                  const isAwaitingReply = conversation.awaitingReply === true;
+                  const isFailed =
+                    conversation.lastMessage?.status === "FAILED" &&
+                    conversation.lastMessage?.direction === "OUTBOUND";
+                  const hasDraft = !!draftsByConversation[conversation.id]?.trim();
+                  const title =
+                    conversation.contact?.name ||
+                    conversation.contact?.phone ||
+                    conversation.contact?.email ||
+                    "Unknown contact";
+                  const subtitle = hasDraft
+                    ? `Draft: ${draftsByConversation[conversation.id]}`
+                    : lastMessagePreview(conversation.lastMessage);
+                  return (
+                    <li key={conversation.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          preserveStartContactSelectionRef.current = false;
+                          setStartContact(null);
+                          setSelectedId(conversation.id);
+                          if (!isLgUp) setMobilePane("thread");
+                        }}
+                        className={`group flex min-h-14 w-full items-center gap-2 rounded-none px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isActive
+                          ? "bg-primary/12"
+                          : isAwaitingReply
+                            ? "bg-base-100 hover:bg-base-300/40"
+                            : "bg-base-100 hover:bg-base-300/35"
+                          }`}
+                      >
+                        <ContactAvatar
+                          name={conversation.contact?.name}
+                          phone={conversation.contact?.phone}
+                          avatarUrl={conversation.contact?.avatarUrl}
+                          size="sm"
+                          className="shrink-0"
+                        />
+                        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <span
+                                className={`truncate text-sm ${hasUnread || isAwaitingReply
+                                  ? "font-semibold text-base-content"
+                                  : "text-base-content/85"
+                                  }`}
+                              >
+                                {title}
+                              </span>
+                              {conversation.turn ? (
+                                <span className="badge badge-outline badge-xs">
+                                  {conversation.turn === "YOUR_TURN"
+                                    ? "Your turn"
+                                    : "Waiting"}
+                                </span>
+                              ) : null}
+                              {isAwaitingReply ? (
+                                <span className="badge badge-warning badge-xs">
+                                  Awaiting reply
+                                </span>
+                              ) : null}
+                              {hasDraft ? (
+                                <span className="badge badge-info badge-xs">Draft</span>
+                              ) : null}
+                              {isFailed ? (
+                                <span className="badge badge-error badge-xs">Failed</span>
+                              ) : null}
+                            </div>
+                            <div className="flex shrink-0 items-center gap-1">
+                              {hasUnread ? (
+                                <span className="badge badge-primary badge-xs">
+                                  {conversation.unreadCount}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <span
+                            className={`truncate text-xs ${hasUnread || isAwaitingReply
+                              ? "font-medium text-base-content/80"
+                              : "text-base-content/55"
+                              }`}
+                          >
+                            {subtitle}
+                          </span>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
               <button
                 type="button"
-                className="btn btn-outline btn-sm w-full rounded-xl"
-                onClick={() => fetchConversations(status, null, false)}
+                className="btn btn-ghost btn-sm mt-2 w-full"
+                onClick={() => fetchConversations(status, cursor, true)}
+                disabled={!cursor || listLoading}
               >
-                Retry
+                Load more
               </button>
             </div>
-          ) : null}
-
-          {!listLoading && !conversations.length && !listError ? (
-            <EmptyState
-              title="No conversations"
-              description="No conversations for this filter."
-            />
-          ) : null}
-
-          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            <ul className="space-y-1">
-              {conversations.map((conversation) => {
-                const isActive = conversation.id === selectedId;
-                const hasUnread = (conversation.unreadCount ?? 0) > 0;
-                const title =
-                  conversation.contact?.name ||
-                  conversation.contact?.phone ||
-                  conversation.contact?.email ||
-                  "Unknown contact";
-                const subtitle = lastMessagePreview(conversation.lastMessage);
-                return (
-                  <li key={conversation.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setStartContact(null);
-                        setSelectedId(conversation.id);
-                        if (!isLgUp) setMobilePane("thread");
-                      }}
-                      className={`group flex min-h-11 w-full flex-col gap-1 rounded-xl px-3 py-2.5 text-left transition-all duration-150 sm:min-h-0 sm:py-2 ${
-                        isActive
-                          ? "bg-primary/12 ring-1 ring-primary/30"
-                          : "bg-base-100 hover:bg-base-300/40"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span
-                          className={`truncate text-sm ${
-                            hasUnread ? "font-medium text-base-content" : "text-base-content/85"
-                          }`}
-                        >
-                          {title}
-                        </span>
-                        {hasUnread ? (
-                          <span className="badge badge-primary badge-sm">
-                            {conversation.unreadCount}
-                          </span>
-                        ) : null}
-                      </div>
-                      <span
-                        className={`truncate text-xs ${
-                          hasUnread ? "text-base-content/75" : "text-base-content/55"
-                        }`}
-                      >
-                        {subtitle}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
           </div>
+        </div>
 
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm w-full rounded-xl transition-all duration-150 active:scale-[0.99]"
-          onClick={() => fetchConversations(status, cursor, true)}
-          disabled={!cursor || listLoading}
+        <div
+          className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border border-base-content/15 bg-base-200 shadow-sm lg:min-h-0 lg:max-h-full ${!isLgUp && mobilePane === "list" ? "hidden" : "flex"
+            }`}
         >
-          Load more
-        </button>
-      </div>
-
-      <div
-        className={`flex min-h-0 flex-1 flex-col rounded-xl border border-base-300/80 bg-base-200 p-3 sm:p-4 lg:max-h-[calc(100dvh-7rem)] ${
-          !isLgUp && mobilePane === "list" ? "hidden" : "flex"
-        }`}
-      >
-          <div className="flex shrink-0 items-center justify-between gap-2">
-            <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2 sm:min-h-0">
+          <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-base-300 bg-base-200 px-3">
+            <div className="flex min-h-0 min-w-0 flex-1 items-center gap-2">
               {!isLgUp ? (
                 <button
                   type="button"
-                  className="btn btn-ghost btn-square shrink-0 rounded-xl"
+                  className="btn btn-ghost btn-sm btn-square shrink-0"
                   aria-label="Back to conversations"
                   onClick={() => setMobilePane("list")}
                 >
-                  <ArrowLeftIcon className="h-5 w-5" />
+                  <ArrowBackRounded className="h-5 w-5" />
                 </button>
               ) : null}
-              <h2 className="truncate text-base font-medium">
-                {!isLgUp && (selectedConversation || startContact)
-                  ? selectedConversation
-                    ? conversationTitle(selectedConversation)
-                    : startContact?.name || startContact?.phone || startContact?.email || "New chat"
-                  : "Messages"}
+              <h2 className="truncate text-sm font-medium text-base-content/80">
+                {selectedConversation
+                  ? conversationTitle(selectedConversation)
+                  : startContact
+                    ? startContact.name ||
+                      startContact.phone ||
+                      startContact.email ||
+                      "New chat"
+                    : "Select a conversation"}
               </h2>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
               {selectedConversation ? (
                 <>
+                  {otherViewers.length > 0 ? (
+                    <span className="hidden text-xs text-base-content/65 md:inline">
+                      {otherViewers.slice(0, 2).join(", ")} is viewing this
+                    </span>
+                  ) : null}
                   <div className="hidden items-center gap-1 md:flex">
                     <button
                       type="button"
@@ -1194,22 +1944,38 @@ export function InboxClient({
                     >
                       Open
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-xs btn-ghost"
-                      onClick={() => runConversationAction("close")}
-                      disabled={conversationActionBusy}
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-xs btn-ghost"
-                      onClick={() => runConversationAction("archive")}
-                      disabled={conversationActionBusy}
-                    >
-                      Archive
-                    </button>
+                    {mode === "inbox" ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btn btn-xs btn-ghost"
+                          onClick={() => runConversationAction("close")}
+                          disabled={conversationActionBusy}
+                        >
+                          Close
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-xs btn-ghost"
+                          onClick={() => runConversationAction("archive")}
+                          disabled={conversationActionBusy}
+                        >
+                          Archive
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-ghost"
+                        onClick={toggleSnooze}
+                        disabled={conversationActionBusy}
+                      >
+                        {selectedConversation.snoozedUntil &&
+                          new Date(selectedConversation.snoozedUntil).getTime() > Date.now()
+                          ? "Unsnooze"
+                          : "Snooze 1h"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className="btn btn-xs btn-ghost"
@@ -1272,677 +2038,720 @@ export function InboxClient({
                   >
                     Unassign
                   </button>
+                  {selectedConversation.lastMessage?.status === "FAILED" &&
+                    selectedConversation.lastMessage?.direction === "OUTBOUND" &&
+                    selectedConversation.lastMessage?.text ? (
+                    <button
+                      type="button"
+                      className="btn btn-xs btn-error"
+                      onClick={() => void retryFailedLastMessage(selectedConversation)}
+                      disabled={conversationActionBusy || sending}
+                    >
+                      Retry failed
+                    </button>
+                  ) : null}
                 </>
               ) : null}
               {!isLgUp && selectedConversation ? (
                 <button
                   type="button"
-                  className="btn btn-ghost btn-square rounded-xl"
+                  className="btn btn-ghost btn-square"
                   aria-label="Contact details"
                   onClick={() => contactDialogRef.current?.showModal()}
                 >
-                  <UserCircleIcon className="h-6 w-6" />
+                  <AccountCircleRounded className="h-6 w-6" />
                 </button>
               ) : null}
               {messageLoading && <span className="loading loading-spinner" />}
             </div>
-          </div>
+          </header>
 
-          {messageError ? (
-            <div className="mt-2 shrink-0 space-y-2">
-              <ErrorState message={messageError} />
-              <button
-                type="button"
-                className="btn btn-outline btn-sm rounded-xl"
-                onClick={() =>
-                  selectedId && fetchMessages(selectedId, { silent: false })
-                }
-              >
-                Retry
-              </button>
-            </div>
-          ) : null}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-3 pb-3 pt-2 sm:px-4">
+            {messageError ? (
+              <div className="shrink-0 space-y-2">
+                <ErrorState message={messageError} />
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() =>
+                    selectedId && fetchMessages(selectedId, { silent: false })
+                  }
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
 
-          {!selectedConversation && !startContact ? (
-            <div className="mt-2 shrink-0">
-              <EmptyState
-                title="Select a conversation"
-                description="Choose a conversation or start a new chat."
-              />
-            </div>
-          ) : null}
-
-          {!!(selectedConversation || startContact) && !messageLoading && !messages.length ? (
-            <div className="mt-2 shrink-0">
-              <EmptyState
-                title="No messages yet"
-                description={
-                  startContact && !selectedConversation
-                    ? "Send the first message to create this conversation."
-                    : "Send the first message to start this thread."
-                }
-              />
-            </div>
-          ) : null}
-
-          <div className="mx-auto mt-2 flex min-h-0 w-full max-w-3xl flex-1 flex-col">
-            <div
-              ref={messagesScrollRef}
-              className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
-            >
-              {sortedMessages.map((message) => (
-                <MessageBubble
-                  key={`${message.id}-${resolveMediaUrlForUi(message.mediaUrl ?? undefined) ?? ""}-${message.status ?? ""}`}
-                  message={message}
+            {!selectedConversation && !startContact ? (
+              <div className="shrink-0">
+                <EmptyState
+                  title="Select a conversation"
+                  description="Choose a conversation or start a new chat."
                 />
-              ))}
-              <div
-                ref={messagesBottomSentinelRef}
-                aria-hidden
-                className="h-px w-full shrink-0"
-              />
-            </div>
+              </div>
+            ) : null}
 
-            <div className="mt-3 shrink-0 space-y-2 border-t border-base-300/70 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={WHATSAPP_ATTACH_ACCEPT}
-              className="hidden"
-              onChange={handleMediaFileChange}
-            />
-            {activeContactId && activeChannel === "WHATSAPP" ? (
-              <div className="space-y-2">
-                {policyLoading ? (
-                  <div className="flex items-center gap-2 text-xs text-base-content/60">
-                    <span className="loading loading-spinner loading-xs" />
-                    Checking send policy…
-                  </div>
-                ) : null}
-                {policyError ? (
-                  <div role="alert" className="alert alert-warning alert-soft py-2 text-sm">
-                    {policyError}
-                  </div>
-                ) : null}
-                {sendPolicy ? (
-                  <div
-                    role="status"
-                    className={`alert py-2 text-sm ${
-                      sendPolicy.templateRequired
-                        ? "alert-warning alert-soft"
-                        : "alert-success alert-soft"
-                    }`}
-                  >
-                    {sendPolicy.templateRequired
-                      ? "Template required: this chat is outside the 24h customer-care window."
-                      : "Free chat allowed in the current customer-care window."}
-                  </div>
-                ) : null}
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-base-content/65">
-                    Send mode
-                  </span>
-                  <div className="join">
-                    <button
-                      type="button"
-                      className={`btn btn-xs join-item ${
-                        !useTemplateSend ? "btn-primary" : "btn-ghost"
-                      }`}
-                      disabled={sendPolicy?.templateRequired === true}
-                      onClick={() => setUseTemplateSend(false)}
-                    >
-                      Free chat
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-xs join-item ${
-                        useTemplateSend ? "btn-primary" : "btn-ghost"
-                      }`}
-                      onClick={() => setUseTemplateSend(true)}
-                    >
-                      Template
-                    </button>
-                  </div>
-                </div>
-                {useTemplateSend ? (
-                  <div className="space-y-2 rounded-xl border border-base-300/70 bg-base-100/70 p-3">
-                    {templatesError ? (
-                      <div role="alert" className="alert alert-warning alert-soft py-2 text-sm">
-                        {templatesError}
+            {!!(selectedConversation || startContact) && !messageLoading && !messages.length ? (
+              <div className="shrink-0">
+                <EmptyState
+                  title="No messages yet"
+                  description={
+                    startContact && !selectedConversation
+                      ? "Send the first message to create this conversation."
+                      : "Send the first message to start this thread."
+                  }
+                />
+              </div>
+            ) : null}
+
+            <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col overflow-hidden pt-2">
+              <div
+                ref={messagesScrollRef}
+                className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1"
+              >
+                {sortedMessages.map((message) => (
+                  <MessageBubble
+                    key={`${message.id}-${resolveMediaUrlForUi(message.mediaUrl ?? undefined) ?? ""}-${message.status ?? ""}`}
+                    message={message}
+                  />
+                ))}
+                <div aria-hidden className="h-px w-full shrink-0" />
+              </div>
+
+              <div className="mt-3 shrink-0 space-y-2 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={WHATSAPP_ATTACH_ACCEPT}
+                  className="hidden"
+                  onChange={handleMediaFileChange}
+                />
+                {activeContactId && activeChannel === "WHATSAPP" ? (
+                  <div className="space-y-2">
+                    {policyLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-base-content/60">
+                        <span className="loading loading-spinner loading-xs" />
+                        Checking send policy…
                       </div>
                     ) : null}
-                    <label className="floating-label">
-                      <select
-                        className="select select-bordered w-full"
-                        value={selectedTemplateId}
-                        onChange={(event) => setSelectedTemplateId(event.target.value)}
-                        disabled={templatesLoading}
+                    {policyError ? (
+                      <div role="alert" className="alert alert-warning alert-soft py-2 text-sm">
+                        {policyError}
+                      </div>
+                    ) : null}
+                    {sendPolicy ? (
+                      <div
+                        role="status"
+                        className={`alert py-2 text-sm ${sendPolicy.templateRequired
+                          ? "alert-warning alert-soft"
+                          : "alert-success alert-soft"
+                          }`}
                       >
-                        <option value="">Select template</option>
-                        {templateOptions.map((template) => (
-                          <option key={template.id} value={template.id}>
-                            {template.name}
-                          </option>
-                        ))}
-                      </select>
-                      <span>Template</span>
-                    </label>
-                    <label className="floating-label">
-                      <input
-                        type="text"
-                        className="input input-bordered w-full"
-                        value={
-                          templateVersionLoading
-                            ? "Loading latest approved version..."
-                            : selectedTemplateVersionNum != null
-                              ? String(selectedTemplateVersionNum)
-                              : ""
-                        }
-                        readOnly
-                        placeholder="Approved version"
-                      />
-                      <span>Version</span>
-                    </label>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-base-content/65">
-                          Template variables
-                        </p>
+                        {sendPolicy.templateRequired
+                          ? "Template required: this chat is outside the 24h customer-care window."
+                          : "Free chat allowed in the current customer-care window."}
+                      </div>
+                    ) : null}
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-base-content/65">
+                        Send mode
+                      </span>
+                      <div className="join">
                         <button
                           type="button"
-                          className="btn btn-ghost btn-xs"
-                          onClick={addTemplateVariableRow}
+                          className={`btn btn-xs join-item ${!useTemplateSend ? "btn-primary" : "btn-ghost"
+                            }`}
+                          disabled={sendPolicy?.templateRequired === true}
+                          onClick={() => setUseTemplateSend(false)}
                         >
-                          Add variable
+                          Free chat
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-xs join-item ${useTemplateSend ? "btn-primary" : "btn-ghost"
+                            }`}
+                          onClick={() => setUseTemplateSend(true)}
+                        >
+                          Template
                         </button>
                       </div>
-                      {templateVariables.map((row) => (
-                        <div key={row.id} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            className="input input-bordered input-sm w-1/2"
-                            placeholder="key"
-                            value={row.key}
-                            onChange={(event) =>
-                              updateTemplateVariableRow(row.id, {
-                                key: event.target.value,
-                              })
-                            }
-                          />
-                          <input
-                            type="text"
-                            className="input input-bordered input-sm w-1/2"
-                            placeholder="value"
-                            value={row.value}
-                            onChange={(event) =>
-                              updateTemplateVariableRow(row.id, {
-                                value: event.target.value,
-                              })
-                            }
-                          />
-                          <button
-                            type="button"
-                            className="btn btn-ghost btn-xs"
-                            onClick={() => removeTemplateVariableRow(row.id)}
+                    </div>
+                    {useTemplateSend ? (
+                      <div className="space-y-2 rounded-none bg-base-100 p-3">
+                        {templatesError ? (
+                          <div role="alert" className="alert alert-warning alert-soft py-2 text-sm">
+                            {templatesError}
+                          </div>
+                        ) : null}
+                        <label className="floating-label">
+                          <select
+                            className="select select-bordered w-full"
+                            value={selectedTemplateId}
+                            onChange={(event) => setSelectedTemplateId(event.target.value)}
+                            disabled={templatesLoading}
                           >
-                            Remove
-                          </button>
+                            <option value="">Select template</option>
+                            {templateOptions.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name}
+                              </option>
+                            ))}
+                          </select>
+                          <span>Template</span>
+                        </label>
+                        <label className="floating-label">
+                          <input
+                            type="text"
+                            className="input input-bordered w-full"
+                            value={
+                              templateVersionLoading
+                                ? "Loading latest approved version..."
+                                : selectedTemplateVersion != null
+                                  ? String(selectedTemplateVersion.version)
+                                  : ""
+                            }
+                            readOnly
+                            placeholder="Approved version"
+                          />
+                          <span>Version</span>
+                        </label>
+                        {selectedTemplateId && selectedTemplateVersion?.id ? (
+                          <>
+                            {inboxTemplateVersionDetailLoading ? (
+                              <div className="flex items-center gap-2 text-sm text-base-content/70">
+                                <span className="loading loading-spinner loading-sm" />
+                                Loading template details…
+                              </div>
+                            ) : !inboxTemplateVersionDetail ? (
+                              <div
+                                role="alert"
+                                className="alert alert-warning alert-soft py-2 text-sm"
+                              >
+                                Could not load template details. Try re-selecting the
+                                template.
+                              </div>
+                            ) : (
+                              <>
+                                {needsTemplateHeaderMedia &&
+                                  inboxTemplateVersionDetail.headerType ? (
+                                  <div className="rounded-none bg-base-200/40 p-3">
+                                    <p className="text-sm font-medium text-base-content">
+                                      Header media (
+                                      {inboxTemplateVersionDetail.headerType})
+                                    </p>
+                                    <p className="mt-1 text-xs text-base-content/60">
+                                      WhatsApp requires media for this template
+                                      header. Upload a file; it is prepared for this
+                                      send only.
+                                    </p>
+                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                      <input
+                                        type="file"
+                                        className="file-input file-input-bordered file-input-sm w-full max-w-xs"
+                                        accept={
+                                          inboxTemplateVersionDetail.headerType ===
+                                            "VIDEO"
+                                            ? "video/mp4,video/3gpp"
+                                            : inboxTemplateVersionDetail.headerType ===
+                                              "DOCUMENT"
+                                              ? "application/pdf,application/*"
+                                              : "image/jpeg,image/png,image/webp,image/gif"
+                                        }
+                                        disabled={templateBindingUploadBusy}
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          e.target.value = "";
+                                          if (!file) return;
+                                          setTemplateBindingError(null);
+                                          setTemplateBindingUploadBusy(true);
+                                          try {
+                                            const id =
+                                              await uploadWhatsAppAttachmentIdAndPrepareWhatsApp(
+                                                file
+                                              );
+                                            setTemplateHeaderMediaId(id);
+                                          } catch (err: unknown) {
+                                            setTemplateBindingError(
+                                              extractApiErrorMessage(err) ||
+                                              "Upload failed. Try a smaller file or supported format."
+                                            );
+                                          } finally {
+                                            setTemplateBindingUploadBusy(false);
+                                          }
+                                        }}
+                                      />
+                                      {templateHeaderMediaId ? (
+                                        <span className="badge badge-success badge-outline">
+                                          Ready
+                                        </span>
+                                      ) : (
+                                        <span className="text-xs text-warning">
+                                          Required
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-base-content/55">
+                                    This template has no media header (text or none
+                                    only).
+                                  </p>
+                                )}
+
+                                {templateCarouselCardCount > 0 ? (
+                                  <div className="space-y-2">
+                                    <p className="text-sm font-medium text-base-content">
+                                      Carousel cards ({templateCarouselCardCount})
+                                    </p>
+                                    <p className="text-xs text-base-content/60">
+                                      Each card needs header media for WhatsApp.
+                                    </p>
+                                    {Array.from(
+                                      { length: templateCarouselCardCount },
+                                      (_, idx) => {
+                                        const card = (
+                                          inboxTemplateVersionDetail
+                                            .carouselCards as unknown[]
+                                        )?.[idx];
+                                        return (
+                                          <div
+                                            key={idx}
+                                            className="rounded-none bg-base-100 p-3"
+                                          >
+                                            <p className="text-xs font-medium text-base-content/80">
+                                              Card {idx + 1}
+                                            </p>
+                                            <input
+                                              type="file"
+                                              className="file-input file-input-bordered file-input-sm mt-2 w-full max-w-xs"
+                                              accept={carouselCardFileAccept(card)}
+                                              disabled={templateBindingUploadBusy}
+                                              onChange={async (e) => {
+                                                const file = e.target.files?.[0];
+                                                e.target.value = "";
+                                                if (!file) return;
+                                                setTemplateBindingError(null);
+                                                setTemplateBindingUploadBusy(true);
+                                                try {
+                                                  const id =
+                                                    await uploadWhatsAppAttachmentIdAndPrepareWhatsApp(
+                                                      file
+                                                    );
+                                                  setTemplateCarouselMediaIds(
+                                                    (prev) => {
+                                                      const next = [...prev];
+                                                      next[idx] = id;
+                                                      return next;
+                                                    }
+                                                  );
+                                                } catch (err: unknown) {
+                                                  setTemplateBindingError(
+                                                    extractApiErrorMessage(err) ||
+                                                    "Upload failed for this card."
+                                                  );
+                                                } finally {
+                                                  setTemplateBindingUploadBusy(
+                                                    false
+                                                  );
+                                                }
+                                              }}
+                                            />
+                                            {templateCarouselMediaIds[idx] ? (
+                                              <span className="mt-1 inline-block text-xs text-success">
+                                                Uploaded
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      }
+                                    )}
+                                  </div>
+                                ) : null}
+
+                                {templateBindingError ? (
+                                  <div
+                                    role="alert"
+                                    className="alert alert-error text-sm py-2"
+                                  >
+                                    {templateBindingError}
+                                  </div>
+                                ) : null}
+                              </>
+                            )}
+                          </>
+                        ) : null}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-xs text-base-content/65">
+                              Template variables
+                            </p>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs"
+                              onClick={addTemplateVariableRow}
+                            >
+                              Add variable
+                            </button>
+                          </div>
+                          {templateVariables.map((row) => (
+                            <div key={row.id} className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                className="input input-bordered input-sm w-1/2"
+                                placeholder="key"
+                                value={row.key}
+                                onChange={(event) =>
+                                  updateTemplateVariableRow(row.id, {
+                                    key: event.target.value,
+                                  })
+                                }
+                              />
+                              <input
+                                type="text"
+                                className="input input-bordered input-sm w-1/2"
+                                placeholder="value"
+                                value={row.value}
+                                onChange={(event) =>
+                                  updateTemplateVariableRow(row.id, {
+                                    value: event.target.value,
+                                  })
+                                }
+                              />
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                onClick={() => removeTemplateVariableRow(row.id)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                {mediaUpload.error ? (
+                  <div role="alert" className="alert alert-warning alert-soft text-sm py-2">
+                    {mediaUpload.error}
+                  </div>
+                ) : null}
+                {!useTemplateSend && (pendingPreviewUrl || pendingFileName) && pendingKind ? (
+                  <div className="flex items-start gap-3 rounded-none bg-base-200 p-3">
+                    {pendingKind === "IMAGE" && pendingPreviewUrl ? (
+                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-none bg-base-300">
+                        {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
+                        <img
+                          src={pendingPreviewUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                        {mediaUpload.uploading ? (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center bg-base-100/65"
+                            aria-hidden
+                          >
+                            <span className="loading loading-spinner loading-md text-primary" />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {pendingKind === "VIDEO" && pendingPreviewUrl ? (
+                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-none bg-base-300">
+                        <video
+                          src={pendingPreviewUrl}
+                          muted
+                          className="h-full w-full object-cover"
+                          playsInline
+                        />
+                        {mediaUpload.uploading ? (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center bg-base-100/65"
+                            aria-hidden
+                          >
+                            <span className="loading loading-spinner loading-md text-primary" />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {pendingKind === "AUDIO" && pendingPreviewUrl ? (
+                      <div className="relative flex min-h-[3rem] shrink-0 flex-col justify-center">
+                        <audio
+                          src={pendingPreviewUrl}
+                          controls
+                          className="h-10 w-[min(100%,12rem)] max-w-[12rem]"
+                        />
+                        {mediaUpload.uploading ? (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center bg-base-100/50"
+                            aria-hidden
+                          >
+                            <span className="loading loading-spinner loading-md text-primary" />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {pendingKind === "DOCUMENT" ? (
+                      <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-none bg-base-300 text-2xl">
+                        <span aria-hidden>📄</span>
+                        {mediaUpload.uploading ? (
+                          <div
+                            className="absolute inset-0 flex items-center justify-center bg-base-100/65"
+                            aria-hidden
+                          >
+                            <span className="loading loading-spinner loading-md text-primary" />
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div className="flex min-w-0 flex-1 flex-col gap-2">
+                      <p className="text-sm text-base-content/90">
+                        {mediaUpload.uploading
+                          ? `Uploading…${mediaUpload.progress > 0 ? ` ${mediaUpload.progress}%` : ""}`
+                          : pendingMediaId
+                            ? `${pendingKindLabel(pendingKind)} ready to send`
+                            : "Preparing…"}
+                      </p>
+                      {pendingFileName ? (
+                        <p className="truncate text-xs text-base-content/70" title={pendingFileName}>
+                          {pendingFileName}
+                        </p>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs w-fit"
+                        onClick={() => {
+                          mediaUpload.cancel();
+                          setPendingMediaId(null);
+                          clearPendingMediaPreview();
+                        }}
+                      >
+                        Remove
+                      </button>
                     </div>
                   </div>
                 ) : null}
-              </div>
-            ) : null}
-            {mediaUpload.error ? (
-              <div role="alert" className="alert alert-warning alert-soft text-sm py-2">
-                {mediaUpload.error}
-              </div>
-            ) : null}
-            {!useTemplateSend && (pendingPreviewUrl || pendingFileName) && pendingKind ? (
-              <div className="flex items-start gap-3 rounded-xl border border-base-300/60 bg-base-300/30 p-3">
-                {pendingKind === "IMAGE" && pendingPreviewUrl ? (
-                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-base-300 ring-1 ring-base-300/80">
-                    {/* eslint-disable-next-line @next/next/no-img-element -- local blob preview */}
-                    <img
-                      src={pendingPreviewUrl}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                    {mediaUpload.uploading ? (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center bg-base-100/65"
-                        aria-hidden
-                      >
-                        <span className="loading loading-spinner loading-md text-primary" />
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {pendingKind === "VIDEO" && pendingPreviewUrl ? (
-                  <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-base-300 ring-1 ring-base-300/80">
-                    <video
-                      src={pendingPreviewUrl}
-                      muted
-                      className="h-full w-full object-cover"
-                      playsInline
-                    />
-                    {mediaUpload.uploading ? (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center bg-base-100/65"
-                        aria-hidden
-                      >
-                        <span className="loading loading-spinner loading-md text-primary" />
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {pendingKind === "AUDIO" && pendingPreviewUrl ? (
-                  <div className="relative flex min-h-[3rem] shrink-0 flex-col justify-center">
-                    <audio
-                      src={pendingPreviewUrl}
-                      controls
-                      className="h-10 w-[min(100%,12rem)] max-w-[12rem]"
-                    />
-                    {mediaUpload.uploading ? (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center bg-base-100/50"
-                        aria-hidden
-                      >
-                        <span className="loading loading-spinner loading-md text-primary" />
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {pendingKind === "DOCUMENT" ? (
-                  <div className="relative flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-base-300 text-2xl ring-1 ring-base-300/80">
-                    <span aria-hidden>📄</span>
-                    {mediaUpload.uploading ? (
-                      <div
-                        className="absolute inset-0 flex items-center justify-center bg-base-100/65"
-                        aria-hidden
-                      >
-                        <span className="loading loading-spinner loading-md text-primary" />
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <p className="text-sm text-base-content/90">
-                    {mediaUpload.uploading
-                      ? `Uploading…${mediaUpload.progress > 0 ? ` ${mediaUpload.progress}%` : ""}`
-                      : pendingMediaId
-                        ? `${pendingKindLabel(pendingKind)} ready to send`
-                        : "Preparing…"}
-                  </p>
-                  {pendingFileName ? (
-                    <p className="truncate text-xs text-base-content/70" title={pendingFileName}>
-                      {pendingFileName}
-                    </p>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs w-fit rounded-lg"
-                    onClick={() => {
-                      mediaUpload.cancel();
-                      setPendingMediaId(null);
-                      clearPendingMediaPreview();
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-2">
-              {showWhatsAppMediaTools ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-square rounded-xl shrink-0"
-                  aria-label="Attach photo, video, audio, or document"
-                  disabled={
-                    !activeContactId ||
-                    mediaUpload.uploading ||
-                    useTemplateSend ||
-                    !!pendingMediaId
-                  }
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                    <circle cx="9" cy="9" r="2" />
-                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                  </svg>
-                </button>
-              ) : activeContactId ? (
-                <span
-                  className="tooltip tooltip-top shrink-0 text-xs text-base-content/50"
-                  data-tip="Media attachments are only available on WhatsApp for now."
-                >
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-square btn-disabled rounded-xl cursor-not-allowed"
-                    aria-label="Media only on WhatsApp"
-                    disabled
-                  >
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      aria-hidden
-                    >
-                      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                      <circle cx="9" cy="9" r="2" />
-                      <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
-                    </svg>
-                  </button>
-                </span>
-              ) : null}
-              <input
-                ref={draftInputRef}
-                type="text"
-                className="input input-bordered min-w-0 flex-1 rounded-xl transition-all duration-150 focus:border-primary/50"
-                placeholder={
-                  useTemplateSend
-                    ? "Template mode: free text is disabled"
-                    : pendingMediaId
-                    ? "Add a caption (optional)…"
-                    : "Type a message…"
-                }
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    if (canSend) handleSend();
-                  }
-                }}
-                disabled={
-                  !activeContactId ||
-                  sending ||
-                  mediaUpload.uploading ||
-                  useTemplateSend
-                }
-              />
-              <button
-                type="button"
-                className="btn btn-primary min-h-11 min-w-[4.5rem] rounded-xl px-4 transition-all duration-150 active:scale-[0.99] shrink-0 sm:min-h-0 sm:min-w-0"
-                onClick={handleSend}
-                disabled={!canSend}
-              >
-                {sending ? (
-                  <span className="loading loading-spinner" />
-                ) : (
-                  "Send"
-                )}
-              </button>
-            </div>
-          </div>
-          </div>
-      </div>
-
-      <div className="hidden min-h-0 flex-col space-y-3 rounded-xl border border-base-300/80 bg-base-200 p-3 sm:p-4 lg:flex">
-        <h2 className="text-base font-medium">Contact</h2>
-        {contactDetailsEl}
-        {selectedConversation ? (
-          <>
-            <div className="rounded-xl border border-base-300 bg-base-100 p-3 space-y-2">
-              <h3 className="text-sm font-medium">Message search</h3>
-              <div className="flex items-center gap-2">
-                <input
-                  className="input input-bordered input-sm w-full"
-                  placeholder="Search in this conversation"
-                  value={messageSearchQuery}
-                  onChange={(e) => setMessageSearchQuery(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline"
-                  onClick={runMessageSearch}
-                  disabled={messageSearchBusy || !messageSearchQuery.trim()}
-                >
-                  {messageSearchBusy ? "..." : "Find"}
-                </button>
-              </div>
-              {messageSearchResult ? (
-                <div className="rounded-lg border border-base-300 p-2 text-xs space-y-1">
-                  <div className="font-mono text-base-content/70">
-                    {messageSearchResult.id}
-                  </div>
-                  <div className="line-clamp-2">{messageSearchResult.text || "—"}</div>
-                  <div className="flex items-center gap-2">
-                    <select
-                      className="select select-bordered select-xs"
-                      value={String(messageSearchResult.status || "SENT").toUpperCase()}
-                      onChange={async (event) => {
-                        try {
-                          const updated = (await conversationsApi.updateMessageStatus(
-                            messageSearchResult.id,
-                            event.target.value as
-                              | "PENDING"
-                              | "PROCESSING"
-                              | "QUEUED"
-                              | "SENT"
-                              | "DELIVERED"
-                              | "READ"
-                              | "FAILED"
-                          )) as InboxMessage;
-                          setMessageSearchResult(updated);
-                          if (selectedId) {
-                            void fetchMessages(selectedId, { silent: true });
-                          }
-                        } catch (error: unknown) {
-                          setMessageError(
-                            extractApiErrorMessage(error) ||
-                              "Failed to update message status."
-                          );
-                        }
-                      }}
-                    >
-                      <option value="PENDING">PENDING</option>
-                      <option value="PROCESSING">PROCESSING</option>
-                      <option value="QUEUED">QUEUED</option>
-                      <option value="SENT">SENT</option>
-                      <option value="DELIVERED">DELIVERED</option>
-                      <option value="READ">READ</option>
-                      <option value="FAILED">FAILED</option>
-                    </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  {showWhatsAppMediaTools ? (
                     <button
                       type="button"
-                      className="btn btn-xs btn-ghost"
-                      onClick={() => {
-                        setSelectedId(selectedConversation.id);
-                        void fetchMessages(selectedConversation.id, { silent: false });
-                      }}
+                      className="btn btn-ghost btn-square shrink-0"
+                      aria-label="Attach photo, video, audio, or document"
+                      disabled={
+                        !activeContactId ||
+                        mediaUpload.uploading ||
+                        useTemplateSend ||
+                        !!pendingMediaId
+                      }
+                      onClick={() => fileInputRef.current?.click()}
                     >
-                      Refresh thread
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                        <circle cx="9" cy="9" r="2" />
+                        <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                      </svg>
                     </button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="rounded-xl border border-base-300 bg-base-100 p-3 space-y-2">
-              <h3 className="text-sm font-medium">Conversation notes</h3>
-              <div className="flex items-center gap-2">
-                <input
-                  className="input input-bordered input-sm w-full"
-                  placeholder="Add internal note"
-                  value={noteDraft}
-                  onChange={(e) => setNoteDraft(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={createConversationNote}
-                  disabled={conversationActionBusy || !noteDraft.trim()}
-                >
-                  Add
-                </button>
-              </div>
-              {notesLoading ? (
-                <span className="loading loading-spinner loading-sm" />
-              ) : conversationNotes.length ? (
-                <ul className="space-y-2">
-                  {conversationNotes.map((note) => (
-                    <li key={note.id} className="rounded-lg border border-base-300 p-2">
-                      <p className="text-xs">{note.content}</p>
-                      <div className="mt-1 flex items-center justify-between text-[11px] text-base-content/60">
-                        <span>{note.authorUserId || "unknown"}</span>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => deleteConversationNote(note.id)}
-                          disabled={conversationActionBusy}
+                  ) : activeContactId ? (
+                    <span
+                      className="tooltip tooltip-top shrink-0 text-xs text-base-content/50"
+                      data-tip="Media attachments are only available on WhatsApp for now."
+                    >
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-square btn-disabled cursor-not-allowed"
+                        aria-label="Media only on WhatsApp"
+                        disabled
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          aria-hidden
                         >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-base-content/60">No notes yet.</p>
-              )}
-            </div>
-
-            <InternalNotesPanel conversationId={selectedConversation.id} />
-            <InternalMessagesPanel conversationId={selectedConversation.id} />
-          </>
-        ) : null}
-      </div>
-    </div>
-
-    <dialog
-      ref={startChatDialogRef}
-      className="modal"
-      aria-labelledby="inbox-start-chat-title"
-    >
-      <div className="modal-box max-h-[85dvh] max-w-lg overflow-y-auto">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h3 id="inbox-start-chat-title" className="text-lg font-semibold">
-            Start new chat
-          </h3>
-          <form method="dialog">
-            <button
-              type="submit"
-              className="btn btn-sm btn-circle btn-ghost"
-              aria-label="Close"
-            >
-              ✕
-            </button>
-          </form>
-        </div>
-
-        <label className="input input-bordered mb-3 w-full rounded-xl">
-          <span className="label">Search</span>
-          <input
-            type="text"
-            placeholder="Name, phone, or email"
-            value={startChatSearch}
-            onChange={(event) => setStartChatSearch(event.target.value)}
-          />
-        </label>
-
-        {startChatError ? (
-          <div role="alert" className="alert alert-warning alert-soft mb-3 text-sm">
-            {startChatError}
-          </div>
-        ) : null}
-        {startChatLoading ? (
-          <div className="flex justify-center py-4">
-            <span className="loading loading-spinner" />
-          </div>
-        ) : null}
-
-        {!startChatLoading && startChatContacts.length === 0 ? (
-          <EmptyState
-            title="No contacts found"
-            description="Try a different search term or add a contact first."
-          />
-        ) : (
-          <ul className="space-y-2">
-            {startChatContacts.map((contact) => {
-              const title =
-                contact.name || contact.phone || contact.email || "Unknown contact";
-              return (
-                <li key={contact.id}>
+                          <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                          <circle cx="9" cy="9" r="2" />
+                          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                        </svg>
+                      </button>
+                    </span>
+                  ) : null}
+                  <input
+                    ref={draftInputRef}
+                    type="text"
+                    className="input input-bordered min-w-0 flex-1"
+                    placeholder={
+                      useTemplateSend
+                        ? "Template mode: free text is disabled"
+                        : pendingMediaId
+                          ? "Add a caption (optional)…"
+                          : "Type a message…"
+                    }
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        if (canSend) handleSend();
+                      }
+                    }}
+                    disabled={
+                      !activeContactId ||
+                      sending ||
+                      mediaUpload.uploading ||
+                      useTemplateSend
+                    }
+                  />
                   <button
                     type="button"
-                    className="w-full rounded-xl border border-base-300/60 bg-base-100 px-3 py-2 text-left hover:bg-base-200"
-                    onClick={() => {
-                      setStatus("OPEN");
-                      setSelectedId(null);
-                      setMessages([]);
-                      setStartContact(contact);
-                      if (!isLgUp) setMobilePane("thread");
-                      startChatDialogRef.current?.close();
-                      window.setTimeout(() => {
-                        draftInputRef.current?.focus({ preventScroll: true });
-                      }, 0);
-                    }}
+                    className="btn btn-primary min-w-[4.5rem] px-4 shrink-0 sm:min-w-0"
+                    onClick={handleSend}
+                    disabled={!canSend}
                   >
-                    <p className="truncate text-sm font-medium">{title}</p>
-                    <p className="truncate text-xs text-base-content/60">
-                      {contact.phone || contact.email || "No phone/email"}
-                    </p>
+                    {sending ? (
+                      <span className="loading loading-spinner" />
+                    ) : (
+                      "Send"
+                    )}
                   </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        <button type="submit" className="sr-only">
-          Close
-        </button>
-      </form>
-    </dialog>
-
-    <dialog
-      ref={contactDialogRef}
-      className="modal"
-      aria-labelledby="inbox-contact-title"
-    >
-      <div className="modal-box max-h-[85dvh] max-w-md overflow-y-auto">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 id="inbox-contact-title" className="text-lg font-semibold">
-            Contact
-          </h3>
-          <form method="dialog">
-            <button
-              type="submit"
-              className="btn btn-sm btn-circle btn-ghost"
-              aria-label="Close"
-            >
-              ✕
-            </button>
-          </form>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        {contactDetailsEl}
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button type="submit" className="sr-only">
-          Close
-        </button>
-      </form>
-    </dialog>
+      </div>
+
+      <dialog
+        ref={startChatDialogRef}
+        className="modal"
+        aria-labelledby="inbox-start-chat-title"
+      >
+        <div className="modal-box max-h-[85dvh] max-w-lg overflow-y-auto">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h3 id="inbox-start-chat-title" className="text-lg font-semibold">
+              Start new chat
+            </h3>
+            <form method="dialog">
+              <button
+                type="submit"
+                className="btn btn-sm btn-circle btn-ghost"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </form>
+          </div>
+
+          <label className="input input-bordered mb-3 w-full">
+            <span className="label">Search</span>
+            <input
+              type="text"
+              placeholder="Name, phone, or email"
+              value={startChatSearch}
+              onChange={(event) => setStartChatSearch(event.target.value)}
+            />
+          </label>
+
+          {startChatError ? (
+            <div role="alert" className="alert alert-warning alert-soft mb-3 text-sm">
+              {startChatError}
+            </div>
+          ) : null}
+          {startChatLoading ? (
+            <div className="flex justify-center py-4">
+              <span className="loading loading-spinner" />
+            </div>
+          ) : null}
+
+          {!startChatLoading && startChatContacts.length === 0 ? (
+            <EmptyState
+              title="No contacts found"
+              description="Try a different search term or add a contact first."
+            />
+          ) : (
+            <ul className="space-y-2">
+              {startChatContacts.map((contact) => {
+                const title =
+                  contact.name || contact.phone || contact.email || "Unknown contact";
+                return (
+                  <li key={contact.id}>
+                    <button
+                      type="button"
+                      className="w-full rounded-none bg-base-100 px-3 py-2 text-left hover:bg-base-200"
+                      onClick={() => {
+                        setStatus("OPEN");
+                        preserveStartContactSelectionRef.current = true;
+                        setSelectedId(null);
+                        setMessages([]);
+                        setStartContact(contact);
+                        if (!isLgUp) setMobilePane("thread");
+                        startChatDialogRef.current?.close();
+                        window.setTimeout(() => {
+                          draftInputRef.current?.focus({ preventScroll: true });
+                        }, 0);
+                      }}
+                    >
+                      <p className="truncate text-sm font-medium">{title}</p>
+                      <p className="truncate text-xs text-base-content/60">
+                        {contact.phone || contact.email || "No phone/email"}
+                      </p>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button type="submit" className="sr-only">
+            Close
+          </button>
+        </form>
+      </dialog>
+
+      <dialog
+        ref={contactDialogRef}
+        className="modal"
+        aria-labelledby="inbox-contact-title"
+      >
+        <div className="modal-box max-h-[85dvh] max-w-md overflow-y-auto">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 id="inbox-contact-title" className="text-lg font-semibold">
+              Contact
+            </h3>
+            <form method="dialog">
+              <button
+                type="submit"
+                className="btn btn-sm btn-circle btn-ghost"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </form>
+          </div>
+          {contactDetailsEl}
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button type="submit" className="sr-only">
+            Close
+          </button>
+        </form>
+      </dialog>
     </>
   );
 }

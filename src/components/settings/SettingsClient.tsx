@@ -148,25 +148,25 @@ export function SettingsClient({
 
   return (
     <Section>
-      <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-3">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-medium">Workspace info</h2>
           <div className="flex items-center gap-3">
             {canManageWorkspace ? (
               <button
                 type="button"
-                className="btn btn-sm btn-outline rounded-xl"
+                className="btn btn-sm btn-outline"
                 onClick={openEdit}
               >
                 Edit
               </button>
             ) : null}
-            <Link href="/settings/team" className="btn btn-sm btn-ghost rounded-xl">
+            <Link href="/settings/team" className="btn btn-sm btn-ghost">
               Team
             </Link>
             <Link
               href="/settings/integrations"
-              className="btn btn-sm btn-ghost rounded-xl"
+              className="btn btn-sm btn-ghost"
             >
               Integrations
             </Link>
@@ -184,7 +184,7 @@ export function SettingsClient({
           <div className="pt-2">
             <button
               type="button"
-              className="btn btn-sm btn-error btn-outline rounded-xl"
+              className="btn btn-sm btn-error btn-outline"
               onClick={onDeleteWorkspace}
               disabled={dangerBusy}
             >
@@ -396,12 +396,12 @@ export function SettingsClient({
         href="/settings/integrations/whatsapp"
       />
 
-      <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-3">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
         <h2 className="text-base font-medium">Team snapshot</h2>
         <p className="text-sm text-base-content/70">
           {members.length} member{members.length === 1 ? "" : "s"} in this workspace.
         </p>
-        <Link href="/settings/team" className="btn btn-sm btn-outline rounded-xl">
+        <Link href="/settings/team" className="btn btn-sm btn-outline">
           Manage team
         </Link>
       </div>
@@ -411,7 +411,7 @@ export function SettingsClient({
 
 function InfoCard({ label, value }: { label: string; value?: string }) {
   return (
-    <div className="rounded-xl border border-base-300 bg-base-100 p-4 space-y-2">
+    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
       <div className="text-xs text-base-content/60">{label}</div>
       <div className="text-base font-medium text-base-content">{value || "-"}</div>
     </div>

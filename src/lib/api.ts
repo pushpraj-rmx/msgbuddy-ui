@@ -1,6 +1,5 @@
 import api, { fetchWithAuthRefresh } from "./axios";
 import { API_BASE_URL, endpoints } from "./endpoints";
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "./auth";
 import type {
   Contact,
   ContactsListResponse,
@@ -15,14 +14,15 @@ import type {
   DuplicatesResponse,
   ImportResult,
   Template,
-  TemplateVersion,
   TemplatesListResponse,
-  TemplateSyncResponse,
-  TemplateImportResponse,
   TemplateLimitsResponse,
   TemplateChannel,
   TemplateCategory,
-  TemplateVersionPayload,
+  ChannelTemplateState,
+  ChannelTemplateVersion,
+  ChannelTemplateVersionPayload,
+  ChannelTemplateVersionUpdatePayload,
+  ChannelTemplateSyncResult,
   WorkspaceRole,
   PlatformRole,
   OffsetPaginatedResponse,
@@ -33,15 +33,17 @@ import type {
   PlatformUserDetail,
   PlatformWebhookLog,
   PlatformUsageEvent,
+  PlatformAdminAuditLog,
   PlatformBspCredential,
   PlatformBsp,
   PlatformChannelAccount,
   OnboardingWabaListResponse,
+  NotificationItem,
+  NotificationsListResponse,
 } from "./types";
 
 export type {
   Template,
-  TemplateVersion,
   TemplateChannel,
   TemplateCategory,
 };
@@ -136,102 +138,6 @@ export interface MeResponse {
   platformRole: PlatformRole;
 }
 
-async function refreshServerAccessToken(
-  cookieStore: Awaited<ReturnType<typeof import("next/headers").cookies>>
-): Promise<string | null> {
-  try {
-    const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
-    if (!refreshToken) return null;
-
-    const response = await fetch(`${API_BASE_URL}${endpoints.auth.refresh}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-      credentials: "include",
-    });
-
-    if (!response.ok) return null;
-
-    const { accessToken, refreshToken: newRefresh, expiresIn } =
-      (await response.json()) as Partial<AuthResponse>;
-
-    if (!accessToken) return null;
-
-    const maxAge = expiresIn ?? 15 * 60;
-    if (typeof cookieStore.set === "function") {
-      cookieStore.set(ACCESS_TOKEN_COOKIE, accessToken, {
-        path: "/",
-        sameSite: "lax",
-        httpOnly: false,
-        secure: process.env.NODE_ENV === "production",
-        maxAge,
-      });
-
-      if (newRefresh) {
-        cookieStore.set(REFRESH_TOKEN_COOKIE, newRefresh, {
-          path: "/",
-          sameSite: "lax",
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          maxAge: 30 * 24 * 60 * 60,
-        });
-      }
-    }
-
-    return accessToken;
-  } catch {
-    return null;
-  }
-}
-
-export async function serverFetch<T>(
-  path: string,
-  init: RequestInit = {}
-): Promise<T> {
-  const { cookies } = await import("next/headers");
-  const { redirect } = await import("next/navigation");
-  const cookieStore = await cookies();
-  const raw = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
-  const token = raw ? decodeURIComponent(raw) : null;
-
-  const doRequest = async (bearer: string | null) => {
-    const headers = new Headers(init.headers || {});
-    if (bearer) {
-      headers.set("Authorization", `Bearer ${bearer}`);
-    } else {
-      headers.delete("Authorization");
-    }
-    if (init.body != null && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
-    }
-
-    return fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers,
-      cache: "no-store",
-      credentials: "include",
-    });
-  };
-
-  let response = await doRequest(token);
-
-  if (response.status === 401) {
-    const refreshed = await refreshServerAccessToken(cookieStore);
-    if (refreshed) {
-      response = await doRequest(refreshed);
-    } else {
-      redirect("/login");
-    }
-  }
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed (${response.status})`);
-  }
-
-  return response.json() as Promise<T>;
-}
-
 export const authApi = {
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
     const response = await api.post<AuthResponse>(endpoints.auth.register, data, {
@@ -256,6 +162,12 @@ export const authApi = {
 export interface ConversationFilters {
   status?: "OPEN" | "CLOSED" | "ARCHIVED";
   channel?: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
+  search?: string;
+  unreadOnly?: boolean;
+  awaitingReplyOnly?: boolean;
+  includeSnoozed?: boolean;
+  snoozedOnly?: boolean;
+  sort?: "lastMessageAt" | "awaitingReply";
   limit?: number;
   cursor?: string;
 }
@@ -329,17 +241,15 @@ export type SendMessagePayload =
   | {
       contactId: string;
       channel: "WHATSAPP";
-      templateId: string;
-      templateVersionNum: number;
+      channelTemplateVersionId: string;
       templateVariables?: Record<string, string>;
       idempotencyKey?: string;
     };
 
 /** POST /v2/media/:id/prepare-whatsapp */
 export type PrepareWhatsAppResponseDto = {
-  ok?: boolean;
-  synced?: boolean;
-  message?: string;
+  mediaId: string;
+  whatsappMediaId: string;
 };
 
 export const conversationsApi = {
@@ -372,6 +282,10 @@ export const conversationsApi = {
     const response = await api.get(endpoints.conversations.byId(id));
     return response.data;
   },
+  listByContact: async (contactId: string) => {
+    const response = await api.get(endpoints.conversations.byContact(contactId));
+    return response.data;
+  },
   open: async (id: string) => {
     const response = await api.put(endpoints.conversations.open(id));
     return response.data;
@@ -386,6 +300,14 @@ export const conversationsApi = {
   },
   read: async (id: string) => {
     const response = await api.put(endpoints.conversations.read(id));
+    return response.data;
+  },
+  snooze: async (id: string, until: string) => {
+    const response = await api.put(endpoints.conversations.snooze(id), { until });
+    return response.data;
+  },
+  unsnooze: async (id: string) => {
+    const response = await api.put(endpoints.conversations.unsnooze(id));
     return response.data;
   },
   assign: async (id: string, userId: string) => {
@@ -430,6 +352,21 @@ export const conversationsApi = {
     status: "PENDING" | "PROCESSING" | "QUEUED" | "SENT" | "DELIVERED" | "READ" | "FAILED"
   ) => {
     const response = await api.put(endpoints.messages.updateStatus(id), { status });
+    return response.data;
+  },
+};
+
+export const presenceApi = {
+  heartbeatConversationView: async (conversationId: string) => {
+    const response = await api.post(
+      endpoints.presence.viewConversation(conversationId)
+    );
+    return response.data;
+  },
+  clearConversationView: async (conversationId: string) => {
+    const response = await api.delete(
+      endpoints.presence.viewConversation(conversationId)
+    );
     return response.data;
   },
 };
@@ -480,6 +417,38 @@ export const internalApi = {
   listMessages: async (conversationId: string): Promise<InternalMessage[]> => {
     const response = await api.get<InternalMessage[]>(
       endpoints.internal.messagesByConversation(conversationId)
+    );
+    return response.data;
+  },
+};
+
+export const notificationsApi = {
+  list: async (params?: {
+    page?: number;
+    limit?: number;
+    unreadOnly?: boolean;
+  }): Promise<NotificationsListResponse> => {
+    const response = await api.get<NotificationsListResponse>(
+      endpoints.notifications.list,
+      { params }
+    );
+    return response.data;
+  },
+  unreadCount: async (): Promise<{ count: number }> => {
+    const response = await api.get<{ count: number }>(
+      endpoints.notifications.unreadCount
+    );
+    return response.data;
+  },
+  markRead: async (id: string): Promise<NotificationItem> => {
+    const response = await api.patch<NotificationItem>(
+      endpoints.notifications.markRead(id)
+    );
+    return response.data;
+  },
+  markAllRead: async (): Promise<{ count: number }> => {
+    const response = await api.patch<{ count: number }>(
+      endpoints.notifications.markAllRead
     );
     return response.data;
   },
@@ -771,11 +740,7 @@ export const segmentsApi = {
 export const templatesApi = {
   list: async (params?: {
     q?: string;
-    channel?: string;
-    category?: string;
     isActive?: boolean;
-    providerStatus?: string;
-    hasProviderId?: boolean;
     page?: number;
     limit?: number;
     sortBy?: string;
@@ -787,10 +752,8 @@ export const templatesApi = {
     );
     return response.data;
   },
-  get: async (id: string, params?: { include?: string }): Promise<Template> => {
-    const response = await api.get<Template>(endpoints.templates.byId(id), {
-      params,
-    });
+  get: async (id: string): Promise<Template> => {
+    const response = await api.get<Template>(endpoints.templates.byId(id));
     return response.data;
   },
   getLimits: async (): Promise<TemplateLimitsResponse> => {
@@ -802,8 +765,7 @@ export const templatesApi = {
   create: async (data: {
     name: string;
     description?: string;
-    channel?: TemplateChannel;
-    category?: TemplateCategory;
+    groupKey?: string;
   }): Promise<Template> => {
     const response = await api.post<Template>(endpoints.templates.create, data);
     return response.data;
@@ -813,7 +775,6 @@ export const templatesApi = {
     data: {
       name?: string;
       description?: string;
-      category?: TemplateCategory;
       isActive?: boolean;
     }
   ): Promise<Template> => {
@@ -826,98 +787,146 @@ export const templatesApi = {
   remove: async (id: string): Promise<void> => {
     await api.delete(endpoints.templates.remove(id));
   },
-  refreshStatus: async (id: string): Promise<Template> => {
-    const response = await api.post<Template>(
-      endpoints.templates.refreshStatus(id)
+  addWhatsApp: async (
+    id: string,
+    data?: { category?: TemplateCategory }
+  ): Promise<{ id: string; templateId: string; channel: string }> => {
+    const response = await api.post(endpoints.templates.addWhatsApp(id), data ?? {});
+    return response.data as { id: string; templateId: string; channel: string };
+  },
+  metaImportPreview: async (): Promise<{
+    items: Array<{
+      providerTemplateId: string;
+      name: string;
+      language: string;
+      category: string;
+      status: string;
+      action: "create" | "link" | "skip";
+      reason?: string;
+    }>;
+  }> => {
+    const response = await api.get(endpoints.templates.metaImportPreview);
+    return response.data as any;
+  },
+  metaImport: async (providerTemplateIds?: string[]): Promise<any> => {
+    const response = await api.post(endpoints.templates.metaImport, {
+      providerTemplateIds,
+    });
+    return response.data as any;
+  },
+};
+
+export const channelTemplatesApi = {
+  state: async (id: string): Promise<ChannelTemplateState> => {
+    const response = await api.get<ChannelTemplateState>(
+      endpoints.channelTemplates.state(id)
     );
     return response.data;
   },
-  importFromProvider: async (): Promise<TemplateImportResponse> => {
-    const response = await api.post<TemplateImportResponse>(
-      endpoints.templates.providerImport
+  update: async (
+    id: string,
+    data: { category: TemplateCategory }
+  ): Promise<any> => {
+    const response = await api.put(endpoints.channelTemplates.update(id), data);
+    return response.data as any;
+  },
+  listVersions: async (id: string): Promise<ChannelTemplateVersion[]> => {
+    const response = await api.get<ChannelTemplateVersion[]>(
+      endpoints.channelTemplates.versions(id)
+    );
+    return response.data;
+  },
+  createVersion: async (
+    id: string,
+    data: ChannelTemplateVersionPayload
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.post<ChannelTemplateVersion>(
+      endpoints.channelTemplates.versions(id),
+      data
     );
     return response.data;
   },
   getVersion: async (
     id: string,
     version: number
-  ): Promise<TemplateVersion> => {
-    const response = await api.get<TemplateVersion>(
-      endpoints.templates.version(id, version)
-    );
-    return response.data;
-  },
-  latestApproved: async (id: string): Promise<TemplateVersion> => {
-    const response = await api.get<TemplateVersion>(
-      endpoints.templates.latestApproved(id)
-    );
-    return response.data;
-  },
-  createVersion: async (
-    id: string,
-    data: TemplateVersionPayload
-  ): Promise<TemplateVersion> => {
-    const response = await api.post<TemplateVersion>(
-      endpoints.templates.createVersion(id),
-      data
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.get<ChannelTemplateVersion>(
+      endpoints.channelTemplates.version(id, version)
     );
     return response.data;
   },
   updateVersion: async (
     id: string,
     version: number,
-    data: TemplateVersionPayload
-  ): Promise<TemplateVersion> => {
-    const response = await api.put<TemplateVersion>(
-      endpoints.templates.version(id, version),
+    data: ChannelTemplateVersionUpdatePayload
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.put<ChannelTemplateVersion>(
+      endpoints.channelTemplates.updateVersion(id, version),
       data
     );
     return response.data;
   },
-  submitVersion: async (
+  activate: async (
     id: string,
     version: number
-  ): Promise<TemplateVersion> => {
-    const response = await api.post<TemplateVersion>(
-      endpoints.templates.submit(id, version)
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.post<ChannelTemplateVersion>(
+      endpoints.channelTemplates.activate(id, version)
     );
     return response.data;
   },
-  approveVersion: async (
+  submit: async (
     id: string,
     version: number
-  ): Promise<TemplateVersion> => {
-    const response = await api.post<TemplateVersion>(
-      endpoints.templates.approve(id, version)
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.post<ChannelTemplateVersion>(
+      endpoints.channelTemplates.submit(id, version)
     );
     return response.data;
   },
-  rejectVersion: async (
+  approve: async (
+    id: string,
+    version: number
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.post<ChannelTemplateVersion>(
+      endpoints.channelTemplates.approve(id, version)
+    );
+    return response.data;
+  },
+  reject: async (
     id: string,
     version: number,
     reason: string
-  ): Promise<TemplateVersion> => {
-    const response = await api.post<TemplateVersion>(
-      endpoints.templates.reject(id, version),
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.post<ChannelTemplateVersion>(
+      endpoints.channelTemplates.reject(id, version),
       { reason }
     );
     return response.data;
   },
-  syncVersion: async (
+  archive: async (
     id: string,
     version: number
-  ): Promise<TemplateSyncResponse> => {
-    const response = await api.post<TemplateSyncResponse>(
-      endpoints.templates.sync(id, version)
+  ): Promise<ChannelTemplateVersion> => {
+    const response = await api.put<ChannelTemplateVersion>(
+      endpoints.channelTemplates.archive(id, version)
     );
     return response.data;
   },
-  archiveVersion: async (
+  sync: async (
     id: string,
     version: number
-  ): Promise<TemplateVersion> => {
-    const response = await api.put<TemplateVersion>(
-      endpoints.templates.archiveVersion(id, version)
+  ): Promise<ChannelTemplateSyncResult> => {
+    const response = await api.post<ChannelTemplateSyncResult>(
+      endpoints.channelTemplates.sync(id, version)
+    );
+    return response.data;
+  },
+  refreshProvider: async (
+    id: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const response = await api.post<{ success: boolean; error?: string }>(
+      endpoints.channelTemplates.refreshProvider(id)
     );
     return response.data;
   },
@@ -1824,6 +1833,17 @@ export interface PlatformUsageEventsParams {
   offset?: number;
 }
 
+export interface PlatformAuditLogsParams {
+  action?: string;
+  targetType?: string;
+  targetId?: string;
+  actorUserId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export type PlatformLoginHistoryEntry = {
   id?: string;
   userId?: string;
@@ -1917,6 +1937,15 @@ export const platformApi = {
   ): Promise<OffsetPaginatedResponse<PlatformUsageEvent>> => {
     const response = await api.get<OffsetPaginatedResponse<PlatformUsageEvent>>(
       endpoints.platform.usageEvents,
+      { params }
+    );
+    return response.data;
+  },
+  listAuditLogs: async (
+    params?: PlatformAuditLogsParams
+  ): Promise<OffsetPaginatedResponse<PlatformAdminAuditLog>> => {
+    const response = await api.get<OffsetPaginatedResponse<PlatformAdminAuditLog>>(
+      endpoints.platform.auditLogs,
       { params }
     );
     return response.data;

@@ -54,7 +54,7 @@ export function InternalMessagesPanel({
   };
 
   return (
-    <div className="rounded-xl border border-base-300 bg-base-100 p-3 space-y-2">
+    <div className="rounded-none bg-base-100 p-3 space-y-2">
       <h3 className="text-sm font-medium">Internal messages</h3>
       <div className="flex items-center gap-2">
         <input
@@ -90,9 +90,9 @@ export function InternalMessagesPanel({
       ) : items.length ? (
         <ul className="max-h-40 space-y-2 overflow-y-auto pr-1">
           {items.map((item) => (
-            <li key={item.id} className="rounded-lg border border-base-300 p-2">
+            <li key={item.id} className="rounded-none p-2">
               <p className="text-xs">{item.text}</p>
-              <p className="mt-1 text-[11px] text-base-content/60">
+              <p className="mt-1 text-xs text-base-content/60">
                 {item.senderUserId || "unknown"}
               </p>
             </li>

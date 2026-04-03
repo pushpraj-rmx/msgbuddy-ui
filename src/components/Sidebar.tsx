@@ -1,61 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import {
-  HomeIcon,
-  ChatBubbleLeftRightIcon,
-  UserGroupIcon,
-  TagIcon,
-  Squares2X2Icon,
-  RocketLaunchIcon,
-  DocumentDuplicateIcon,
-  PhotoIcon,
-  ChartBarIcon,
-  CircleStackIcon,
-  Cog6ToothIcon,
-  ArrowRightOnRectangleIcon,
-  CommandLineIcon,
-  BuildingOffice2Icon,
-} from "@heroicons/react/24/outline";
+import { usePathname } from "next/navigation";
+import { useState } from "react";
 import type { MeResponse } from "@/lib/api";
-import { logoutAction } from "@/app/actions/auth";
-import { clearToken } from "@/lib/auth";
-import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
+import { SAMPLE_OVERFLOW_MENU_ITEMS } from "@/lib/sample-overflow-menu";
+import { getAppNav, isActivePath } from "@/lib/navigation";
 
 function closeDrawer(drawerId: string) {
   (document.getElementById(drawerId) as HTMLInputElement | null)?.click();
 }
 
-function getNav(platformRole: string) {
-  const items = [
-    { href: "/dashboard", label: "Dashboard", Icon: HomeIcon },
-    { href: "/inbox", label: "Inbox", Icon: ChatBubbleLeftRightIcon },
-    { href: "/contacts", label: "Contacts", Icon: UserGroupIcon },
-    { href: "/contacts/tags", label: "Tags", Icon: TagIcon },
-    { href: "/contacts/segments", label: "Segments", Icon: Squares2X2Icon },
-    { href: "/campaigns", label: "Campaigns", Icon: RocketLaunchIcon },
-    { href: "/templates", label: "Templates", Icon: DocumentDuplicateIcon },
-    { href: "/media", label: "Media", Icon: PhotoIcon },
-    { href: "/analytics", label: "Analytics", Icon: ChartBarIcon },
-    { href: "/usage", label: "Usage", Icon: CircleStackIcon },
-    { href: "/settings", label: "Settings", Icon: Cog6ToothIcon },
-  ];
-
-  if (canAccessPlatform(platformRole)) {
-    items.push({ href: "/platform", label: "Platform", Icon: CommandLineIcon });
-    items.push({ href: "/ops", label: "Ops", Icon: CommandLineIcon });
-  }
-  if (isSuperAdmin(platformRole)) {
-    items.push({
-      href: "/onboarding",
-      label: "Onboarding",
-      Icon: BuildingOffice2Icon,
-    });
-  }
-
-  return items;
-}
+const ACTIVE_ITEM_CLASS =
+  "menu-active bg-base-200 text-base-content border border-base-300 shadow-none";
 
 export function Sidebar({
   drawerId,
@@ -65,69 +22,116 @@ export function Sidebar({
   me: MeResponse;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
-  const nav = getNav(me.platformRole ?? "NONE");
-
-  const handleLogout = async () => {
-    clearToken();
-    await logoutAction();
-    router.replace("/login");
-  };
+  const nav = getAppNav(me.platformRole ?? "NONE");
+  const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>({});
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-base-300 bg-base-200 shadow-md lg:w-64">
-      <div className="flex h-14 shrink-0 items-center border-b border-base-300 px-4">
-        <Link
-          href="/dashboard"
-          className="btn btn-ghost flex items-center gap-2 text-xl font-semibold text-primary"
-          onClick={() => closeDrawer(drawerId)}
-        >
-          MsgBuddy
-        </Link>
-      </div>
-      <nav className="flex-1 overflow-y-auto p-2">
-        <ul className="menu menu-vertical w-full gap-1 rounded-box p-0">
-          {nav.map(({ href, label, Icon }) => (
-            <li key={href}>
-              <Link
-                href={href}
-                onClick={() => closeDrawer(drawerId)}
-                className={`flex items-center gap-3 rounded-xl ${pathname === href ? "menu-active bg-primary text-primary-content shadow-sm" : ""}`}
-              >
-                <Icon className="h-5 w-5 shrink-0" />
-                {label}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </nav>
-      <div className="shrink-0 border-t border-base-300 p-3 sm:p-4">
-        <div className="flex items-center gap-3">
-          <div className="avatar placeholder shrink-0">
-            <div className="bg-primary/20 text-primary w-10 rounded-full">
-              <span className="text-sm font-medium">
-                {me.user.email.slice(0, 2).toUpperCase()}
-              </span>
-            </div>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-base-content">
-              {me.user.email}
+    <aside className="flex h-full min-h-0 w-64 flex-col border-r border-base-300 bg-base-100 lg:w-64">
+      <nav className="min-h-0 flex-1 overflow-y-auto p-3 max-lg:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]">
+        <div className="space-y-4">
+          <ul className="menu menu-vertical w-full gap-1.5 rounded-box p-0">
+            {nav.map(({ href, label, Icon, children }) => {
+            const isParentActive = isActivePath(pathname, href);
+            const isAnyChildActive =
+              children?.some((child) => isActivePath(pathname, child.href)) ??
+              false;
+
+            if (!children?.length) {
+              if (!Icon) return null;
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    onClick={() => closeDrawer(drawerId)}
+                    className={`flex items-center gap-3 rounded-box py-2.5 ${
+                      isParentActive
+                        ? ACTIVE_ITEM_CLASS
+                        : ""
+                    }`}
+                  >
+                    <Icon className="h-5 w-5 shrink-0" />
+                    {label}
+                  </Link>
+                </li>
+              );
+            }
+
+            // Nested group (People -> Tags/Segments)
+            if (!Icon) return null;
+            const defaultOpen = isParentActive || isAnyChildActive;
+            const isOpen = groupOpen[href] ?? defaultOpen;
+            return (
+              <li key={href}>
+                <button
+                  type="button"
+                  aria-expanded={isOpen}
+                  onClick={() =>
+                    setGroupOpen((prev) => ({
+                      ...prev,
+                      [href]: !(prev[href] ?? defaultOpen),
+                    }))
+                  }
+                  className={`flex items-center gap-3 rounded-box py-2.5 ${
+                    isParentActive
+                      ? ACTIVE_ITEM_CLASS
+                      : ""
+                  }`}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {label}
+                </button>
+                {isOpen ? (
+                  <ul className="mt-1 border-l border-base-300 pl-3">
+                    {children.map((child) => {
+                      const childActive = isActivePath(pathname, child.href);
+                      return (
+                        <li key={child.href}>
+                          <Link
+                            href={child.href}
+                            onClick={() => closeDrawer(drawerId)}
+                            className={`flex items-center gap-3 rounded-box py-2 ${
+                              childActive
+                                ? ACTIVE_ITEM_CLASS
+                                : isAnyChildActive
+                                  ? "text-base-content/80"
+                                  : "text-base-content/60"
+                            }`}
+                          >
+                            <child.Icon className="h-4 w-4 shrink-0" />
+                            {child.label}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : null}
+              </li>
+            );
+            })}
+          </ul>
+          <div className="border-t border-base-300 pt-3">
+            <p className="mb-2 text-xs font-medium text-base-content/60">
+              Sample menus (overflow test)
             </p>
-            <p className="truncate text-xs text-base-content/60">
-              {me.workspace.name}
-            </p>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="btn btn-ghost btn-sm flex h-auto items-center gap-1.5 p-0 text-base-content/70"
-            >
-              <ArrowRightOnRectangleIcon className="h-4 w-4 shrink-0" />
-              Log out
-            </button>
+            <ul className="menu menu-sm menu-vertical w-full rounded-box border border-base-300 bg-base-200 p-0">
+              {SAMPLE_OVERFLOW_MENU_ITEMS.map((label, i) => (
+                <li key={label}>
+                  <button
+                    type="button"
+                    className="rounded-none text-left text-sm"
+                    onClick={() => {}}
+                  >
+                    <span className="text-base-content/50 tabular-nums">
+                      {i + 1}.
+                    </span>{" "}
+                    {label}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
-      </div>
+      </nav>
     </aside>
   );
 }

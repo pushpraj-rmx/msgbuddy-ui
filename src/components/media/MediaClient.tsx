@@ -260,7 +260,7 @@ export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
       </div>
 
       {selectedMediaId && selectedMedia ? (
-        <div className="rounded-xl border border-base-300 bg-base-200 p-4">
+        <div className="rounded-box border border-base-300 bg-base-100 p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold">Media details</h3>
             <button
@@ -274,7 +274,7 @@ export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
               Close
             </button>
           </div>
-          <pre className="max-h-64 overflow-auto rounded-lg bg-base-100 p-3 text-xs">
+          <pre className="max-h-64 overflow-auto rounded-box bg-base-100 p-3 text-xs">
             {JSON.stringify(selectedMedia, null, 2)}
           </pre>
         </div>

@@ -4,7 +4,9 @@ export type MessageType =
   | "IMAGE"
   | "VIDEO"
   | "AUDIO"
-  | "DOCUMENT";
+  | "DOCUMENT"
+  | "TEMPLATE"
+  | "INTERACTIVE";
 
 export type MessageStatus =
   | "PENDING"
@@ -92,6 +94,9 @@ export function getMediaKind(message: InboxMessage): MediaKind {
       return "audio";
     case "DOCUMENT":
       return "document";
+    case "TEMPLATE":
+    case "INTERACTIVE":
+      return "text";
     default:
       return "unknown";
   }

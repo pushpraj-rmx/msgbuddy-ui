@@ -42,6 +42,8 @@ export const endpoints = {
     close: (id: string) => `${P}/conversations/${id}/close`,
     archive: (id: string) => `${P}/conversations/${id}/archive`,
     read: (id: string) => `${P}/conversations/${id}/read`,
+    snooze: (id: string) => `${P}/conversations/${id}/snooze`,
+    unsnooze: (id: string) => `${P}/conversations/${id}/unsnooze`,
     assign: (id: string) => `${P}/conversations/${id}/assign`,
     unassign: (id: string) => `${P}/conversations/${id}/unassign`,
     priority: (id: string) => `${P}/conversations/${id}/priority`,
@@ -107,25 +109,36 @@ export const endpoints = {
     list: `${P}/templates`,
     limits: `${P}/templates/limits`,
     create: `${P}/templates`,
-    providerImport: `${P}/templates/provider/import`,
     byId: (id: string) => `${P}/templates/${id}`,
     update: (id: string) => `${P}/templates/${id}`,
     remove: (id: string) => `${P}/templates/${id}`,
-    refreshStatus: (id: string) => `${P}/templates/${id}/refresh-status`,
-    createVersion: (id: string) => `${P}/templates/${id}/versions`,
+    addWhatsApp: (id: string) => `${P}/templates/${id}/channels/whatsapp`,
+    metaImportPreview: `${P}/templates/provider/meta/import/preview`,
+    metaImport: `${P}/templates/provider/meta/import`,
+  },
+  channelTemplates: {
+    state: (id: string) => `${P}/channel-templates/${id}/state`,
+    update: (id: string) => `${P}/channel-templates/${id}`,
+    versions: (id: string) => `${P}/channel-templates/${id}/versions`,
     version: (id: string, version: number) =>
-      `${P}/templates/${id}/versions/${version}`,
-    latestApproved: (id: string) => `${P}/templates/${id}/versions/latest/approved`,
+      `${P}/channel-templates/${id}/versions/${version}`,
+    updateVersion: (id: string, version: number) =>
+      `${P}/channel-templates/${id}/versions/${version}`,
+    latestApproved: (id: string) =>
+      `${P}/channel-templates/${id}/versions/latest/approved`,
+    activate: (id: string, version: number) =>
+      `${P}/channel-templates/${id}/versions/${version}/activate`,
     submit: (id: string, version: number) =>
-      `${P}/templates/${id}/versions/${version}/submit`,
+      `${P}/channel-templates/${id}/versions/${version}/submit`,
     approve: (id: string, version: number) =>
-      `${P}/templates/${id}/versions/${version}/approve`,
+      `${P}/channel-templates/${id}/versions/${version}/approve`,
     reject: (id: string, version: number) =>
-      `${P}/templates/${id}/versions/${version}/reject`,
+      `${P}/channel-templates/${id}/versions/${version}/reject`,
+    archive: (id: string, version: number) =>
+      `${P}/channel-templates/${id}/versions/${version}/archive`,
     sync: (id: string, version: number) =>
-      `${P}/templates/${id}/versions/${version}/sync`,
-    archiveVersion: (id: string, version: number) =>
-      `${P}/templates/${id}/versions/${version}/archive`,
+      `${P}/channel-templates/${id}/versions/${version}/sync`,
+    refreshProvider: (id: string) => `${P}/channel-templates/${id}/provider/refresh`,
   },
   campaigns: {
     list: `${P}/campaigns`,
@@ -195,6 +208,16 @@ export const endpoints = {
     messagesByConversation: (conversationId: string) =>
       `${P}/internal/messages/${conversationId}`,
   },
+  notifications: {
+    list: `${P}/notifications`,
+    unreadCount: `${P}/notifications/unread-count`,
+    markRead: (id: string) => `${P}/notifications/${id}/read`,
+    markAllRead: `${P}/notifications/read-all`,
+  },
+  presence: {
+    viewConversation: (conversationId: string) =>
+      `${P}/presence/conversations/${conversationId}/view`,
+  },
   sse: {
     workspace: (workspaceId: string) => `${P}/sse/workspace/${workspaceId}`,
   },
@@ -225,6 +248,7 @@ export const endpoints = {
     userPlatformRole: (id: string) => `${P}/platform/users/${id}/platform-role`,
     webhookLogs: `${P}/platform/webhook-logs`,
     usageEvents: `${P}/platform/usage-events`,
+    auditLogs: `${P}/platform/audit-logs`,
     connectedClientBusinesses: `${P}/platform/connected-client-businesses`,
     bspCredentials: `${P}/platform/bsp-credentials`,
     bspCredentialByBsp: (bsp: string) => `${P}/platform/bsp-credentials/${bsp}`,

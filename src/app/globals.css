@@ -1,18 +1,20 @@
 @import "tailwindcss";
+
 @plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
+  themes: dark --default, light;
 }
+
 @plugin "daisyui/theme" {
   name: "light";
-  default: true;
+  default: false;
   prefersdark: false;
   color-scheme: light;
 
-  --color-base-100: #f7f8fa;
+  --color-base-100: #f2f4fb;
   --color-base-200: #ffffff;
-  --color-base-300: #e7ebf0;
-  --color-base-content: #0b1220;
-  --color-primary: #065cff;
+  --color-base-300: #dfe5f3;
+  --color-base-content: #0b1324;
+  --color-primary: #6369ff;
   --color-primary-content: #ffffff;
   --color-secondary: #d500fc;
   --color-secondary-content: #ffffff;
@@ -20,13 +22,13 @@
   --color-accent-content: #ffffff;
   --color-neutral: #11161c;
   --color-neutral-content: #ffffff;
-  --color-info: #3f6d8c;
+  --color-info: #365f7d;
   --color-info-content: #ffffff;
-  --color-success: #2f6b4f;
+  --color-success: #2e6a4d;
   --color-success-content: #ffffff;
-  --color-warning: #7a5f2b;
+  --color-warning: #785d2a;
   --color-warning-content: #ffffff;
-  --color-error: #7b3944;
+  --color-error: #7a3742;
   --color-error-content: #ffffff;
 
   --radius-selector: 0.5rem;
@@ -36,31 +38,32 @@
   --depth: 0;
   --noise: 0;
 }
+
 @plugin "daisyui/theme" {
   name: "dark";
-  default: false;
+  default: true;
   prefersdark: true;
   color-scheme: dark;
 
-  --color-base-100: #0b0f14;
-  --color-base-200: #11161c;
-  --color-base-300: #1f2630;
-  --color-base-content: #e6edf3;
-  --color-primary: #065cff;
+  --color-base-100: #070d1e;
+  --color-base-200: #0f1937;
+  --color-base-300: #1d2a4d;
+  --color-base-content: #e9eeff;
+  --color-primary: #8688ff;
   --color-primary-content: #e6edf3;
-  --color-secondary: #d500fc;
+  --color-secondary: #a084ff;
   --color-secondary-content: #e6edf3;
-  --color-accent: #d500fc;
+  --color-accent: #8f75ff;
   --color-accent-content: #e6edf3;
-  --color-neutral: #11161c;
+  --color-neutral: #0f1835;
   --color-neutral-content: #e6edf3;
-  --color-info: #5a6f86;
+  --color-info: #607797;
   --color-info-content: #e6edf3;
-  --color-success: #4f7a65;
+  --color-success: #55806a;
   --color-success-content: #e6edf3;
-  --color-warning: #7c6a44;
+  --color-warning: #856f45;
   --color-warning-content: #e6edf3;
-  --color-error: #80535b;
+  --color-error: #8a5660;
   --color-error-content: #e6edf3;
 
   --radius-selector: 0.5rem;
@@ -69,4 +72,87 @@
   --border: 1px;
   --depth: 0;
   --noise: 0;
+}
+
+html,
+body {
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--color-base-100);
+}
+
+:root {
+  --layout-gutter-x: 0.875rem;
+  --layout-gutter-y: 0.875rem;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --layout-gutter-x: 1rem;
+    --layout-gutter-y: 1rem;
+  }
+}
+
+.ui-panel {
+  border: 1px solid color-mix(in srgb, var(--color-base-300) 100%, transparent);
+  border-radius: var(--radius-box);
+  background-color: var(--color-base-100);
+}
+
+.ui-panel-body {
+  padding: 1rem;
+}
+
+@media (min-width: 640px) {
+  .ui-panel-body {
+    padding: 1.25rem;
+  }
+}
+
+.ui-interactive-row {
+  border: 1px solid color-mix(in srgb, var(--color-base-300) 100%, transparent);
+  border-radius: var(--radius-box);
+  background-color: var(--color-base-100);
+}
+
+.ui-interactive-row:hover {
+  background-color: var(--color-base-200);
+}
+
+/* Design-system enforcement: collapse legacy ad-hoc rounding/text sizes to canonical tokens. */
+.rounded-xl,
+.rounded-2xl,
+.rounded-lg {
+  border-radius: var(--radius-box);
+}
+
+.text-\[10px\],
+.text-\[11px\] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* DaisyUI drawer: removing lg:drawer-open swaps sticky sidebar for fixed off-canvas; the
+   default translate/opacity transitions can read as a flash. Only affects lg+ when
+   desktop nav is collapsed (no lg:drawer-open). Mobile drawer keeps base transitions. */
+@media (min-width: 1024px) {
+  .drawer:not(.lg\:drawer-open) .drawer-side {
+    transition: none;
+  }
+
+  .drawer:not(.lg\:drawer-open) .drawer-side > :not(.drawer-overlay) {
+    transition: none;
+  }
+
+  /* Drawer sits below topbar; DaisyUI sets .drawer-side to height:100dvh, which is taller
+     than the flex row and gets clipped by .drawer’s overflow-hidden — footer disappears. */
+  .app-shell-drawer .drawer-side {
+    height: 100% !important;
+    max-height: 100%;
+    min-height: 0;
+  }
 }

@@ -6,13 +6,14 @@ import {
   useQueryClient,
   type Query,
 } from "@tanstack/react-query";
-import { templatesApi } from "@/lib/api";
+import { templatesApi, channelTemplatesApi } from "@/lib/api";
 import type {
   Template,
-  TemplateChannel,
+  ChannelTemplateState,
+  ChannelTemplateVersion,
+  ChannelTemplateVersionPayload,
+  ChannelTemplateVersionUpdatePayload,
   TemplateCategory,
-  TemplateVersion,
-  TemplateVersionPayload,
 } from "@/lib/types";
 
 export const templateKeys = {
@@ -22,19 +23,19 @@ export const templateKeys = {
     [...templateKeys.lists(), params] as const,
   limits: () => [...templateKeys.all, "limits"] as const,
   detail: (id: string) => [...templateKeys.all, "detail", id] as const,
+};
+
+export const channelTemplateKeys = {
+  all: ["channelTemplates"] as const,
+  state: (id: string) => [...channelTemplateKeys.all, "state", id] as const,
+  versions: (id: string) => [...channelTemplateKeys.all, "versions", id] as const,
   version: (id: string, version: number) =>
-    [...templateKeys.all, "detail", id, "version", version] as const,
-  latestApproved: (id: string) =>
-    [...templateKeys.all, "detail", id, "latestApproved"] as const,
+    [...channelTemplateKeys.all, "version", id, version] as const,
 };
 
 export type TemplatesListParams = {
   q?: string;
-  channel?: string;
-  category?: string;
   isActive?: boolean;
-  providerStatus?: string;
-  hasProviderId?: boolean;
   page?: number;
   limit?: number;
   sortBy?: string;
@@ -72,44 +73,9 @@ export function useTemplate(
 ) {
   return useQuery<Template>({
     queryKey: templateKeys.detail(id ?? ""),
-    queryFn: () => templatesApi.get(id!, { include: "versions" }),
+    queryFn: () => templatesApi.get(id!),
     enabled: !!id && (options?.enabled !== false),
     refetchInterval: options?.refetchInterval,
-  });
-}
-
-export function useTemplateVersion(
-  templateId: string | null,
-  version: number | null,
-  options?: {
-    enabled?: boolean;
-    refetchInterval?:
-      | number
-      | false
-      | ((query: Query<TemplateVersion>) => number | false | undefined);
-  }
-) {
-  return useQuery<TemplateVersion>({
-    queryKey: templateKeys.version(templateId ?? "", version ?? 0),
-    queryFn: () =>
-      templatesApi.getVersion(templateId!, version!),
-    enabled:
-      !!templateId &&
-      version != null &&
-      version > 0 &&
-      (options?.enabled !== false),
-    refetchInterval: options?.refetchInterval,
-  });
-}
-
-export function useLatestApprovedVersion(
-  templateId: string | null,
-  options?: { enabled?: boolean }
-) {
-  return useQuery({
-    queryKey: templateKeys.latestApproved(templateId ?? ""),
-    queryFn: () => templatesApi.latestApproved(templateId!),
-    enabled: !!templateId && (options?.enabled !== false),
   });
 }
 
@@ -119,12 +85,177 @@ export function useCreateTemplate() {
     mutationFn: (data: {
       name: string;
       description?: string;
-      channel: TemplateChannel;
-      category: TemplateCategory;
     }) => templatesApi.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: templateKeys.lists() });
       qc.invalidateQueries({ queryKey: templateKeys.limits() });
+    },
+  });
+}
+
+export function useChannelTemplateState(
+  channelTemplateId: string | null,
+  options?: { enabled?: boolean; refetchInterval?: number | false }
+) {
+  return useQuery<ChannelTemplateState>({
+    queryKey: channelTemplateKeys.state(channelTemplateId ?? ""),
+    queryFn: () => channelTemplatesApi.state(channelTemplateId!),
+    enabled: !!channelTemplateId && (options?.enabled !== false),
+    refetchInterval: options?.refetchInterval,
+  });
+}
+
+export function useChannelTemplateVersions(
+  channelTemplateId: string | null,
+  options?: { enabled?: boolean; refetchInterval?: number | false }
+) {
+  return useQuery<ChannelTemplateVersion[]>({
+    queryKey: channelTemplateKeys.versions(channelTemplateId ?? ""),
+    queryFn: () => channelTemplatesApi.listVersions(channelTemplateId!),
+    enabled: !!channelTemplateId && (options?.enabled !== false),
+    refetchInterval: options?.refetchInterval,
+  });
+}
+
+export function useChannelTemplateVersion(
+  channelTemplateId: string | null,
+  version: number | null,
+  options?: { enabled?: boolean }
+) {
+  return useQuery<ChannelTemplateVersion>({
+    queryKey: channelTemplateKeys.version(channelTemplateId ?? "", version ?? 0),
+    queryFn: () => channelTemplatesApi.getVersion(channelTemplateId!, version!),
+    enabled: !!channelTemplateId && version != null && version > 0 && (options?.enabled !== false),
+  });
+}
+
+export function useCreateChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: ChannelTemplateVersionPayload }) =>
+      channelTemplatesApi.createVersion(id, data),
+    onSuccess: (data, variables) => {
+      const ctId = data.channelTemplateId ?? variables.id;
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(ctId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.version(ctId, data.version) });
+    },
+  });
+}
+
+export function useUpdateChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      version,
+      data,
+    }: {
+      id: string;
+      version: number;
+      data: ChannelTemplateVersionUpdatePayload;
+    }) => channelTemplatesApi.updateVersion(id, version, data),
+    onSuccess: (data, variables) => {
+      const ctId = data.channelTemplateId ?? variables.id;
+      const vNum = data.version ?? variables.version;
+      // Apply server response immediately so UI matches DB (fixes stale cache / missed refetch).
+      qc.setQueryData(channelTemplateKeys.version(ctId, vNum), data);
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(ctId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.version(ctId, vNum) });
+    },
+  });
+}
+
+export function useUpdateChannelTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, category }: { id: string; category: TemplateCategory }) =>
+      channelTemplatesApi.update(id, { category }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(variables.id) });
+    },
+  });
+}
+
+export function useActivateChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      channelTemplatesApi.activate(id, version),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+    },
+  });
+}
+
+export function useSubmitChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      channelTemplatesApi.submit(id, version),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+    },
+  });
+}
+
+export function useApproveChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      channelTemplatesApi.approve(id, version),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+    },
+  });
+}
+
+export function useRejectChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version, reason }: { id: string; version: number; reason: string }) =>
+      channelTemplatesApi.reject(id, version, reason),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+    },
+  });
+}
+
+export function useArchiveChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      channelTemplatesApi.archive(id, version),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+    },
+  });
+}
+
+export function useSyncChannelTemplateVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, version }: { id: string; version: number }) =>
+      channelTemplatesApi.sync(id, version),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(variables.id) });
+      qc.invalidateQueries({
+        queryKey: channelTemplateKeys.version(variables.id, variables.version),
+      });
+    },
+  });
+}
+
+export function useRefreshChannelTemplateProviderState() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => channelTemplatesApi.refreshProvider(id),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(variables.id) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(variables.id) });
     },
   });
 }
@@ -140,7 +271,6 @@ export function useUpdateTemplate() {
       data: {
         name?: string;
         description?: string;
-        category?: TemplateCategory;
         isActive?: boolean;
       };
     }) => templatesApi.update(id, data),
@@ -158,151 +288,6 @@ export function useRemoveTemplate() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: templateKeys.lists() });
       qc.invalidateQueries({ queryKey: templateKeys.limits() });
-    },
-  });
-}
-
-export function useImportTemplatesFromProvider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: () => templatesApi.importFromProvider(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-      qc.invalidateQueries({ queryKey: templateKeys.limits() });
-    },
-  });
-}
-
-export function useCreateTemplateVersion() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      data,
-    }: {
-      id: string;
-      data: TemplateVersionPayload;
-    }) => templatesApi.createVersion(id, data),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-      qc.invalidateQueries({ queryKey: templateKeys.limits() });
-      qc.invalidateQueries({ queryKey: templateKeys.detail(data.templateId) });
-      qc.invalidateQueries({
-        queryKey: templateKeys.version(data.templateId, data.version),
-      });
-    },
-  });
-}
-
-export function useUpdateTemplateVersion() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      version,
-      data,
-    }: {
-      id: string;
-      version: number;
-      data: TemplateVersionPayload;
-    }) => templatesApi.updateVersion(id, version, data),
-    onSuccess: (data) => {
-      qc.invalidateQueries({
-        queryKey: templateKeys.version(data.templateId, data.version),
-      });
-      qc.invalidateQueries({ queryKey: templateKeys.detail(data.templateId) });
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-    },
-  });
-}
-
-export function useSubmitTemplateVersion() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, version }: { id: string; version: number }) =>
-      templatesApi.submitVersion(id, version),
-    onSuccess: (data) => {
-      qc.invalidateQueries({
-        queryKey: templateKeys.version(data.templateId, data.version),
-      });
-      qc.invalidateQueries({ queryKey: templateKeys.detail(data.templateId) });
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-    },
-  });
-}
-
-export function useApproveTemplateVersion() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, version }: { id: string; version: number }) =>
-      templatesApi.approveVersion(id, version),
-    onSuccess: (data) => {
-      qc.invalidateQueries({
-        queryKey: templateKeys.version(data.templateId, data.version),
-      });
-      qc.invalidateQueries({ queryKey: templateKeys.detail(data.templateId) });
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-    },
-  });
-}
-
-export function useRejectTemplateVersion() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      version,
-      reason,
-    }: {
-      id: string;
-      version: number;
-      reason: string;
-    }) => templatesApi.rejectVersion(id, version, reason),
-    onSuccess: (data) => {
-      qc.invalidateQueries({
-        queryKey: templateKeys.version(data.templateId, data.version),
-      });
-      qc.invalidateQueries({ queryKey: templateKeys.detail(data.templateId) });
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-    },
-  });
-}
-
-export function useSyncTemplateVersion() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, version }: { id: string; version: number }) =>
-      templatesApi.syncVersion(id, version),
-    onSuccess: (_, { id, version }) => {
-      qc.invalidateQueries({ queryKey: templateKeys.detail(id) });
-      qc.invalidateQueries({ queryKey: templateKeys.version(id, version) });
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-    },
-  });
-}
-
-export function useRefreshTemplateStatus() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => templatesApi.refreshStatus(id),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: templateKeys.detail(data.id) });
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
-    },
-  });
-}
-
-export function useArchiveTemplateVersion() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, version }: { id: string; version: number }) =>
-      templatesApi.archiveVersion(id, version),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: templateKeys.detail(data.templateId) });
-      qc.invalidateQueries({
-        queryKey: templateKeys.version(data.templateId, data.version),
-      });
-      qc.invalidateQueries({ queryKey: templateKeys.lists() });
     },
   });
 }

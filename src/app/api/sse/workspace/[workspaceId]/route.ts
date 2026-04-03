@@ -1,55 +1,23 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { API_BASE_URL, endpoints } from "@/lib/endpoints";
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/auth";
+import { ACCESS_TOKEN_COOKIE } from "@/lib/auth";
+import { refreshAuthTokensOnce } from "@/lib/auth-refresh";
+import { parseJwtExpMs } from "@/lib/jwt";
+
+const SSE_GRACE_MS = 30_000;
 
 async function getOrRefreshAccessToken(): Promise<string | null> {
   const cookieStore = await cookies();
   const raw = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
   const token = raw ? decodeURIComponent(raw) : null;
-  if (token) return token;
-
-  const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
-  if (!refreshToken) return null;
-
-  try {
-    const response = await fetch(`${API_BASE_URL}${endpoints.auth.refresh}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-      credentials: "include",
-      cache: "no-store",
-    });
-    if (!response.ok) return null;
-
-    const payload = (await response.json()) as {
-      accessToken?: string;
-      refreshToken?: string;
-      expiresIn?: number;
-    };
-    if (!payload.accessToken) return null;
-
-    const maxAge = payload.expiresIn ?? 15 * 60;
-    cookieStore.set(ACCESS_TOKEN_COOKIE, payload.accessToken, {
-      path: "/",
-      sameSite: "lax",
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      maxAge,
-    });
-    if (payload.refreshToken) {
-      cookieStore.set(REFRESH_TOKEN_COOKIE, payload.refreshToken, {
-        path: "/",
-        sameSite: "lax",
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        maxAge: 30 * 24 * 60 * 60,
-      });
-    }
-    return payload.accessToken;
-  } catch {
-    return null;
+  if (token) {
+    const expMs = parseJwtExpMs(token);
+    if (expMs && expMs > Date.now() + SSE_GRACE_MS) return token;
   }
+
+  const payload = await refreshAuthTokensOnce();
+  return payload?.accessToken ?? null;
 }
 
 export async function GET(

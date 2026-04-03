@@ -1,6 +1,7 @@
 import { AccessDenied } from "@/components/platform/AccessDenied";
 import { OnboardingWabaClient } from "@/components/platform/OnboardingWabaClient";
-import { serverFetch, type MeResponse } from "@/lib/api";
+import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import { isSuperAdmin } from "@/lib/platform-access";
 

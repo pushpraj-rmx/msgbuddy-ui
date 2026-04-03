@@ -79,7 +79,7 @@ export function InternalNotesPanel({
   };
 
   return (
-    <div className="rounded-xl border border-base-300 bg-base-100 p-3 space-y-2">
+    <div className="rounded-none bg-base-100 p-3 space-y-2">
       <h3 className="text-sm font-medium">Internal notes</h3>
       <div className="flex items-center gap-2">
         <input
@@ -107,9 +107,9 @@ export function InternalNotesPanel({
       ) : notes.length ? (
         <ul className="space-y-2">
           {notes.map((note) => (
-            <li key={note.id} className="rounded-lg border border-base-300 p-2">
+            <li key={note.id} className="rounded-none p-2">
               <p className="text-xs">{note.content}</p>
-              <div className="mt-1 flex items-center justify-between gap-2 text-[11px] text-base-content/60">
+              <div className="mt-1 flex items-center justify-between gap-2 text-xs text-base-content/60">
                 <span>{note.authorId || "unknown"}</span>
                 <div className="flex items-center gap-1">
                   <button

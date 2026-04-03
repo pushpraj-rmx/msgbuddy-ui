@@ -2,7 +2,8 @@ import { AccessDenied } from "@/components/platform/AccessDenied";
 import { PlatformConsoleClient } from "@/components/platform/PlatformConsoleClient";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { serverFetch, type MeResponse } from "@/lib/api";
+import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import { canAccessPlatform } from "@/lib/platform-access";
 

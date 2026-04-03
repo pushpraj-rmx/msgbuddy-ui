@@ -60,8 +60,8 @@ export function TagsManagerClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link href="/contacts" className="btn btn-ghost btn-sm">
-          ← Contacts
+        <Link href="/people/contacts" className="btn btn-ghost btn-sm">
+          ← People
         </Link>
         <button
           type="button"

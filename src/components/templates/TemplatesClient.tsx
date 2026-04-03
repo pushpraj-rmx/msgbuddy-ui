@@ -17,32 +17,16 @@ import {
   useTemplateLimits,
   useCreateTemplate,
   useRemoveTemplate,
-  useImportTemplatesFromProvider,
   type TemplatesListParams,
 } from "@/hooks/use-templates";
-import type { Template, TemplateChannel, TemplateCategory } from "@/lib/types";
+import type { Template } from "@/lib/types";
 import { TemplateCreateModal } from "./TemplateCreateModal";
-import { TemplatePreviewModal } from "./TemplatePreviewModal";
 
-const CHANNELS: TemplateChannel[] = [
-  "WHATSAPP",
-  "TELEGRAM",
-  "MSGBUDDY",
-  "EMAIL",
-  "SMS",
-];
-const CATEGORIES: TemplateCategory[] = [
-  "UTILITY",
-  "MARKETING",
-  "AUTHENTICATION",
-];
 const SORT_FIELDS = [
   { value: "updatedAt", label: "Updated" },
   { value: "createdAt", label: "Created" },
   { value: "name", label: "Name" },
-  { value: "category", label: "Category" },
   { value: "isActive", label: "Active" },
-  { value: "providerStatus", label: "Provider status" },
 ] as const;
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -55,19 +39,13 @@ function getApiError(err: unknown): string {
 export function TemplatesClient() {
   const router = useRouter();
   const [search, setSearch] = useState("");
-  const [channel, setChannel] = useState<string>("");
-  const [category, setCategory] = useState<string>("");
   const [isActive, setIsActive] = useState<string>("");
-  const [hasProviderId, setHasProviderId] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("updatedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(25);
   const [creating, setCreating] = useState(false);
-  const [preview, setPreview] = useState<{
-    template: Template;
-    version: number | null;
-  } | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Template | null>(null);
 
   const debouncedSearch = useDebouncedValue(search, 300);
@@ -75,18 +53,10 @@ export function TemplatesClient() {
   const listParams: TemplatesListParams = useMemo(
     () => ({
       q: debouncedSearch.trim() || undefined,
-      channel: channel || undefined,
-      category: category || undefined,
       isActive:
         isActive === "true"
           ? true
           : isActive === "false"
-            ? false
-            : undefined,
-      hasProviderId:
-        hasProviderId === "true"
-          ? true
-          : hasProviderId === "false"
             ? false
             : undefined,
       sortBy: sortBy || undefined,
@@ -96,10 +66,7 @@ export function TemplatesClient() {
     }),
     [
       debouncedSearch,
-      channel,
-      category,
       isActive,
-      hasProviderId,
       sortBy,
       sortOrder,
       page,
@@ -114,7 +81,6 @@ export function TemplatesClient() {
   const atLimit = limits ? limits.current >= limits.max : false;
   const createMutation = useCreateTemplate();
   const removeMutation = useRemoveTemplate();
-  const importMutation = useImportTemplatesFromProvider();
 
   const [sorting, setSorting] = useState<SortingState>([
     { id: "updatedAt", desc: true },
@@ -137,24 +103,6 @@ export function TemplatesClient() {
         ),
       },
       {
-        accessorKey: "channel",
-        header: "Channel",
-        cell: ({ row }) => (
-          <span className="badge badge-ghost badge-sm">
-            {row.original.channel}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "category",
-        header: "Category",
-        cell: ({ row }) => (
-          <span className="text-sm text-base-content/70">
-            {row.original.category}
-          </span>
-        ),
-      },
-      {
         accessorKey: "isActive",
         header: "Active",
         cell: ({ row }) =>
@@ -163,33 +111,6 @@ export function TemplatesClient() {
           ) : (
             <span className="badge badge-ghost badge-sm">No</span>
           ),
-      },
-      {
-        id: "providerStatus",
-        header: "Provider",
-        cell: ({ row }) => {
-          const t = row.original;
-          if (t.providerStatus != null && t.providerStatus !== "") {
-            const isRejected =
-              t.providerStatus === "REJECTED" ||
-              t.providerStatus === "PROVIDER_REJECTED";
-            return (
-              <span
-                className={`badge badge-sm ${
-                  isRejected ? "badge-error" : "badge-info"
-                }`}
-              >
-                {t.providerStatus}
-              </span>
-            );
-          }
-          if (t.providerTemplateId) {
-            return (
-              <span className="badge badge-info badge-sm">Synced</span>
-            );
-          }
-          return <span className="text-base-content/50 text-xs">—</span>;
-        },
       },
       {
         accessorKey: "updatedAt",
@@ -231,9 +152,8 @@ export function TemplatesClient() {
               <button
                 type="button"
                 className="btn btn-ghost btn-xs"
-                onClick={() =>
-                  setPreview({ template: t, version: null })
-                }
+                disabled
+                title="Preview is moving to WhatsApp templates"
               >
                 Preview
               </button>
@@ -280,15 +200,16 @@ export function TemplatesClient() {
     (payload: {
       name: string;
       description?: string;
-      channel: TemplateChannel;
-      category: TemplateCategory;
     }) => {
+      setCreateError(null);
       createMutation.mutate(payload, {
         onSuccess: (data) => {
           setCreating(false);
           router.push(`/templates/${data.id}`);
         },
-        onError: () => {},
+        onError: (err) => {
+          setCreateError(getApiError(err));
+        },
       });
     },
     [createMutation, router]
@@ -303,10 +224,6 @@ export function TemplatesClient() {
     [removeMutation]
   );
 
-  const handleImport = useCallback(() => {
-    importMutation.mutate();
-  }, [importMutation]);
-
   const totalPages = data
     ? Math.max(1, Math.ceil(data.total / data.limit))
     : 1;
@@ -314,7 +231,7 @@ export function TemplatesClient() {
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="rounded-xl border border-base-300/80 bg-base-200 p-4">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4">
           <div className="flex flex-wrap items-end gap-2">
             <div className="form-control min-w-[200px]">
               <label className="label py-0">
@@ -322,8 +239,8 @@ export function TemplatesClient() {
               </label>
               <input
                 type="search"
-                placeholder="Search templates…"
-                className="input input-bordered input-sm w-full rounded-xl transition-all duration-150 focus:border-primary/50"
+                placeholder="Search messages…"
+                className="input input-bordered input-sm w-full"
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
@@ -331,72 +248,15 @@ export function TemplatesClient() {
                 }}
               />
             </div>
-            <div className="form-control w-36">
-              <label className="label py-0">
-                <span className="label-text text-xs text-base-content/60">Channel</span>
-              </label>
-              <select
-                className="select select-bordered select-sm w-full rounded-xl"
-                value={channel}
-                onChange={(e) => {
-                  setChannel(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">All</option>
-                {CHANNELS.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="form-control w-40">
-              <label className="label py-0">
-                <span className="label-text text-xs text-base-content/60">Category</span>
-              </label>
-              <select
-                className="select select-bordered select-sm w-full rounded-xl"
-                value={category}
-                onChange={(e) => {
-                  setCategory(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">All</option>
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
             <div className="form-control w-28">
               <label className="label py-0">
                 <span className="label-text text-xs text-base-content/60">Active</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full rounded-xl"
+                className="select select-bordered select-sm w-full"
                 value={isActive}
                 onChange={(e) => {
                   setIsActive(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">All</option>
-                <option value="true">Yes</option>
-                <option value="false">No</option>
-              </select>
-            </div>
-            <div className="form-control w-28">
-              <label className="label py-0">
-                <span className="label-text text-xs text-base-content/60">Synced</span>
-              </label>
-              <select
-                className="select select-bordered select-sm w-full rounded-xl"
-                value={hasProviderId}
-                onChange={(e) => {
-                  setHasProviderId(e.target.value);
                   setPage(1);
                 }}
               >
@@ -410,7 +270,7 @@ export function TemplatesClient() {
                 <span className="label-text text-xs text-base-content/60">Sort</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full rounded-xl"
+                className="select select-bordered select-sm w-full"
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value);
@@ -426,7 +286,7 @@ export function TemplatesClient() {
             </div>
             <button
               type="button"
-              className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
+              className="btn btn-ghost btn-sm"
               onClick={() => {
                 setSortOrder((o) => (o === "desc" ? "asc" : "desc"));
                 setPage(1);
@@ -440,7 +300,7 @@ export function TemplatesClient() {
                 <span className="label-text text-xs text-base-content/60">Per page</span>
               </label>
               <select
-                className="select select-bordered select-sm w-full rounded-xl"
+                className="select select-bordered select-sm w-full"
                 value={limit}
                 onChange={(e) => {
                   setLimit(Number(e.target.value));
@@ -461,30 +321,28 @@ export function TemplatesClient() {
                   {limits.isVerified && " (verified)"}
                 </span>
               )}
+              <Link
+                href="/settings/integrations/whatsapp/import-templates"
+                className="btn btn-outline btn-sm"
+                title="Import existing WhatsApp templates from Meta"
+              >
+                Import from Meta
+              </Link>
               <button
                 type="button"
-                className="btn btn-primary btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
-                onClick={() => setCreating(true)}
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  setCreateError(null);
+                  setCreating(true);
+                }}
                 disabled={atLimit}
                 title={atLimit ? "Template limit reached" : undefined}
               >
-                Create template
+                Create message
               </button>
               <button
                 type="button"
-                className="btn btn-outline btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
-                onClick={handleImport}
-                disabled={importMutation.isPending}
-              >
-                {importMutation.isPending ? (
-                  <span className="loading loading-spinner loading-sm" />
-                ) : (
-                  "Import from provider"
-                )}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm rounded-xl transition-all duration-150 active:scale-[0.99]"
+                className="btn btn-ghost btn-sm"
                 onClick={() => refetch()}
                 disabled={isFetching}
               >
@@ -498,21 +356,6 @@ export function TemplatesClient() {
           </div>
       </div>
 
-      {importMutation.isSuccess && importMutation.data && (
-        <div role="alert" className="alert alert-success">
-          <span>
-            Imported: {importMutation.data.imported}, updated:{" "}
-            {importMutation.data.updated}, flagged: {importMutation.data.flagged}
-          </span>
-        </div>
-      )}
-
-      {importMutation.isError && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(importMutation.error)}</span>
-        </div>
-      )}
-
       {error && (
         <div role="alert" className="alert alert-error">
           <span>{getApiError(error)}</span>
@@ -520,7 +363,7 @@ export function TemplatesClient() {
       )}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-base-300/80 bg-base-200">
+      <div className="overflow-hidden rounded-box border border-base-300 bg-base-100">
         <div className="overflow-x-auto">
           <table className="table table-sm table-zebra">
             <thead>
@@ -530,14 +373,14 @@ export function TemplatesClient() {
                     <th
                       key={h.id}
                       className={
-                        ["name", "updatedAt", "createdAt", "category", "isActive", "providerStatus"].includes(
+                        ["name", "updatedAt", "createdAt", "isActive"].includes(
                           h.id
                         )
                           ? "cursor-pointer select-none text-xs font-medium text-base-content/60"
                           : "text-xs font-medium text-base-content/60"
                       }
                       onClick={() =>
-                        ["name", "updatedAt", "createdAt", "category", "isActive", "providerStatus"].includes(
+                        ["name", "updatedAt", "createdAt", "isActive"].includes(
                           h.id
                         )
                           ? handleSort(h.id)
@@ -565,7 +408,7 @@ export function TemplatesClient() {
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="text-center py-8 text-base-content/60">
-                    No templates found.
+                    No messages found.
                   </td>
                 </tr>
               ) : (
@@ -596,7 +439,7 @@ export function TemplatesClient() {
             <div className="join">
               <button
                 type="button"
-                className="btn btn-sm join-item rounded-xl transition-all duration-150 active:scale-[0.99]"
+                className="btn btn-sm join-item"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
               >
@@ -604,13 +447,13 @@ export function TemplatesClient() {
               </button>
               <button
                 type="button"
-                className="btn btn-sm join-item btn-disabled no-animation rounded-xl"
+                className="btn btn-sm join-item btn-disabled no-animation"
               >
                 Page {page} of {totalPages}
               </button>
               <button
                 type="button"
-                className="btn btn-sm join-item rounded-xl transition-all duration-150 active:scale-[0.99]"
+                className="btn btn-sm join-item"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
               >
@@ -623,24 +466,21 @@ export function TemplatesClient() {
 
       {creating && (
         <TemplateCreateModal
-          onClose={() => setCreating(false)}
+          onClose={() => {
+            setCreateError(null);
+            setCreating(false);
+          }}
           onSave={handleCreate}
           isPending={createMutation.isPending}
-        />
-      )}
-
-      {preview && (
-        <TemplatePreviewModal
-          template={preview.template}
-          version={preview.version}
-          onClose={() => setPreview(null)}
+          errorMessage={createError}
+          onClearError={() => setCreateError(null)}
         />
       )}
 
       {deleteConfirm && (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
-            <h3 className="font-semibold">Delete template?</h3>
+            <h3 className="font-semibold">Delete message?</h3>
             <p className="py-2 text-base-content/70">
               “{deleteConfirm.name}” will be removed. This cannot be undone.
             </p>

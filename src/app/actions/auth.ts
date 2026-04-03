@@ -3,7 +3,12 @@
 import { cookies } from "next/headers";
 import type { AuthResponse } from "@/lib/api";
 import { API_BASE_URL, endpoints } from "@/lib/endpoints";
-import { ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE } from "@/lib/auth";
+import {
+  ACCESS_TOKEN_COOKIE,
+  DEFAULT_ACCESS_TOKEN_TTL_SEC,
+  REFRESH_TOKEN_COOKIE,
+} from "@/lib/auth";
+import { refreshAuthTokensOnce } from "@/lib/auth-refresh";
 
 const setAuthCookies = async ({
   accessToken,
@@ -11,7 +16,7 @@ const setAuthCookies = async ({
   expiresIn,
 }: AuthResponse) => {
   const cookieStore = await cookies();
-  const maxAge = expiresIn ?? 15 * 60;
+  const maxAge = expiresIn ?? DEFAULT_ACCESS_TOKEN_TTL_SEC;
 
   cookieStore.set(ACCESS_TOKEN_COOKIE, accessToken, {
     path: "/",
@@ -37,35 +42,15 @@ export async function refreshSessionAction(): Promise<
   | { success: true; accessToken: string; expiresIn?: number }
   | { success: false }
 > {
-  const cookieStore = await cookies();
-  const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
-  if (!refreshToken) {
+  const payload = await refreshAuthTokensOnce();
+  if (!payload?.accessToken) {
     return { success: false };
   }
-
-  try {
-    const response = await fetch(`${API_BASE_URL}${endpoints.auth.refresh}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      return { success: false };
-    }
-
-    const payload = (await response.json()) as AuthResponse;
-    await setAuthCookies(payload);
-
-    return {
-      success: true,
-      accessToken: payload.accessToken,
-      expiresIn: payload.expiresIn,
-    };
-  } catch {
-    return { success: false };
-  }
+  return {
+    success: true,
+    accessToken: payload.accessToken,
+    expiresIn: payload.expiresIn,
+  };
 }
 
 export async function loginAction(email: string, password: string) {

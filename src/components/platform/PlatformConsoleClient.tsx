@@ -6,6 +6,7 @@ import {
   useBspCredentials,
   useChannelAccounts,
   useConnectedClientBusinesses,
+  usePlatformAuditLogs,
   usePlatformUsageEvents,
   usePlatformUser,
   usePlatformUserLoginHistory,
@@ -26,6 +27,7 @@ type TabKey =
   | "users"
   | "webhookLogs"
   | "usageEvents"
+  | "auditLogs"
   | "bspCredentials"
   | "channelAccounts"
   | "connectedClientBusinesses";
@@ -81,6 +83,7 @@ export function PlatformConsoleClient({
             { key: "users", label: "Users" },
             { key: "webhookLogs", label: "Webhook Logs" },
             { key: "usageEvents", label: "Usage Events" },
+            { key: "auditLogs", label: "Audit Logs" },
           ] as Array<{ key: TabKey; label: string }>),
     [superAdmin]
   );
@@ -105,6 +108,7 @@ export function PlatformConsoleClient({
       {tab === "users" && <UsersTab superAdmin={superAdmin} />}
       {tab === "webhookLogs" && <WebhookLogsTab />}
       {tab === "usageEvents" && <UsageEventsTab />}
+      {tab === "auditLogs" && <AuditLogsTab />}
       {tab === "bspCredentials" && superAdmin && <BspCredentialsTab />}
       {tab === "channelAccounts" && superAdmin && <ChannelAccountsTab />}
       {tab === "connectedClientBusinesses" && superAdmin && (
@@ -129,14 +133,31 @@ function WorkspacesTab() {
     offset,
   });
   const detail = usePlatformWorkspace(selectedWorkspaceId);
+  const channelAccounts = useChannelAccounts();
   const suspend = useSuspendWorkspace();
   const reactivate = useReactivateWorkspace();
 
+  const numbersByWorkspaceId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const a of channelAccounts.data ?? []) {
+      const wid = (a.workspaceId ?? "").trim();
+      if (!wid) continue;
+      const label =
+        (a.externalId ?? "").trim() ||
+        (a.displayName ?? "").trim() ||
+        a.id;
+      const next = map.get(wid) ?? [];
+      next.push(label);
+      map.set(wid, next);
+    }
+    return map;
+  }, [channelAccounts.data]);
+
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Workspace Filters</h2>
+      <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Workspace Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
               className="input input-bordered"
@@ -196,6 +217,9 @@ function WorkspacesTab() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Plan</th>
+              <th>Expiry</th>
+              <th>Numbers</th>
               <th>Status</th>
               <th>Suspended</th>
               <th>Members</th>
@@ -209,6 +233,19 @@ function WorkspacesTab() {
                 <td>
                   <div className="font-medium">{workspace.name}</div>
                   <div className="text-xs text-base-content/60">{workspace.slug}</div>
+                </td>
+                <td>{workspace.plan || "-"}</td>
+                <td>{formatDate(workspace.planExpiresAt ?? null)}</td>
+                <td>
+                  <div className="text-xs text-base-content/70">
+                    {(numbersByWorkspaceId.get(workspace.id) ?? []).slice(0, 2).join(", ") ||
+                      "-"}
+                    {(numbersByWorkspaceId.get(workspace.id) ?? []).length > 2 && (
+                      <span className="ml-1">
+                        +{(numbersByWorkspaceId.get(workspace.id) ?? []).length - 2} more
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td>{workspace.status}</td>
                 <td>{workspace.isSuspended ? "Yes" : "No"}</td>
@@ -257,7 +294,7 @@ function WorkspacesTab() {
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={6} className="text-center text-base-content/60">
+                <td colSpan={9} className="text-center text-base-content/60">
                   No workspaces found.
                 </td>
               </tr>
@@ -287,10 +324,10 @@ function WorkspacesTab() {
       </div>
 
       {selectedWorkspaceId && (
-        <div className="card card-border bg-base-200">
-          <div className="card-body">
+        <div className="rounded-box border border-base-300 bg-base-100">
+          <div className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
-              <h3 className="card-title text-base">Workspace Inspection</h3>
+              <h3 className="text-base font-semibold">Workspace Inspection</h3>
               <button
                 className="btn btn-ghost btn-xs"
                 onClick={() => setSelectedWorkspaceId(null)}
@@ -311,6 +348,32 @@ function WorkspacesTab() {
                 </div>
                 <div>
                   <span className="font-medium">Slug:</span> {detail.data.slug}
+                </div>
+                <div>
+                  <span className="font-medium">Plan:</span> {String(detail.data.plan ?? "-")}
+                </div>
+                <div>
+                  <span className="font-medium">Plan expires at:</span>{" "}
+                  {formatDate(String(detail.data.planExpiresAt ?? ""))}
+                </div>
+                <div>
+                  <span className="font-medium">Billing email:</span>{" "}
+                  {String(detail.data.billingEmail ?? "-")}
+                </div>
+                <div>
+                  <span className="font-medium">Subscription:</span>{" "}
+                  {String(detail.data.subscriptionId ?? "-")}
+                </div>
+                <div>
+                  <span className="font-medium">Trial ends at:</span>{" "}
+                  {formatDate(String(detail.data.trialEndsAt ?? ""))}
+                </div>
+                <div>
+                  <span className="font-medium">Numbers (accounts):</span>{" "}
+                  {(detail.data.cloudApiAccounts ?? [])
+                    .map((a) => a.displayPhoneNumber || a.phoneNumberId || a.id)
+                    .filter(Boolean)
+                    .join(", ") || "-"}
                 </div>
                 <div>
                   <span className="font-medium">Status:</span> {detail.data.status}
@@ -357,9 +420,9 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">User Filters</h2>
+      <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">User Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
               className="input input-bordered"
@@ -475,10 +538,10 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
       </div>
 
       {selectedUserId && (
-        <div className="card card-border bg-base-200">
-          <div className="card-body">
+        <div className="rounded-box border border-base-300 bg-base-100">
+          <div className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
-              <h3 className="card-title text-base">User Inspection</h3>
+              <h3 className="text-base font-semibold">User Inspection</h3>
               <button
                 className="btn btn-ghost btn-xs"
                 onClick={() => setSelectedUserId(null)}
@@ -607,9 +670,9 @@ function WebhookLogsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Webhook Logs Filters</h2>
+      <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Webhook Logs Filters</h2>
           <div className="grid gap-2 sm:grid-cols-4">
             <input
               className="input input-bordered"
@@ -722,9 +785,9 @@ function UsageEventsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Usage Events Filters</h2>
+      <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Usage Events Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
               className="input input-bordered"
@@ -806,6 +869,134 @@ function UsageEventsTab() {
   );
 }
 
+function AuditLogsTab() {
+  const [action, setAction] = useState("");
+  const [targetType, setTargetType] = useState("");
+  const [targetId, setTargetId] = useState("");
+  const [actorUserId, setActorUserId] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [limit, setLimit] = useState(50);
+
+  const list = usePlatformAuditLogs({
+    action: action.trim() || undefined,
+    targetType: targetType.trim() || undefined,
+    targetId: targetId.trim() || undefined,
+    actorUserId: actorUserId.trim() || undefined,
+    offset,
+    limit,
+  });
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Audit Logs Filters</h2>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <input
+              className="input input-bordered"
+              placeholder="Action (e.g. USER_PLATFORM_ROLE_UPDATED)"
+              value={action}
+              onChange={(e) => {
+                setAction(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <input
+              className="input input-bordered"
+              placeholder="Target type (e.g. USER, WORKSPACE)"
+              value={targetType}
+              onChange={(e) => {
+                setTargetType(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <input
+              className="input input-bordered"
+              placeholder="Target ID"
+              value={targetId}
+              onChange={(e) => {
+                setTargetId(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <input
+              className="input input-bordered"
+              placeholder="Actor user ID"
+              value={actorUserId}
+              onChange={(e) => {
+                setActorUserId(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <select
+              className="select select-bordered"
+              value={String(limit)}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setOffset(0);
+              }}
+            >
+              {[25, 50, 100, 200].map((n) => (
+                <option key={n} value={n}>
+                  {n} per page
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {list.error && (
+        <div role="alert" className="alert alert-error">
+          <span>{getApiError(list.error)}</span>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+        <table className="table table-sm">
+          <thead>
+            <tr>
+              <th>Created</th>
+              <th>Action</th>
+              <th>Target</th>
+              <th>Actor</th>
+              <th>Request</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.data?.items.map((row) => (
+              <tr key={row.id}>
+                <td>{formatDate(row.createdAt)}</td>
+                <td className="max-w-48 truncate">{row.action}</td>
+                <td className="max-w-64 truncate">
+                  {row.targetType}:{row.targetId}
+                </td>
+                <td className="max-w-48 truncate">{row.actorUserId}</td>
+                <td className="max-w-48 truncate">{row.requestId || "-"}</td>
+              </tr>
+            ))}
+            {!list.isLoading && !list.data?.items.length && (
+              <tr>
+                <td colSpan={5} className="text-center text-base-content/60">
+                  No audit logs found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Pager
+        offset={offset}
+        limit={limit}
+        total={list.data?.total ?? 0}
+        onPrev={() => setOffset((v) => Math.max(0, v - limit))}
+        onNext={() => setOffset((v) => v + limit)}
+      />
+    </div>
+  );
+}
+
 function BspCredentialsTab() {
   const [bsp, setBsp] = useState<PlatformBsp>("TWILIO");
   const [credentialsJson, setCredentialsJson] = useState("{}");
@@ -861,9 +1052,9 @@ function BspCredentialsTab() {
         </table>
       </div>
 
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Upsert BSP Credential</h2>
+      <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Upsert BSP Credential</h2>
           <div className="grid gap-2 sm:grid-cols-2">
             <select
               className="select select-bordered"
@@ -904,7 +1095,7 @@ function BspCredentialsTab() {
             value={credentialsJson}
             onChange={(e) => setCredentialsJson(e.target.value)}
           />
-          <div className="card-actions">
+          <div className="flex justify-end">
             <button
               className="btn btn-primary btn-sm"
               disabled={upsert.isPending}

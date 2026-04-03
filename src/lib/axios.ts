@@ -3,7 +3,12 @@ import axios, {
   AxiosHeaders,
   InternalAxiosRequestConfig,
 } from "axios";
-import { getToken, clearToken, setAccessToken } from "./auth";
+import {
+  getToken,
+  clearToken,
+  setAccessToken,
+  DEFAULT_ACCESS_TOKEN_TTL_SEC,
+} from "./auth";
 import { API_BASE_URL, endpoints } from "./endpoints";
 
 type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean };
@@ -23,7 +28,7 @@ let refreshPromise: Promise<string | null> | null = null;
  * and sent as `{ refreshToken }` to the API — browser cannot attach it to cross-origin
  * requests by itself.
  */
-const refreshAccessToken = async (): Promise<string | null> => {
+export async function refreshAccessToken(): Promise<string | null> {
   if (!refreshPromise) {
     refreshPromise = (async () => {
       const { refreshSessionAction } = await import("@/app/actions/auth");
@@ -33,7 +38,7 @@ const refreshAccessToken = async (): Promise<string | null> => {
         return null;
       }
       setAccessToken(result.accessToken, {
-        expiresInSeconds: result.expiresIn,
+        expiresInSeconds: result.expiresIn ?? DEFAULT_ACCESS_TOKEN_TTL_SEC,
       });
       return result.accessToken;
     })()
@@ -46,7 +51,7 @@ const refreshAccessToken = async (): Promise<string | null> => {
       });
   }
   return refreshPromise;
-};
+}
 
 /**
  * `fetch` with Bearer token + cookie credentials, mirroring the axios client’s 401 refresh.

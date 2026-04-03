@@ -7,6 +7,7 @@ import {
   type PlatformUsageEventsParams,
   type PlatformUsersListParams,
   type PlatformWorkspacesListParams,
+  type PlatformAuditLogsParams,
 } from "@/lib/api";
 import type { PlatformBsp, PlatformRole } from "@/lib/types";
 
@@ -24,6 +25,8 @@ export const platformKeys = {
     [...platformKeys.all, "webhookLogs", params] as const,
   usageEvents: (params: PlatformUsageEventsParams) =>
     [...platformKeys.all, "usageEvents", params] as const,
+  auditLogs: (params: PlatformAuditLogsParams) =>
+    [...platformKeys.all, "auditLogs", params] as const,
   bspCredentials: () => [...platformKeys.all, "bspCredentials"] as const,
   channelAccounts: () => [...platformKeys.all, "channelAccounts"] as const,
   connectedClientBusinesses: () =>
@@ -115,6 +118,13 @@ export function usePlatformUsageEvents(params: PlatformUsageEventsParams) {
   return useQuery({
     queryKey: platformKeys.usageEvents(params),
     queryFn: () => platformApi.listUsageEvents(params),
+  });
+}
+
+export function usePlatformAuditLogs(params: PlatformAuditLogsParams) {
+  return useQuery({
+    queryKey: platformKeys.auditLogs(params),
+    queryFn: () => platformApi.listAuditLogs(params),
   });
 }
 

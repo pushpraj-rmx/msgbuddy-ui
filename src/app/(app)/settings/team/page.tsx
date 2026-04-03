@@ -1,7 +1,8 @@
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/states";
-import { serverFetch, type MeResponse } from "@/lib/api";
+import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import type { Member } from "@/components/settings/SettingsClient";
 import { TeamClient } from "@/components/settings/TeamClient";
@@ -16,7 +17,7 @@ export default async function SettingsTeamPage() {
     <PageContainer>
       <PageHeader title="Team" description="Manage workspace members and roles." />
       {!members.length ? (
-        <div className="rounded-xl border border-base-300 bg-base-200 p-4">
+        <div className="rounded-box border border-base-300 bg-base-100 p-4">
           <EmptyState
             title="No members found"
             description="Invite teammates to collaborate in this workspace."

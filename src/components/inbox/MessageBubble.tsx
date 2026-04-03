@@ -112,7 +112,7 @@ function imageFrameClassForBubble(
   message: InboxMessage,
   failed: boolean
 ): string {
-  const base = "border rounded-lg";
+  const base = "border rounded-box";
   if (failed) return `${base} border-error-content/40`;
   if (isProcessingMessage(message)) return `${base} border-neutral-content/35`;
   return `${base} border-primary-content/35`;
@@ -235,9 +235,9 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
 
       if (processing && !resolvedMediaUrl) {
         return (
-          <div className="min-w-[12rem] max-w-[18rem] overflow-hidden rounded-xl bg-base-300/40">
+          <div className="min-w-[12rem] max-w-[18rem] overflow-hidden rounded-box bg-base-300/40">
             <div className="flex gap-3 px-3 pt-3 pb-2">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-base-300">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-box bg-base-300">
                 <span className="loading loading-spinner loading-sm text-base-content/70" />
               </div>
               <div className="min-w-0 flex-1 space-y-1">
@@ -267,11 +267,11 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
               target="_blank"
               rel="noopener noreferrer"
               download={message.mediaFilename || undefined}
-              className="block min-w-[12rem] max-w-[18rem] overflow-hidden rounded-xl bg-base-300/45 outline-none ring-primary/0 transition-[box-shadow] hover:bg-base-300/55 focus-visible:ring-2 focus-visible:ring-primary/40"
+              className="block min-w-[12rem] max-w-[18rem] overflow-hidden rounded-box bg-base-300/45 outline-none ring-primary/0 transition-[box-shadow] hover:bg-base-300/55 focus-visible:ring-2 focus-visible:ring-primary/40"
             >
               <div className="flex gap-3 px-3 pt-3 pb-2">
                 <div
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold leading-none ${badgeClass}`}
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-box text-xs font-bold leading-none ${badgeClass}`}
                   aria-hidden
                 >
                   {badgeText}
@@ -371,6 +371,32 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
       );
     }
 
+    if (kind === "TEMPLATE") {
+      return (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+            WhatsApp template
+          </span>
+          <div className="whitespace-pre-wrap">
+            {message.text?.trim() ?? ""}
+          </div>
+        </div>
+      );
+    }
+
+    if (kind === "INTERACTIVE") {
+      return (
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+            Interactive
+          </span>
+          <div className="whitespace-pre-wrap">
+            {message.text?.trim() || "—"}
+          </div>
+        </div>
+      );
+    }
+
     if (kind === "TEXT") {
       return (
         <div className="whitespace-pre-wrap">
@@ -393,7 +419,7 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
       }`}
     >
       <div
-        className={`chat-bubble max-w-[min(85%,28rem)] rounded-xl leading-relaxed ${
+        className={`chat-bubble max-w-[min(85%,28rem)] rounded-box leading-relaxed ${
           documentBubble ? "p-0" : richMedia ? "p-1" : "px-3 py-2"
         } ${bubbleClassName(message, failed)}`}
       >
@@ -406,7 +432,7 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
           }`}
         >
           {hint.hint && (hint.hint.length > 120 || hint.href) ? (
-            <details className="rounded-xl border border-error/30 bg-error/5 px-3 py-2">
+            <details className="rounded-box border border-error/40 bg-error/5 px-3 py-2">
               <summary className="cursor-pointer list-none text-sm font-medium text-error [&::-webkit-details-marker]:hidden">
                 {message.errorMessage?.trim() || "Delivery failed"}{" "}
                 <span className="text-xs font-normal text-base-content/60">

@@ -129,8 +129,8 @@ function KpiCard({
   hint?: string;
 }) {
   return (
-    <div className="card bg-base-200 shadow-sm">
-      <div className="card-body gap-1 p-4 sm:p-5">
+    <div className="rounded-box border border-base-300 bg-base-100">
+      <div className="gap-1 p-4 sm:p-5">
         <div className="text-xs font-medium uppercase tracking-wide text-base-content/60">
           {label}
         </div>
@@ -152,7 +152,7 @@ function Sparkline({ points }: { points: TimeSeriesPoint[] }) {
 
   if (points.length === 0) {
     return (
-      <div className="flex h-24 items-end justify-center rounded-lg bg-base-300/30 text-sm text-base-content/50">
+      <div className="flex h-24 items-end justify-center rounded-box bg-base-200 text-sm text-base-content/60">
         No activity in this range
       </div>
     );
@@ -308,15 +308,15 @@ export function DashboardClient() {
         />
       </div>
 
-      <div className="card bg-base-200 shadow-sm">
-        <div className="card-body gap-3">
+      <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="gap-3 p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-medium">Activity</span>
             <span className="text-xs text-base-content/50">Daily volume</span>
           </div>
           <Sparkline points={timeSeries} />
           {timeSeries.length > 0 ? (
-            <div className="flex flex-wrap justify-between gap-1 text-[10px] text-base-content/45 sm:text-xs">
+            <div className="flex flex-wrap justify-between gap-1 text-xs text-base-content/60">
               {timeSeries.map((p) => (
                 <span key={p.date} className="min-w-0 flex-1 truncate text-center">
                   {p.date.slice(5)}
@@ -328,10 +328,10 @@ export function DashboardClient() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="card border border-base-300 bg-base-100 shadow-sm">
-          <div className="card-body gap-3">
+        <div className="rounded-box border border-base-300 bg-base-100">
+          <div className="gap-3 p-4 sm:p-5">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="card-title text-base">Needs attention</h3>
+              <h3 className="text-base font-semibold">Needs attention</h3>
               <Link href="/inbox" className="btn btn-primary btn-sm">
                 Open inbox
               </Link>
@@ -379,10 +379,10 @@ export function DashboardClient() {
           </div>
         </div>
 
-        <div className="card border border-base-300 bg-base-100 shadow-sm">
-          <div className="card-body gap-3">
+        <div className="rounded-box border border-base-300 bg-base-100">
+          <div className="gap-3 p-4 sm:p-5">
             <div className="flex items-center justify-between gap-2">
-              <h3 className="card-title text-base">Usage & limits</h3>
+              <h3 className="text-base font-semibold">Usage & limits</h3>
               <Link href="/usage" className="btn btn-ghost btn-sm">
                 Details
               </Link>
@@ -450,8 +450,8 @@ export function DashboardClient() {
       ) : null}
 
       <div className="flex flex-wrap gap-2">
-        <Link href="/contacts" className="btn btn-sm btn-ghost">
-          Contacts
+        <Link href="/people/contacts" className="btn btn-sm btn-ghost">
+          People
         </Link>
         <Link href="/templates" className="btn btn-sm btn-ghost">
           Templates

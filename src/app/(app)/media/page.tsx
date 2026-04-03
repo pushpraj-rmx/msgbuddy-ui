@@ -1,7 +1,7 @@
 import { MediaClient, type MediaItem } from "@/components/media/MediaClient";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { serverFetch } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 
 export default async function MediaPage() {

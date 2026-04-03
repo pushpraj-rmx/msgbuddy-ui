@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { WhatsAppIntegrationPage } from "@/components/integrations/WhatsAppIntegrationPage";
 import { WhatsAppOnboardingPanel } from "@/components/integrations/WhatsAppOnboardingPanel";
@@ -256,6 +257,23 @@ export function WhatsAppSettingsClient({
 
   return (
     <div className="space-y-6">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="font-semibold">Templates</div>
+            <div className="text-sm text-base-content/70">
+              Import existing WhatsApp templates from Meta into MsgBuddy.
+            </div>
+          </div>
+          <Link
+            className="btn btn-outline btn-sm"
+            href="/settings/integrations/whatsapp/import-templates"
+          >
+            Import from Meta
+          </Link>
+        </div>
+      </div>
+
       <WhatsAppIntegrationPage
         variant="connectOnly"
         initialCloudApiConfig={cloudApiConfigState}

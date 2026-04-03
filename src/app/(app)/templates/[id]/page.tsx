@@ -1,8 +1,8 @@
 import { notFound } from "next/navigation";
 import { TemplateDetailClient } from "@/components/templates/TemplateDetailClient";
-import { serverFetch } from "@/lib/api";
-import { endpoints } from "@/lib/endpoints";
 import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
+import { endpoints } from "@/lib/endpoints";
 
 export default async function TemplateDetailPage({
   params,
@@ -19,12 +19,16 @@ export default async function TemplateDetailPage({
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Template</h1>
+        <h1 className="text-2xl font-semibold">Message</h1>
         <p className="text-sm text-base-content/60">
-          Manage versions, submit for approval, and sync to provider.
+          Configure channels and manage channel-specific versions.
         </p>
       </div>
-      <TemplateDetailClient templateId={id} userRole={me.role} />
+      <TemplateDetailClient
+        templateId={id}
+        userRole={me.role}
+        workspaceId={me.workspace.id}
+      />
     </div>
   );
 }

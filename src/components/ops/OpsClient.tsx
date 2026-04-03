@@ -68,19 +68,19 @@ export function OpsClient() {
         </div>
       ) : null}
 
-      <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-3">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">Queue metrics</h2>
           <button type="button" className="btn btn-sm btn-primary" onClick={() => void loadQueues()} disabled={loading}>
             {loading ? "Loading…" : "Refresh queues"}
           </button>
         </div>
-        <pre className="max-h-80 overflow-auto rounded-xl border border-base-300 bg-base-100 p-3 text-xs">
+        <pre className="max-h-80 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 text-xs">
           {queueMetrics == null ? "No data loaded yet." : JSON.stringify(queueMetrics, null, 2)}
         </pre>
       </div>
 
-      <div className="rounded-xl border border-base-300 bg-base-200 p-4 space-y-3">
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
         <h2 className="text-base font-semibold">Upload session monitor</h2>
         <div className="flex flex-wrap items-center gap-2">
           <input
@@ -96,7 +96,7 @@ export function OpsClient() {
             Cancel session
           </button>
         </div>
-        <pre className="max-h-80 overflow-auto rounded-xl border border-base-300 bg-base-100 p-3 text-xs">
+        <pre className="max-h-80 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 text-xs">
           {uploadSessionData == null
             ? "No session loaded."
             : JSON.stringify(uploadSessionData, null, 2)}

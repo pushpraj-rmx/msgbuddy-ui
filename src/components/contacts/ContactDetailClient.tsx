@@ -85,15 +85,16 @@ export function ContactDetailClient({
   const deleteMutation = useMutation({
     mutationFn: () => contactsApi.delete(contact.id),
     onSuccess: () => {
-      if (typeof window !== "undefined") window.location.href = "/contacts";
+      if (typeof window !== "undefined")
+        window.location.href = "/people/contacts";
     },
   });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Link href="/contacts" className="btn btn-ghost btn-sm">
-          ← Contacts
+        <Link href="/people/contacts" className="btn btn-ghost btn-sm">
+          ← People
         </Link>
       </div>
 

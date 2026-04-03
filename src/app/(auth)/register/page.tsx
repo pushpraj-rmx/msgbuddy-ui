@@ -79,7 +79,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-base-100 p-6 grid place-items-center">
-      <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-base-300/80 bg-base-200">
+      <div className="w-full max-w-5xl overflow-hidden rounded-box border border-base-300 bg-base-100">
         <div className="grid grid-cols-1 md:grid-cols-2">
           <div className="bg-base-100 p-6 space-y-6">
             <div className="space-y-2">
@@ -99,7 +99,7 @@ export default function RegisterPage() {
                 <input
                   type="email"
                   placeholder="you@example.com"
-                  className="input input-bordered w-full rounded-xl transition-all duration-150 focus:border-primary/50"
+                  className="input input-bordered w-full"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -110,7 +110,7 @@ export default function RegisterPage() {
                 <input
                   type="password"
                   placeholder="Enter a secure password"
-                  className="input input-bordered w-full rounded-xl transition-all duration-150 focus:border-primary/50"
+                  className="input input-bordered w-full"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -123,7 +123,7 @@ export default function RegisterPage() {
                 <input
                   type="text"
                   placeholder="e.g. Product team"
-                  className="input input-bordered w-full rounded-xl transition-all duration-150 focus:border-primary/50"
+                  className="input input-bordered w-full"
                   value={workspace}
                   onChange={(e) => setWorkspace(e.target.value)}
                   required
@@ -133,7 +133,7 @@ export default function RegisterPage() {
                 </p>
               </div>
 
-              <label className="flex cursor-pointer items-start gap-3 rounded-xl bg-base-100 px-4 py-3">
+              <label className="flex cursor-pointer items-start gap-3 rounded-box bg-base-100 px-4 py-3">
                 <input
                   type="checkbox"
                   className="checkbox checkbox-primary checkbox-sm rounded-full mt-0.5"
@@ -157,7 +157,7 @@ export default function RegisterPage() {
               <div className="space-y-3 pt-2">
                 <button
                   type="submit"
-                  className="btn btn-primary w-full rounded-xl transition-all duration-150 active:scale-[0.99]"
+                  className="btn btn-primary w-full"
                   disabled={isPending || !agreeToLegal}
                 >
                   {isPending ? (
@@ -171,7 +171,7 @@ export default function RegisterPage() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost w-full rounded-xl transition-all duration-150 active:scale-[0.99]"
+                  className="btn btn-ghost w-full"
                   onClick={() => router.push("/login")}
                 >
                   Already have an account? Sign in
@@ -193,7 +193,7 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            <div className="mt-6 overflow-hidden rounded-xl border border-base-300/80 bg-base-100">
+            <div className="mt-6 overflow-hidden rounded-box border border-base-300 bg-base-100">
               <Image
                 src={registerFeatureSlides[activeSlide].imageSrc}
                 alt={registerFeatureSlides[activeSlide].imageAlt}
