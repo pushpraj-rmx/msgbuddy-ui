@@ -9,11 +9,19 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 
-/** Matches Tailwind `xl` (default 1280px). Close desktop panel when below this width. */
-const RIGHT_PANEL_DESKTOP_MQ = "(min-width: 1280px)";
+const DETAILS_PANE_OPEN_KEY = "global-details-pane-open";
 
-const RIGHT_PANEL_OPEN_KEY = "global-right-panel-open";
+function readStoredPaneOpen(): boolean {
+  try {
+    const raw = localStorage.getItem(DETAILS_PANE_OPEN_KEY);
+    if (raw === "true" || raw === "false") return raw === "true";
+  } catch {
+    // ignore
+  }
+  return true;
+}
 
 type RightPanelState = {
   title?: string;
@@ -44,60 +52,70 @@ type RightPanelContextValue = {
 
 const RightPanelContext = createContext<RightPanelContextValue | null>(null);
 
-function getInitialOpenState(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const raw = localStorage.getItem(RIGHT_PANEL_OPEN_KEY);
-    if (raw === "true" || raw === "false") {
-      return raw === "true";
-    }
-  } catch {
-    // ignore storage errors
-  }
-  return false;
-}
-
 export function RightPanelProvider({ children }: { children: ReactNode }) {
-  const [isOpen, setIsOpen] = useState<boolean>(getInitialOpenState);
+  const [isOpen, setIsOpen] = useState(false);
   const [panel, setPanel] = useState<RightPanelState | null>(null);
 
-  const persistOpenState = useCallback((next: boolean) => {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const xl = window.matchMedia(XL_MEDIA_QUERY).matches;
+    setIsOpen(xl && readStoredPaneOpen());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(XL_MEDIA_QUERY);
+    const onChange = () => {
+      if (!mq.matches) {
+        setIsOpen(false);
+        return;
+      }
+      setIsOpen(readStoredPaneOpen());
+    };
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  const persistOpen = useCallback((next: boolean) => {
     try {
-      localStorage.setItem(RIGHT_PANEL_OPEN_KEY, String(next));
+      localStorage.setItem(DETAILS_PANE_OPEN_KEY, String(next));
     } catch {
-      // ignore storage errors
+      // ignore
     }
   }, []);
 
   const open = useCallback(() => {
     setIsOpen(true);
-    persistOpenState(true);
-  }, [persistOpenState]);
+    persistOpen(true);
+  }, [persistOpen]);
 
   const close = useCallback(() => {
     setIsOpen(false);
-    persistOpenState(false);
-  }, [persistOpenState]);
+    persistOpen(false);
+  }, [persistOpen]);
 
   const toggle = useCallback(() => {
     setIsOpen((prev) => {
       const next = !prev;
-      persistOpenState(next);
+      persistOpen(next);
       return next;
     });
-  }, [persistOpenState]);
+  }, [persistOpen]);
 
-  const setContent = useCallback((input: SetRightPanelInput) => {
-    setPanel({
-      title: input.title,
-      content: input.content,
-      source: input.source,
-    });
-    if (input.openAfter === true) {
-      setIsOpen(true);
-      persistOpenState(true);
-    }
-  }, [persistOpenState]);
+  const setContent = useCallback(
+    (input: SetRightPanelInput) => {
+      setPanel({
+        title: input.title,
+        content: input.content,
+        source: input.source,
+      });
+      if (input.openAfter === true) {
+        setIsOpen(true);
+        persistOpen(true);
+      }
+    },
+    [persistOpen]
+  );
 
   const clearContent = useCallback((source?: string) => {
     setPanel((prev) => {
@@ -106,17 +124,6 @@ export function RightPanelProvider({ children }: { children: ReactNode }) {
       return prev.source === source ? null : prev;
     });
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(RIGHT_PANEL_DESKTOP_MQ);
-    const apply = () => {
-      if (!mq.matches) close();
-    };
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, [close]);
 
   const value = useMemo<RightPanelContextValue>(
     () => ({

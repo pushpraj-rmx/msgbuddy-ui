@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   useMutation,
   useQuery,
@@ -97,9 +97,13 @@ export function useNotifications(options?: {
 
 export function useNotificationSSE(workspaceId: string | null | undefined) {
   const queryClient = useQueryClient();
+  /** Dedupe SSE replays/reconnects so unread count is not incremented twice for the same id. */
+  const seenNotificationIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!workspaceId) return;
+
+    seenNotificationIdsRef.current = new Set();
 
     const es = new EventSource(`/api/sse/workspace/${workspaceId}`);
 
@@ -112,6 +116,11 @@ export function useNotificationSSE(workspaceId: string | null | undefined) {
         (payload as Record<string, unknown>).notification
       );
       if (!notification) return;
+
+      if (seenNotificationIdsRef.current.has(notification.id)) {
+        return;
+      }
+      seenNotificationIdsRef.current.add(notification.id);
 
       queryClient.setQueryData<{ count: number }>(
         notificationQueryKeys.unreadCount(),

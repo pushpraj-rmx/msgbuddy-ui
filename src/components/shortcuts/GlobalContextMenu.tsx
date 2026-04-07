@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchOpenGlobalSearch, dispatchOpenShortcutsHelp } from "@/lib/shortcuts";
+import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 type Point = { x: number; y: number };
@@ -25,6 +26,7 @@ function isNativeContextTarget(target: EventTarget | null): boolean {
 export function GlobalContextMenu() {
   const { isOpen: rightPanelOpen, close: closeRightPanel, open: openRightPanel } =
     useRightPanel();
+  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
   const [open, setOpen] = useState(false);
   const [point, setPoint] = useState<Point | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -119,18 +121,20 @@ export function GlobalContextMenu() {
         <span>Keyboard shortcuts</span>
         <kbd className="kbd kbd-sm">?</kbd>
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        className="flex w-full items-center justify-between rounded-none px-3 py-2 text-left text-sm hover:bg-base-200"
-        onClick={() => {
-          if (rightPanelOpen) closeRightPanel();
-          else openRightPanel();
-          close();
-        }}
-      >
-        <span>{rightPanelOpen ? "Hide details panel" : "Show details panel"}</span>
-      </button>
+      {isXlUp ? (
+        <button
+          type="button"
+          role="menuitem"
+          className="flex w-full items-center justify-between rounded-none px-3 py-2 text-left text-sm hover:bg-base-200"
+          onClick={() => {
+            if (rightPanelOpen) closeRightPanel();
+            else openRightPanel();
+            close();
+          }}
+        >
+          <span>{rightPanelOpen ? "Close details pane" : "Open details pane"}</span>
+        </button>
+      ) : null}
       <div className="my-1 h-px bg-base-300" role="separator" />
       <div className="px-3 py-2 text-xs text-base-content/50">More actions later…</div>
     </div>

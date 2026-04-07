@@ -16,10 +16,19 @@ export const endpoints = {
   auth: {
     login: `${P}/auth/login`,
     register: `${P}/auth/register`,
+    /** GET — link from verification email; API redirects to the app login. */
+    verifyEmail: `${P}/auth/verify-email`,
+    resendVerification: `${P}/auth/resend-verification`,
+    /** GET — browser navigates to API; API redirects to Google, then back to `/v2/auth/google/callback`, then to the app. */
+    googleStart: `${P}/auth/google`,
     me: `${P}/me`,
     refresh: `${P}/auth/refresh`,
     logout: `${P}/auth/logout`,
     logoutAll: `${P}/auth/logout-all`,
+    forgotPassword: `${P}/auth/forgot-password`,
+    resetPassword: `${P}/auth/reset-password`,
+    changePassword: `${P}/auth/change-password`,
+    loginHistory: `${P}/auth/login-history`,
   },
   workspaces: {
     list: `${P}/workspaces`,

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -78,6 +79,12 @@ export default function NotificationsPage() {
             <div className="space-y-2">
               {items.map((item) => {
                 const isUnread = !item.readAt;
+                const href =
+                  item.data &&
+                  typeof item.data.href === "string" &&
+                  item.data.href.startsWith("/")
+                    ? item.data.href
+                    : null;
                 return (
                   <article
                     key={item.id}
@@ -85,8 +92,17 @@ export default function NotificationsPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h2 className="text-sm font-semibold">{item.title}</h2>
-                        <p className="mt-1 text-sm text-base-content/75">{item.body}</p>
+                        {href ? (
+                          <Link href={href} className="block hover:opacity-90">
+                            <h2 className="text-sm font-semibold">{item.title}</h2>
+                            <p className="mt-1 text-sm text-base-content/75">{item.body}</p>
+                          </Link>
+                        ) : (
+                          <>
+                            <h2 className="text-sm font-semibold">{item.title}</h2>
+                            <p className="mt-1 text-sm text-base-content/75">{item.body}</p>
+                          </>
+                        )}
                         <p className="mt-1 text-xs text-base-content/60">
                           {formatRelativeTime(item.createdAt)}
                         </p>

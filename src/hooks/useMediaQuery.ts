@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+/** Matches Tailwind `xl` (1280px). */
+export const XL_MEDIA_QUERY = "(min-width: 1280px)" as const;
+
 /**
  * Subscribes to `matchMedia`. Initial state is `false` until mount so SSR and
  * the first client render match (no hydration mismatch).

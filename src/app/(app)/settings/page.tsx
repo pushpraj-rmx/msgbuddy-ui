@@ -7,6 +7,7 @@ import type {
   WorkspaceSettings,
 } from "@/components/settings/SettingsClient";
 import type {
+  LoginHistoryEvent,
   MeResponse,
   WorkspaceCloudApiConfigResponse,
 } from "@/lib/api";
@@ -27,12 +28,15 @@ async function getCloudApiSafe(
 
 export default async function SettingsPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
-  const [workspace, settings, members, cloudApiConfig] =
+  const [workspace, settings, members, cloudApiConfig, loginHistory] =
     await Promise.all([
       serverFetch<Workspace>(endpoints.workspaces.byId(me.workspace.id)),
       serverFetch<WorkspaceSettings>(endpoints.workspaces.settings(me.workspace.id)),
       serverFetch<Member[]>(endpoints.workspaces.members(me.workspace.id)),
       getCloudApiSafe(me.workspace.id),
+      serverFetch<LoginHistoryEvent[]>(`${endpoints.auth.loginHistory}?limit=50`).catch(
+        () => [] as LoginHistoryEvent[]
+      ),
     ]);
 
   return (
@@ -47,6 +51,9 @@ export default async function SettingsPage() {
         members={members}
         cloudApiConfig={cloudApiConfig}
         meRole={me.role}
+        accountEmail={me.user.email}
+        hasPassword={me.user.hasPassword === true}
+        loginHistory={loginHistory}
       />
     </PageContainer>
   );

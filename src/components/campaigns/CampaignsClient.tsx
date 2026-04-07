@@ -25,6 +25,7 @@ import {
   isMediaHeaderType,
   uploadMediaRowIdAndPrepareWhatsApp,
 } from "@/lib/whatsappTemplateMedia";
+import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { CampaignDetailView } from "./CampaignDetailView";
 
@@ -570,6 +571,7 @@ export function CampaignsClient({
 
   const { setContent: setRightPanelContent, clearContent: clearRightPanelContent } =
     useRightPanel();
+  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
 
   const campaignDetailPanel = useMemo(() => {
     if (!selectedCampaign) return null;
@@ -647,7 +649,7 @@ export function CampaignsClient({
     setRightPanelContent({
       source: "campaigns",
       title: formatCampaignListTitle(selectedCampaign.name),
-      openAfter: true,
+      openAfter: isXlUp,
       content: campaignDetailPanel,
     });
   }, [
@@ -655,6 +657,7 @@ export function CampaignsClient({
     campaignDetailPanel,
     clearRightPanelContent,
     setRightPanelContent,
+    isXlUp,
   ]);
 
   useEffect(() => {

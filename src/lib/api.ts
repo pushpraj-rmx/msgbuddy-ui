@@ -65,10 +65,28 @@ export interface AuthResponse {
   expiresIn?: number;
 }
 
+/** POST /auth/register when email verification is required before tokens are issued. */
+export interface RegisterPendingVerificationResponse {
+  requiresEmailVerification: true;
+  email: string;
+}
+
 export interface User {
   id: string;
   email: string;
+  /** True when the account can sign in with email + password (not Google-only). */
+  hasPassword?: boolean;
 }
+
+/** GET /auth/login-history */
+export type LoginHistoryEvent = {
+  id: string;
+  userId: string;
+  action: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+};
 
 export interface Workspace {
   id: string;

@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { registerAction } from "@/app/actions/auth";
-import { setAccessToken } from "@/lib/auth";
 import { ErrorState } from "@/components/ui/states";
 import { BrandLogo } from "@/components/BrandLogo";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 
 const registerFeatureSlides = [
   {
@@ -47,6 +47,9 @@ export default function RegisterPage() {
   const [workspace, setWorkspace] = useState("");
   const [agreeToLegal, setAgreeToLegal] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verificationSentTo, setVerificationSentTo] = useState<string | null>(
+    null
+  );
   const [isPending, startTransition] = useTransition();
   const [activeSlide, setActiveSlide] = useState(0);
 
@@ -55,6 +58,15 @@ export default function RegisterPage() {
       setActiveSlide((prev) => (prev + 1) % registerFeatureSlides.length);
     }, 3500);
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get("error");
+    if (err) {
+      setError(err.length > 280 ? `${err.slice(0, 280)}…` : err);
+      window.history.replaceState(null, "", "/register");
+    }
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -69,10 +81,7 @@ export default function RegisterPage() {
       if (!result.success) {
         setError(result.error || "Registration failed. Please try again.");
       } else {
-        setAccessToken(result.accessToken || null, {
-          expiresInSeconds: result.expiresIn,
-        });
-        router.replace("/dashboard");
+        setVerificationSentTo(result.email);
       }
     });
   };
@@ -90,6 +99,40 @@ export default function RegisterPage() {
               <p className="text-sm text-base-content/70">
                 Set up your workspace and start collaborating.
               </p>
+            </div>
+
+            {verificationSentTo ? (
+              <div className="rounded-box border border-success/30 bg-success/10 px-4 py-4 space-y-3 text-left">
+                <p className="text-sm font-medium text-success">
+                  Check your email
+                </p>
+                <p className="text-sm text-base-content/80">
+                  We sent a verification link to{" "}
+                  <span className="font-medium text-base-content">
+                    {verificationSentTo}
+                  </span>
+                  . Open it to confirm you own this address, then sign in with
+                  your password. Until you verify, password sign-in is blocked
+                  (Google sign-in is separate and doesn&apos;t use this step).
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => router.push("/login")}
+                >
+                  Go to sign in
+                </button>
+              </div>
+            ) : (
+              <>
+            <div className="space-y-3">
+              <GoogleSignInButton label="Sign up with Google" />
+              <p className="text-xs text-base-content/60 text-center">
+                Google confirms your address — no separate verification email from us.
+              </p>
+              <div className="divider text-xs text-base-content/50">
+                or register with email and password
+              </div>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -178,6 +221,8 @@ export default function RegisterPage() {
                 </button>
               </div>
             </form>
+              </>
+            )}
           </div>
 
           <div className="hidden md:flex flex-col justify-between bg-base-200 p-6">

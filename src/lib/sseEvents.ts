@@ -3,6 +3,8 @@
  * Align with backend docs; support legacy UPPER_SNAKE aliases during transition.
  */
 
+import type { InboxMessage } from "./messaging";
+
 export const SseWireType = {
   messageCreated: "message.created",
   messageStatusUpdated: "message.status_updated",
@@ -58,6 +60,51 @@ export function parseWorkspaceSseEvent(raw: string): {
   }
 
   return null;
+}
+
+function optDateString(v: unknown): string | undefined {
+  if (v instanceof Date) return v.toISOString();
+  if (typeof v === "string") return v;
+  return undefined;
+}
+
+function optDateStringOrNull(v: unknown): string | null {
+  if (v == null) return null;
+  const s = optDateString(v);
+  return s ?? null;
+}
+
+/** Map SSE `message` field (GET /messages/conversation list row) into local inbox state. */
+export function inboxMessageFromSseWire(raw: unknown): InboxMessage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  if (typeof o.id !== "string" || typeof o.conversationId !== "string") return null;
+  const direction =
+    o.direction === "OUTBOUND" || o.direction === "INBOUND" ? o.direction : "INBOUND";
+  return {
+    id: o.id,
+    conversationId: o.conversationId,
+    direction,
+    type: typeof o.type === "string" ? o.type : undefined,
+    text: typeof o.text === "string" ? o.text : undefined,
+    mediaId: o.mediaId == null ? null : String(o.mediaId),
+    mediaUrl: o.mediaUrl == null ? null : String(o.mediaUrl),
+    mediaMimeType: o.mediaMimeType == null ? null : String(o.mediaMimeType),
+    mediaSize: typeof o.mediaSize === "number" ? o.mediaSize : null,
+    mediaFilename:
+      o.mediaFilename == null || o.mediaFilename === undefined
+        ? null
+        : String(o.mediaFilename),
+    providerMessageId: o.providerMessageId == null ? null : String(o.providerMessageId),
+    status: typeof o.status === "string" ? o.status : undefined,
+    createdAt: optDateString(o.createdAt),
+    sentAt: optDateStringOrNull(o.sentAt),
+    deliveredAt: optDateStringOrNull(o.deliveredAt),
+    readAt: optDateStringOrNull(o.readAt),
+    errorCode: o.errorCode == null ? null : String(o.errorCode),
+    errorMessage: o.errorMessage == null ? null : String(o.errorMessage),
+    failedAt: optDateStringOrNull(o.failedAt),
+  };
 }
 
 export function isMessageCreated(type: string): boolean {

@@ -34,6 +34,9 @@ export type InboxMessage = {
   providerMessageId?: string | null;
   status?: MessageStatus | string;
   createdAt?: string;
+  sentAt?: string | null;
+  deliveredAt?: string | null;
+  readAt?: string | null;
   errorCode?: string | null;
   errorMessage?: string | null;
   failedAt?: string | null;

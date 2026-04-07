@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import type { AuthResponse } from "@/lib/api";
+import type { AuthResponse, RegisterPendingVerificationResponse } from "@/lib/api";
 import { API_BASE_URL, endpoints } from "@/lib/endpoints";
 import {
   ACCESS_TOKEN_COOKIE,
@@ -87,7 +87,10 @@ export async function registerAction(
   email: string,
   password: string,
   workspace: string
-) {
+): Promise<
+  | { success: true; requiresEmailVerification: true; email: string }
+  | { success: false; error: string }
+> {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoints.auth.register}`, {
       method: "POST",
@@ -98,23 +101,172 @@ export async function registerAction(
 
     if (!response.ok) {
       const data = await response.json().catch(() => ({}));
-      return { success: false, error: data.message || "Registration failed" };
+      return {
+        success: false,
+        error: data.message || "Registration failed",
+      };
     }
 
-    const payload = (await response.json()) as AuthResponse;
-    await setAuthCookies(payload);
+    const payload = (await response.json()) as RegisterPendingVerificationResponse;
+    if (payload.requiresEmailVerification && payload.email) {
+      return {
+        success: true,
+        requiresEmailVerification: true,
+        email: payload.email,
+      };
+    }
 
-    return {
-      success: true,
-      accessToken: payload.accessToken,
-      expiresIn: payload.expiresIn,
-    };
+    return { success: false, error: "Unexpected response from server" };
   } catch (error: unknown) {
     return {
       success: false,
       error: error instanceof Error ? error.message : "Registration failed",
     };
   }
+}
+
+/** Resend verification email (same response whether or not the address exists). */
+export async function resendVerificationAction(email: string) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}${endpoints.auth.resendVerification}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        success: false as const,
+        error: (data as { message?: string }).message || "Request failed",
+      };
+    }
+    return { success: true as const };
+  } catch (error: unknown) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Request failed",
+    };
+  }
+}
+
+export async function forgotPasswordAction(email: string) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}${endpoints.auth.forgotPassword}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        success: false as const,
+        error: (data as { message?: string }).message || "Request failed",
+      };
+    }
+    return { success: true as const };
+  } catch (error: unknown) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Request failed",
+    };
+  }
+}
+
+export async function resetPasswordAction(token: string, password: string) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}${endpoints.auth.resetPassword}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        success: false as const,
+        error: (data as { message?: string }).message || "Reset failed",
+      };
+    }
+    return { success: true as const };
+  } catch (error: unknown) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Reset failed",
+    };
+  }
+}
+
+export async function changePasswordAction(
+  currentPassword: string,
+  newPassword: string
+) {
+  try {
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+    const response = await fetch(
+      `${API_BASE_URL}${endpoints.auth.changePassword}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken
+            ? { Authorization: `Bearer ${accessToken}` }
+            : {}),
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        success: false as const,
+        error: (data as { message?: string }).message || "Change failed",
+      };
+    }
+    const payload = (await response.json()) as AuthResponse;
+    await setAuthCookies(payload);
+    return {
+      success: true as const,
+      accessToken: payload.accessToken,
+      expiresIn: payload.expiresIn,
+    };
+  } catch (error: unknown) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Change failed",
+    };
+  }
+}
+
+export async function logoutAllAction() {
+  const cookieStore = await cookies();
+  const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+  try {
+    await fetch(`${API_BASE_URL}${endpoints.auth.logoutAll}`, {
+      method: "POST",
+      headers: {
+        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      },
+      credentials: "include",
+    });
+  } catch {
+    // proceed with local cleanup
+  }
+  cookieStore.delete(ACCESS_TOKEN_COOKIE);
+  cookieStore.delete(REFRESH_TOKEN_COOKIE);
+  return { success: true as const };
 }
 
 export async function logoutAction() {

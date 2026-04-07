@@ -10,7 +10,8 @@ import {
   workspaceApi,
 } from "@/lib/api";
 import { IntegrationCard } from "@/components/integrations/IntegrationCard";
-import { Section } from "@/components/ui/Section";
+import { AccountSecurityClient } from "@/components/settings/AccountSecurityClient";
+import type { LoginHistoryEvent } from "@/lib/api";
 
 export type Workspace = {
   id: string;
@@ -53,12 +54,18 @@ export function SettingsClient({
   members,
   cloudApiConfig,
   meRole,
+  accountEmail,
+  hasPassword,
+  loginHistory,
 }: {
   workspace: Workspace;
   settings: WorkspaceSettings;
   members: Member[];
   cloudApiConfig: WorkspaceCloudApiConfigResponse | null;
   meRole: string;
+  accountEmail: string;
+  hasPassword: boolean;
+  loginHistory: LoginHistoryEvent[];
 }) {
   const router = useRouter();
   const canManageWorkspace = meRole === "OWNER" || meRole === "ADMIN";
@@ -147,7 +154,13 @@ export function SettingsClient({
   };
 
   return (
-    <Section>
+    <section className="space-y-6">
+      <AccountSecurityClient
+        accountEmail={accountEmail}
+        hasPassword={hasPassword}
+        loginHistory={loginHistory}
+      />
+
       <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-medium">Workspace info</h2>
@@ -405,7 +418,7 @@ export function SettingsClient({
           Manage team
         </Link>
       </div>
-    </Section>
+    </section>
   );
 }
 

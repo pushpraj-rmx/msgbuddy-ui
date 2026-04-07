@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { contactsApi, type ContactsListSort, tagsApi } from "@/lib/api";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import {
@@ -117,6 +118,7 @@ export function ContactsListClient({
 }) {
   const { setContent: setRightPanelContent, clearContent: clearRightPanelContent } =
     useRightPanel();
+  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const [displayPageIndex, setDisplayPageIndex] = useState(0);
@@ -258,7 +260,7 @@ export function ContactsListClient({
     setRightPanelContent({
       source: "contacts",
       title: "Contact",
-      openAfter: true,
+      openAfter: isXlUp,
       content: (
         <ContactDetailPanelContent
           contactId={selectedContactId}
@@ -276,6 +278,7 @@ export function ContactsListClient({
     selectedContactId,
     selectedContactRow,
     setRightPanelContent,
+    isXlUp,
   ]);
 
   useEffect(() => {

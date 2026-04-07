@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Image from "next/image";
-import { loginAction } from "@/app/actions/auth";
+import { loginAction, resendVerificationAction } from "@/app/actions/auth";
 import { setAccessToken } from "@/lib/auth";
 import { ErrorState } from "@/components/ui/states";
 import { BrandLogo } from "@/components/BrandLogo";
+import { GoogleSignInButton } from "@/components/auth/GoogleSignInButton";
 
 const loginFeatureSlides = [
   {
@@ -44,6 +46,9 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [verifiedNotice, setVerifiedNotice] = useState(false);
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendPending, setResendPending] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [activeSlide, setActiveSlide] = useState(0);
 
@@ -52,6 +57,27 @@ export default function LoginPage() {
       setActiveSlide((prev) => (prev + 1) % loginFeatureSlides.length);
     }, 3500);
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("verified") === "1") {
+      setVerifiedNotice(true);
+      window.history.replaceState(null, "", "/login");
+    }
+    const err = q.get("error");
+    if (err) {
+      let message = err.length > 280 ? `${err.slice(0, 280)}…` : err;
+      if (err === "verify_failed") {
+        message =
+          "That verification link is invalid or expired. Use “Resend verification email” below if you still need to verify.";
+      }
+      if (err === "missing_verification_token") {
+        message = "Invalid verification link.";
+      }
+      setError(message);
+      window.history.replaceState(null, "", "/login");
+    }
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -70,6 +96,26 @@ export default function LoginPage() {
     });
   };
 
+  const handleResendVerification = () => {
+    setResendMessage(null);
+    if (!email.trim()) {
+      setResendMessage("Enter your email address first.");
+      return;
+    }
+    setResendPending(true);
+    void (async () => {
+      const result = await resendVerificationAction(email);
+      setResendPending(false);
+      if (result.success) {
+        setResendMessage(
+          "If an account exists for this address and is not verified yet, we sent a new link."
+        );
+      } else {
+        setResendMessage(result.error);
+      }
+    })();
+  };
+
   return (
     <div className="min-h-screen bg-base-100 p-6 grid place-items-center">
       <div className="w-full max-w-5xl overflow-hidden rounded-box border border-base-300 bg-base-100">
@@ -85,6 +131,23 @@ export default function LoginPage() {
               </p>
             </div>
 
+            <div className="space-y-3">
+              <GoogleSignInButton />
+              <p className="text-xs text-base-content/60 text-center">
+                No inbox link required — Google handles sign-in.
+              </p>
+              <div className="divider text-xs text-base-content/50">or</div>
+            </div>
+
+            {verifiedNotice ? (
+              <div
+                role="status"
+                className="rounded-box border border-success/30 bg-success/10 px-4 py-3 text-sm text-success"
+              >
+                Email verified. You can sign in below.
+              </div>
+            ) : null}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               {error ? <ErrorState message={error} /> : null}
               <div className="space-y-2">
@@ -99,7 +162,15 @@ export default function LoginPage() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm text-base-content/70">Password</label>
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-sm text-base-content/70">Password</label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-sm link link-primary"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
                 <input
                   type="password"
                   placeholder="Enter your password"
@@ -134,6 +205,31 @@ export default function LoginPage() {
                 </button>
               </div>
             </form>
+
+            <div className="rounded-box border border-base-300 bg-base-200/50 p-4 space-y-2">
+              <p className="text-xs font-medium text-base-content/70">
+                Registered with email &amp; password but didn&apos;t get a verification
+                link? (Google sign-in doesn&apos;t use this.)
+              </p>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm w-full"
+                disabled={resendPending}
+                onClick={handleResendVerification}
+              >
+                {resendPending ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs" />
+                    Sending…
+                  </>
+                ) : (
+                  "Resend verification email"
+                )}
+              </button>
+              {resendMessage ? (
+                <p className="text-xs text-base-content/70">{resendMessage}</p>
+              ) : null}
+            </div>
           </div>
 
           <div className="hidden md:flex flex-col justify-between bg-base-200 p-6">

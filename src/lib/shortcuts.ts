@@ -36,7 +36,7 @@ export const KEYBOARD_SHORTCUTS_CATALOG: ReadonlyArray<{
   {
     keys: "Esc",
     description:
-      "Close details panel when focus is not in a text field; also closes search dropdown, mobile search overlay, or context menu when one is open",
+      "Close details pane when focus is not in a text field; also closes search dropdown, mobile search overlay, or context menu when one is open",
   },
   {
     keys: "R",

@@ -1,12 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter, Manrope } from "next/font/google";
 import "./globals.css";
+import { MuiThemeProvider } from "@/providers/MuiThemeProvider";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { getAppOrigin } from "@/lib/site";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+/** Stitch Buddy Soft UI: Inter body, Manrope headlines */
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const manrope = Manrope({
+  variable: "--font-manrope",
+  subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -41,9 +50,11 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${manrope.variable} ${geistMono.variable} font-sans antialiased`}
       >
-        <QueryProvider>{children}</QueryProvider>
+        <QueryProvider>
+          <MuiThemeProvider>{children}</MuiThemeProvider>
+        </QueryProvider>
       </body>
     </html>
   );

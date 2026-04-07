@@ -67,16 +67,15 @@ export function AppLayout({
           }
         />
         <div
-          className={`app-shell-drawer drawer h-full min-h-0 flex-1 overflow-hidden bg-base-100 ${
-            isDesktopSidebarOpen ? "lg:drawer-open" : ""
-          }`}
+          className={`app-shell-drawer drawer h-full min-h-0 flex-1 overflow-hidden bg-base-100 ${isDesktopSidebarOpen ? "lg:drawer-open" : ""
+            }`}
         >
           <input id={DRAWER_ID} type="checkbox" className="drawer-toggle" />
           <div className="drawer-content flex h-full min-h-0 flex-1 flex-col overflow-hidden">
             <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
-              <div className="flex min-h-0 flex-1 overflow-hidden">
-                {/* flex column + overflow-hidden so height is bounded; pages scroll inside PageContainer (overflow-auto) or their own roots */}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+                {/* Main + details pane: split row so content shrinks when details is open (no overlay). */}
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-5">
                   {children}
                 </div>
                 <GlobalRightPanel />

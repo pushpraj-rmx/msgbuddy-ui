@@ -4,7 +4,7 @@ export function PageContainer({
   children,
   className = "",
 }: {
-  children: ReactNode; w
+  children: ReactNode;
   className?: string;
 }) {
   return (

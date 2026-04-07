@@ -8,14 +8,14 @@ import MenuRounded from "@mui/icons-material/MenuRounded";
 import NotificationsRounded from "@mui/icons-material/NotificationsRounded";
 import SearchRounded from "@mui/icons-material/SearchRounded";
 import ViewSidebarRounded from "@mui/icons-material/ViewSidebarRounded";
-import KeyboardDoubleArrowLeftRounded from "@mui/icons-material/KeyboardDoubleArrowLeftRounded";
-import KeyboardDoubleArrowRightRounded from "@mui/icons-material/KeyboardDoubleArrowRightRounded";
+import ArticleRounded from "@mui/icons-material/ArticleRounded";
 import type { MeResponse } from "@/lib/api";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { logoutAction } from "@/app/actions/auth";
 import { clearToken } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationSSE, useNotifications } from "@/hooks/use-notifications";
+import { usePushSubscription } from "@/hooks/use-push-subscription";
 import { getPageTitle } from "@/lib/navigation";
 import { GlobalSearch } from "@/components/GlobalSearch";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -60,8 +60,13 @@ export function Topbar({
     limit: 8,
   });
   useNotificationSSE(workspaceId);
-  const { isOpen: isRightPanelOpen, open: openRightPanel, close: closeRightPanel } =
-    useRightPanel();
+  const { permission, requestAndSubscribe } = usePushSubscription(workspaceId);
+  const {
+    isOpen: isRightPanelOpen,
+    open: openRightPanel,
+    close: closeRightPanel,
+    panel: rightPanel,
+  } = useRightPanel();
 
   const handleLogout = async () => {
     clearToken();
@@ -150,23 +155,23 @@ export function Topbar({
           <SearchRounded className="h-5 w-5" />
         </button>
         <ThemeToggle />
-        <button
-          type="button"
-          className="btn btn-ghost btn-square hidden xl:inline-flex"
-          aria-label={
-            isRightPanelOpen ? "Collapse details panel" : "Expand details panel"
-          }
-          title={isRightPanelOpen ? "Hide details panel" : "Show details panel"}
-          onClick={() =>
-            isRightPanelOpen ? closeRightPanel() : openRightPanel()
-          }
-        >
-          {isRightPanelOpen ? (
-            <KeyboardDoubleArrowRightRounded className="h-5 w-5" />
-          ) : (
-            <KeyboardDoubleArrowLeftRounded className="h-5 w-5" />
-          )}
-        </button>
+        {isRightPanelOpen || rightPanel?.content ? (
+          <button
+            type="button"
+            className="btn btn-ghost btn-square hidden xl:inline-flex"
+            aria-label={isRightPanelOpen ? "Close details" : "Open details"}
+            title={
+              isRightPanelOpen
+                ? "Close details pane"
+                : "Open details pane"
+            }
+            onClick={() =>
+              isRightPanelOpen ? closeRightPanel() : openRightPanel()
+            }
+          >
+            <ArticleRounded className="h-5 w-5" />
+          </button>
+        ) : null}
         <div className="dropdown dropdown-end">
           <button
             tabIndex={0}
@@ -197,6 +202,27 @@ export function Topbar({
                   Mark all as read
                 </button>
               </div>
+              {permission === "default" && (
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-2 rounded-box border border-base-300 bg-base-200 px-3 py-2 text-left text-xs transition-colors hover:bg-base-300"
+                  onClick={requestAndSubscribe}
+                >
+                  <NotificationsRounded className="h-4 w-4 shrink-0 text-primary" />
+                  <span>
+                    <span className="font-medium">Enable push notifications</span>
+                    <span className="block text-base-content/60">
+                      Get alerted even when the tab is closed
+                    </span>
+                  </span>
+                </button>
+              )}
+              {permission === "denied" && (
+                <div className="rounded-box border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-content">
+                  Push notifications are blocked. Allow them in your browser
+                  settings to receive alerts.
+                </div>
+              )}
               <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                 {listQuery.isLoading ? (
                   <div className="text-xs text-base-content/60">Loading...</div>

@@ -47,11 +47,12 @@ import {
   isContactUpdated,
   isConversationPresenceUpdated,
   isConversationUpdated,
+  inboxMessageFromSseWire,
   isMessageCreated,
   isMessageStatusUpdated,
   parseWorkspaceSseEvent,
 } from "@/lib/sseEvents";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
@@ -264,6 +265,7 @@ export function InboxClient({
 
   const searchParams = useSearchParams();
   const isLgUp = useMediaQuery("(min-width: 1024px)");
+  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
   const [mobilePane, setMobilePane] = useState<"list" | "thread">("list");
   const handledHandoffKeyRef = useRef<string | null>(null);
   const preserveStartContactSelectionRef = useRef(false);
@@ -292,6 +294,18 @@ export function InboxClient({
     );
     return wa?.id ?? null;
   }, [selectedTemplateId, templateOptions]);
+
+  /** Shown on hover on the “Free chat” control (replaces a full-width policy alert). */
+  const freeChatPolicyTip = useMemo(() => {
+    if (policyLoading) return "Checking send policy…";
+    if (sendPolicy?.templateRequired) {
+      return "Template required: this chat is outside the 24h customer-care window.";
+    }
+    if (sendPolicy) {
+      return "Free chat allowed in the current customer-care window.";
+    }
+    return undefined;
+  }, [policyLoading, sendPolicy]);
 
   useEffect(() => {
     try {
@@ -521,12 +535,33 @@ export function InboxClient({
         sortBy: "updatedAt",
         sortOrder: "desc",
       });
+      const candidates = (res.items ?? [])
+        .filter((t) => t.isActive)
+        .filter((t) =>
+          (t.channelTemplates ?? []).some((ct) => ct.channel === "WHATSAPP")
+        );
+
+      // List rows often omit or differ on `channelTemplates[].providerStatus`.
+      // Same source of truth as send: `/channel-templates/:id/state` → latestSendableVersion.
+      const approved = await Promise.all(
+        candidates.map(async (t) => {
+          const wa = (t.channelTemplates ?? []).find(
+            (ct) => ct.channel === "WHATSAPP"
+          );
+          if (!wa?.id) return null;
+          try {
+            const state = await channelTemplatesApi.state(wa.id);
+            const v = state.latestSendableVersion;
+            if (v?.status === "PROVIDER_APPROVED") return t;
+          } catch {
+            return null;
+          }
+          return null;
+        })
+      );
+
       setTemplateOptions(
-        (res.items ?? [])
-          .filter((t) => t.isActive)
-          .filter((t) =>
-            (t.channelTemplates ?? []).some((ct) => ct.channel === "WHATSAPP")
-          )
+        approved.filter((t): t is Template => t != null)
       );
     } catch (error: unknown) {
       setTemplatesError(
@@ -896,15 +931,49 @@ export function InboxClient({
 
         if (isMessageCreated(ev.type)) {
           fetchConversations(status, null, false);
-          if (selectedId) {
-            void fetchMessages(selectedId, { silent: true });
+          const convId =
+            typeof ev.data.conversationId === "string" ? ev.data.conversationId : "";
+          if (selectedId && convId === selectedId) {
+            const wire = inboxMessageFromSseWire(ev.data.message);
+            if (wire) {
+              setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.id === wire.id);
+                if (idx >= 0) {
+                  const next = [...prev];
+                  next[idx] = { ...next[idx], ...wire };
+                  return next;
+                }
+                const next = [...prev, wire];
+                next.sort((a, b) => {
+                  const ta = Date.parse(a.createdAt ?? "") || 0;
+                  const tb = Date.parse(b.createdAt ?? "") || 0;
+                  return ta - tb;
+                });
+                return next;
+              });
+            } else {
+              void fetchMessages(selectedId, { silent: true });
+            }
           }
           return;
         }
 
         if (isMessageStatusUpdated(ev.type)) {
-          if (selectedId) {
-            void fetchMessages(selectedId, { silent: true });
+          const convId =
+            typeof ev.data.conversationId === "string" ? ev.data.conversationId : "";
+          if (selectedId && convId === selectedId) {
+            const wire = inboxMessageFromSseWire(ev.data.message);
+            if (wire?.id) {
+              setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.id === wire.id);
+                if (idx < 0) return prev;
+                const next = [...prev];
+                next[idx] = { ...next[idx], ...wire };
+                return next;
+              });
+            } else {
+              void fetchMessages(selectedId, { silent: true });
+            }
           }
           return;
         }
@@ -928,10 +997,17 @@ export function InboxClient({
                 : ""
             )
             .filter(Boolean);
-          setViewersByConversation((prev) => ({
-            ...prev,
-            [conversationId]: viewerIds,
-          }));
+          setViewersByConversation((prev) => {
+            const cur = prev[conversationId];
+            if (
+              cur &&
+              cur.length === viewerIds.length &&
+              cur.every((id, i) => id === viewerIds[i])
+            ) {
+              return prev;
+            }
+            return { ...prev, [conversationId]: viewerIds };
+          });
           return;
         }
 
@@ -1688,9 +1764,9 @@ export function InboxClient({
   const detailSelectionKey =
     selectedConversation?.id ?? startContact?.id ?? null;
   useEffect(() => {
-    if (!detailSelectionKey) return;
+    if (!detailSelectionKey || !isXlUp) return;
     openRightPanel();
-  }, [detailSelectionKey, openRightPanel]);
+  }, [detailSelectionKey, openRightPanel, isXlUp]);
 
   useEffect(() => {
     return () => clearRightPanelContent("inbox");
@@ -2139,33 +2215,38 @@ export function InboxClient({
                         {policyError}
                       </div>
                     ) : null}
-                    {sendPolicy ? (
-                      <div
-                        role="status"
-                        className={`alert py-2 text-sm ${sendPolicy.templateRequired
-                          ? "alert-warning alert-soft"
-                          : "alert-success alert-soft"
-                          }`}
-                      >
-                        {sendPolicy.templateRequired
-                          ? "Template required: this chat is outside the 24h customer-care window."
-                          : "Free chat allowed in the current customer-care window."}
-                      </div>
-                    ) : null}
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs text-base-content/65">
                         Send mode
                       </span>
                       <div className="join">
-                        <button
-                          type="button"
-                          className={`btn btn-xs join-item ${!useTemplateSend ? "btn-primary" : "btn-ghost"
-                            }`}
-                          disabled={sendPolicy?.templateRequired === true}
-                          onClick={() => setUseTemplateSend(false)}
+                        <div
+                          className={
+                            freeChatPolicyTip
+                              ? "tooltip tooltip-top join-item"
+                              : "join-item"
+                          }
+                          {...(freeChatPolicyTip
+                            ? { "data-tip": freeChatPolicyTip }
+                            : {})}
                         >
-                          Free chat
-                        </button>
+                          <button
+                            type="button"
+                            className={`btn btn-xs w-full ${!useTemplateSend ? "btn-primary" : "btn-ghost"
+                              }`}
+                            disabled={sendPolicy?.templateRequired === true}
+                            onClick={() => setUseTemplateSend(false)}
+                            aria-label={
+                              sendPolicy?.templateRequired
+                                ? "Free chat unavailable: outside the customer-care window. Use a template."
+                                : sendPolicy
+                                  ? "Free chat: inside the customer-care window."
+                                  : "Free chat"
+                            }
+                          >
+                            Free chat
+                          </button>
+                        </div>
                         <button
                           type="button"
                           className={`btn btn-xs join-item ${useTemplateSend ? "btn-primary" : "btn-ghost"

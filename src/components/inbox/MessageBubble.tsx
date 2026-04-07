@@ -104,7 +104,8 @@ function formatMessageTimeShort(iso?: string | null): string | null {
 function bubbleClassName(message: InboxMessage, failed: boolean): string {
   if (failed) return "chat-bubble-error";
   if (isProcessingMessage(message)) return "chat-bubble-neutral";
-  return "chat-bubble-primary";
+  if (message.direction === "OUTBOUND") return "chat-bubble-primary";
+  return "chat-bubble-secondary";
 }
 
 /** 1px frame on images; color matches bubble variant. */
@@ -115,7 +116,8 @@ function imageFrameClassForBubble(
   const base = "border rounded-box";
   if (failed) return `${base} border-error-content/40`;
   if (isProcessingMessage(message)) return `${base} border-neutral-content/35`;
-  return `${base} border-primary-content/35`;
+  if (message.direction === "OUTBOUND") return `${base} border-primary-content/35`;
+  return `${base} border-secondary-content/35`;
 }
 
 function isRichMediaBubble(message: InboxMessage): boolean {
@@ -419,7 +421,7 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
       }`}
     >
       <div
-        className={`chat-bubble max-w-[min(85%,28rem)] rounded-box leading-relaxed ${
+        className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden leading-relaxed ${
           documentBubble ? "p-0" : richMedia ? "p-1" : "px-3 py-2"
         } ${bubbleClassName(message, failed)}`}
       >
