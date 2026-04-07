@@ -7,7 +7,7 @@ import {
   type VerificationCodeMethod,
   type WhatsAppOnboardingPhase,
 } from "@/lib/api";
-import type { AxiosError } from "axios";
+import { ApiError } from "@/lib/axios";
 
 const ONBOARDING_QUERY_KEY = "onboarding-status";
 
@@ -23,11 +23,13 @@ function defaultMetaLanguage(): string {
 }
 
 function getErrorMessage(err: unknown): string {
-  const ax = err as AxiosError<{ message?: string | string[]; statusCode?: number }>;
-  const msg = ax.response?.data?.message;
-  if (Array.isArray(msg)) return msg.join(", ");
-  if (typeof msg === "string") return msg;
-  return ax.message || "Request failed.";
+  if (err instanceof ApiError) {
+    const data = err.data as { message?: string | string[] } | undefined;
+    const msg = data?.message;
+    if (Array.isArray(msg)) return msg.join(", ");
+    if (typeof msg === "string") return msg;
+  }
+  return err instanceof Error ? err.message : "Request failed.";
 }
 
 export type WhatsAppOnboardingPanelProps = {
@@ -104,8 +106,7 @@ export function WhatsAppOnboardingPanel({
       await invalidate();
     },
     onError: (e) => {
-      const ax = e as AxiosError<{ message?: string | string[] }>;
-      const status = ax.response?.status;
+      const status = e instanceof ApiError ? e.status : undefined;
       const base = getErrorMessage(e);
       if (status === 429) {
         setLocalError(

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   useAssignChannelAccount,
-  useBspCredentials,
   useChannelAccounts,
   useConnectedClientBusinesses,
   usePlatformAuditLogs,
@@ -17,10 +16,9 @@ import {
   useReactivateWorkspace,
   useSuspendWorkspace,
   useUpdatePlatformRole,
-  useUpsertBspCredential,
 } from "@/hooks/use-platform";
 import { isSuperAdmin } from "@/lib/platform-access";
-import type { PlatformBsp, PlatformRole, PlatformWorkspaceStatus } from "@/lib/types";
+import type { PlatformRole, PlatformWorkspaceStatus } from "@/lib/types";
 
 type TabKey =
   | "workspaces"
@@ -28,7 +26,6 @@ type TabKey =
   | "webhookLogs"
   | "usageEvents"
   | "auditLogs"
-  | "bspCredentials"
   | "channelAccounts"
   | "connectedClientBusinesses";
 
@@ -55,7 +52,6 @@ const WORKSPACE_STATUSES: PlatformWorkspaceStatus[] = [
 ];
 
 const PLATFORM_ROLES: PlatformRole[] = ["SUPERADMIN", "SUPPORT", "NONE"];
-const BSPS: PlatformBsp[] = ["TWILIO", "INTERAKT", "AISENSY", "OTHER"];
 
 export function PlatformConsoleClient({
   platformRole,
@@ -71,7 +67,6 @@ export function PlatformConsoleClient({
             { key: "users", label: "Users" },
             { key: "webhookLogs", label: "Webhook Logs" },
             { key: "usageEvents", label: "Usage Events" },
-            { key: "bspCredentials", label: "BSP Credentials" },
             { key: "channelAccounts", label: "Channel Accounts" },
             {
               key: "connectedClientBusinesses",
@@ -109,7 +104,6 @@ export function PlatformConsoleClient({
       {tab === "webhookLogs" && <WebhookLogsTab />}
       {tab === "usageEvents" && <UsageEventsTab />}
       {tab === "auditLogs" && <AuditLogsTab />}
-      {tab === "bspCredentials" && superAdmin && <BspCredentialsTab />}
       {tab === "channelAccounts" && superAdmin && <ChannelAccountsTab />}
       {tab === "connectedClientBusinesses" && superAdmin && (
         <ConnectedClientBusinessesTab />
@@ -993,147 +987,6 @@ function AuditLogsTab() {
         onPrev={() => setOffset((v) => Math.max(0, v - limit))}
         onNext={() => setOffset((v) => v + limit)}
       />
-    </div>
-  );
-}
-
-function BspCredentialsTab() {
-  const [bsp, setBsp] = useState<PlatformBsp>("TWILIO");
-  const [credentialsJson, setCredentialsJson] = useState("{}");
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [webhookSecret, setWebhookSecret] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-
-  const list = useBspCredentials();
-  const upsert = useUpsertBspCredential();
-
-  return (
-    <div className="space-y-4">
-      {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
-      )}
-      {submitError && (
-        <div role="alert" className="alert alert-error">
-          <span>{submitError}</span>
-        </div>
-      )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
-          <thead>
-            <tr>
-              <th>BSP</th>
-              <th>Webhook URL</th>
-              <th>Secret</th>
-              <th>Active</th>
-              <th>Credential keys</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.data?.map((item) => (
-              <tr key={item.id}>
-                <td>{item.bsp}</td>
-                <td>{item.webhookUrl || "-"}</td>
-                <td>{item.hasWebhookSecret ? "Yes" : "No"}</td>
-                <td>{item.isActive ? "Yes" : "No"}</td>
-                <td>{item.credentialKeys.join(", ") || "-"}</td>
-              </tr>
-            ))}
-            {!list.isLoading && !list.data?.length && (
-              <tr>
-                <td colSpan={5} className="text-center text-base-content/60">
-                  No BSP credentials found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="rounded-box border border-base-300 bg-base-100">
-        <div className="gap-3 p-4 sm:p-5">
-          <h2 className="text-base font-semibold">Upsert BSP Credential</h2>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <select
-              className="select select-bordered"
-              value={bsp}
-              onChange={(e) => setBsp(e.target.value as PlatformBsp)}
-            >
-              {BSPS.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-            </select>
-            <input
-              className="input input-bordered"
-              placeholder="Webhook URL"
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-            />
-            <input
-              className="input input-bordered"
-              placeholder="Webhook Secret (optional)"
-              value={webhookSecret}
-              onChange={(e) => setWebhookSecret(e.target.value)}
-            />
-            <label className="label cursor-pointer justify-start gap-2">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-              />
-              <span className="label-text">Active</span>
-            </label>
-          </div>
-          <textarea
-            className="textarea textarea-bordered min-h-32"
-            placeholder='{"accountSid":"AC...", "authToken":"..."}'
-            value={credentialsJson}
-            onChange={(e) => setCredentialsJson(e.target.value)}
-          />
-          <div className="flex justify-end">
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={upsert.isPending}
-              onClick={() => {
-                setSubmitError(null);
-                let parsed: Record<string, string>;
-                try {
-                  const value = JSON.parse(credentialsJson);
-                  if (!value || typeof value !== "object") {
-                    throw new Error("Credentials JSON must be an object.");
-                  }
-                  parsed = Object.fromEntries(
-                    Object.entries(value).map(([k, v]) => [k, String(v)])
-                  );
-                } catch {
-                  setSubmitError("Credentials JSON is invalid.");
-                  return;
-                }
-
-                upsert.mutate(
-                  {
-                    bsp,
-                    data: {
-                      credentials: parsed,
-                      webhookUrl: webhookUrl || undefined,
-                      webhookSecret: webhookSecret || undefined,
-                      isActive,
-                    },
-                  },
-                  { onError: (error) => setSubmitError(getApiError(error)) }
-                );
-              }}
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

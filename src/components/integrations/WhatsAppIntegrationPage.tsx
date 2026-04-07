@@ -6,7 +6,7 @@ import { endpoints } from "@/lib/endpoints";
 import { WhatsAppOnboardingPanel } from "@/components/integrations/WhatsAppOnboardingPanel";
 import { whatsappApi, type WorkspaceCloudApiConfigResponse } from "@/lib/api";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AxiosError } from "axios";
+import { ApiError } from "@/lib/axios";
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -451,10 +451,10 @@ export function WhatsAppIntegrationPage({
   }
 
   if (status === "connected") {
-    const queryError = phoneStatusQuery.error as AxiosError<StatusErrorBody> | null;
-    const errorStatus = queryError?.response?.status;
+    const queryError = phoneStatusQuery.error as ApiError | null;
+    const errorStatus = queryError?.status;
     const errorMessage =
-      queryError?.response?.data?.message ||
+      (queryError?.data as StatusErrorBody | undefined)?.message ||
       queryError?.message ||
       "Failed to load phone number status.";
 

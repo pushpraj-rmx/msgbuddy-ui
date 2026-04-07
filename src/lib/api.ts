@@ -34,8 +34,6 @@ import type {
   PlatformWebhookLog,
   PlatformUsageEvent,
   PlatformAdminAuditLog,
-  PlatformBspCredential,
-  PlatformBsp,
   PlatformChannelAccount,
   OnboardingWabaListResponse,
   NotificationItem,
@@ -158,16 +156,12 @@ export interface MeResponse {
 
 export const authApi = {
   register: async (data: RegisterRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>(endpoints.auth.register, data, {
-      withCredentials: true,
-    });
+    const response = await api.post<AuthResponse>(endpoints.auth.register, data);
     return response.data;
   },
 
   login: async (data: LoginRequest): Promise<AuthResponse> => {
-    const response = await api.post<AuthResponse>(endpoints.auth.login, data, {
-      withCredentials: true,
-    });
+    const response = await api.post<AuthResponse>(endpoints.auth.login, data);
     return response.data;
   },
 
@@ -520,10 +514,12 @@ export const contactsApi = {
     file: File,
     options?: { defaultCountry?: string }
   ): Promise<ImportResult> => {
-    const response = await api.postForm<ImportResult>(
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post<ImportResult>(
       endpoints.contacts.import,
-      { file },
-      { params: { defaultCountry: options?.defaultCountry ?? "IN" } }
+      formData,
+      { params: options?.defaultCountry ? { defaultCountry: options.defaultCountry } : undefined }
     );
     return response.data;
   },
@@ -1072,9 +1068,7 @@ export const mediaApi = {
   upload: async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await api.post(endpoints.media.upload, formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    const response = await api.post(endpoints.media.upload, formData);
     return response.data;
   },
   uploadForTemplate: async (
@@ -1084,8 +1078,7 @@ export const mediaApi = {
     formData.append("file", file);
     const response = await api.post<MediaUploadForTemplateResponse>(
       endpoints.media.uploadForTemplate,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } }
+      formData
     );
     return response.data;
   },
@@ -1422,8 +1415,6 @@ export const usageApi = {
   },
 };
 
-// TODO: BSP | Legacy provider; remove or keep when BSP support is finalized
-export type WorkspaceProviderType = "BSP" | "CLOUD_API";
 export type CloudApiConnectionStatus =
   | "ACTIVE"
   | "INACTIVE"
@@ -1447,15 +1438,6 @@ export type VerificationCodeMethod = "SMS" | "VOICE";
 export interface WorkspaceSettingsPayload {
   timezone?: string;
   locale?: string;
-  /** TODO: BSP | BSP WhatsApp credentials in workspace settings */
-  whatsappPhoneNumberId?: string;
-  whatsappBusinessId?: string;
-  whatsappAccessToken?: string;
-  whatsappWebhookSecret?: string;
-}
-
-export interface WorkspaceMessagingConfigPayload {
-  providerType: WorkspaceProviderType;
 }
 
 export interface WorkspaceCloudApiConfigPayload {
@@ -1602,20 +1584,6 @@ export const workspaceApi = {
     data: Partial<WorkspaceSettingsPayload>
   ) => {
     const response = await api.put(endpoints.workspaces.settings(id), data);
-    return response.data;
-  },
-  getMessagingConfig: async (id: string) => {
-    const response = await api.get(endpoints.workspaces.messagingConfig(id));
-    return response.data as { providerType: WorkspaceProviderType };
-  },
-  updateMessagingConfig: async (
-    id: string,
-    data: WorkspaceMessagingConfigPayload
-  ) => {
-    const response = await api.put(
-      endpoints.workspaces.messagingConfig(id),
-      data
-    );
     return response.data;
   },
   getCloudApiConfig: async (id: string) => {
@@ -1971,27 +1939,6 @@ export const platformApi = {
   listConnectedClientBusinesses: async (): Promise<ConnectedClientBusiness[]> => {
     const response = await api.get<ConnectedClientBusiness[]>(
       endpoints.platform.connectedClientBusinesses
-    );
-    return response.data;
-  },
-  listBspCredentials: async (): Promise<PlatformBspCredential[]> => {
-    const response = await api.get<PlatformBspCredential[]>(
-      endpoints.platform.bspCredentials
-    );
-    return response.data;
-  },
-  upsertBspCredential: async (
-    bsp: PlatformBsp,
-    data: {
-      credentials: Record<string, string>;
-      webhookUrl?: string;
-      webhookSecret?: string;
-      isActive?: boolean;
-    }
-  ): Promise<PlatformBspCredential> => {
-    const response = await api.put<PlatformBspCredential>(
-      endpoints.platform.bspCredentialByBsp(bsp),
-      data
     );
     return response.data;
   },

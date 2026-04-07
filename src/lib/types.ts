@@ -523,16 +523,6 @@ export type PlatformAdminAuditLog = {
   createdAt: string;
 };
 
-export type PlatformBsp = "TWILIO" | "INTERAKT" | "AISENSY" | "OTHER";
-
-export type PlatformBspCredential = {
-  id: string;
-  bsp: PlatformBsp;
-  webhookUrl?: string | null;
-  hasWebhookSecret: boolean;
-  isActive: boolean;
-  credentialKeys: string[];
-};
 
 export type PlatformChannelAccount = {
   id: string;

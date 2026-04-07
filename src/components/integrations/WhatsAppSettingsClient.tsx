@@ -9,14 +9,12 @@ import {
   whatsappApi,
   type WhatsAppConnection,
   type WhatsAppPhoneStatus,
-  type WorkspaceProviderType,
   type WorkspaceCloudApiConfigResponse,
-  type WorkspaceMessagingConfigPayload,
   type WorkspaceSettingsPayload,
   type WorkspaceCloudApiConfigPayload,
 } from "@/lib/api";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AxiosError } from "axios";
+import { ApiError } from "@/lib/axios";
 
 export type WorkspaceSettings = Partial<WorkspaceSettingsPayload> & {
   timezone?: string;
@@ -38,10 +36,10 @@ function ConnectionRow({
     retry: 1,
   });
 
-  const queryError = phoneStatusQuery.error as AxiosError<StatusErrorBody> | null;
-  const errorStatus = queryError?.response?.status;
+  const queryError = phoneStatusQuery.error as ApiError | null;
+  const errorStatus = queryError?.status;
   const errorMessage =
-    queryError?.response?.data?.message ||
+    (queryError?.data as StatusErrorBody | undefined)?.message ||
     queryError?.message ||
     "Failed to load phone number status.";
 
@@ -150,30 +148,14 @@ function ConnectionRow({
 
 export function WhatsAppSettingsClient({
   workspaceId,
-  settings,
-  messagingConfig,
+  settings: _settings,
   cloudApiConfig,
 }: {
   workspaceId: string;
   settings: WorkspaceSettings;
-  messagingConfig: WorkspaceMessagingConfigPayload;
   cloudApiConfig: WorkspaceCloudApiConfigResponse | null;
 }) {
   const queryClient = useQueryClient();
-  const [providerType, setProviderType] =
-    useState<WorkspaceProviderType>(messagingConfig.providerType);
-  const [messagingSaving, setMessagingSaving] = useState(false);
-  const [messagingError, setMessagingError] = useState<string | null>(null);
-
-  // TODO: BSP | BSP form state; complete BSP-specific validation/UX later
-  const [bspForm, setBspForm] = useState({
-    whatsappPhoneNumberId: settings.whatsappPhoneNumberId ?? "",
-    whatsappBusinessId: settings.whatsappBusinessId ?? "",
-    whatsappAccessToken: settings.whatsappAccessToken ?? "",
-    whatsappWebhookSecret: settings.whatsappWebhookSecret ?? "",
-  });
-  const [bspSaving, setBspSaving] = useState(false);
-  const [bspError, setBspError] = useState<string | null>(null);
 
   const [cloudForm, setCloudForm] = useState({
     phoneNumberId: cloudApiConfig?.phoneNumberId ?? "",
@@ -198,40 +180,6 @@ export function WhatsAppSettingsClient({
       await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connections"] });
     },
   });
-
-  const handleProviderChange = async (next: WorkspaceProviderType) => {
-    setMessagingError(null);
-    setMessagingSaving(true);
-    try {
-      await workspaceApi.updateMessagingConfig(workspaceId, {
-        providerType: next,
-      });
-      setProviderType(next);
-    } catch (e) {
-      setMessagingError(e instanceof Error ? e.message : "Failed to update provider");
-    } finally {
-      setMessagingSaving(false);
-    }
-  };
-
-  // TODO: BSP | Save BSP WhatsApp credentials; add validation / success feedback later
-  const handleBspSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBspError(null);
-    setBspSaving(true);
-    try {
-      await workspaceApi.updateSettings(workspaceId, {
-        whatsappPhoneNumberId: bspForm.whatsappPhoneNumberId || undefined,
-        whatsappBusinessId: bspForm.whatsappBusinessId || undefined,
-        whatsappAccessToken: bspForm.whatsappAccessToken || undefined,
-        whatsappWebhookSecret: bspForm.whatsappWebhookSecret || undefined,
-      });
-    } catch (e) {
-      setBspError(e instanceof Error ? e.message : "Failed to save BSP settings");
-    } finally {
-      setBspSaving(false);
-    }
-  };
 
   const handleCloudSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -353,123 +301,6 @@ export function WhatsAppSettingsClient({
       </div>
 
       <div className="card bg-base-200 shadow-sm">
-        <div className="card-body">
-          <h2 className="card-title text-lg">Provider</h2>
-          <p className="text-sm text-base-content/60">
-            Choose BSP (legacy) or Meta Cloud API for WhatsApp.
-          </p>
-          <div className="flex flex-wrap gap-4 pt-2">
-            <label className="label cursor-pointer gap-2">
-              <input
-                type="radio"
-                name="provider"
-                className="radio radio-primary"
-                checked={providerType === "BSP"}
-                onChange={() => handleProviderChange("BSP")}
-                disabled={messagingSaving}
-              />
-              <span>BSP (legacy)</span>
-            </label>
-            <label className="label cursor-pointer gap-2">
-              <input
-                type="radio"
-                name="provider"
-                className="radio radio-primary"
-                checked={providerType === "CLOUD_API"}
-                onChange={() => handleProviderChange("CLOUD_API")}
-                disabled={messagingSaving}
-              />
-              <span>Cloud API</span>
-            </label>
-          </div>
-          {messagingSaving && <span className="loading loading-spinner loading-sm" />}
-          {messagingError && (
-            <div role="alert" className="alert alert-error">
-              <span>{messagingError}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {providerType === "BSP" && (
-        <div className="card bg-base-200 shadow-sm">
-          <div className="card-body">
-            <h2 className="card-title text-lg">BSP WhatsApp</h2>
-            <p className="text-sm text-base-content/60">
-              Phone number ID, Business ID, access token, and webhook secret (stored
-              in workspace settings).
-            </p>
-            <form onSubmit={handleBspSubmit} className="space-y-4">
-              <label className="form-control">
-                <span className="label">Phone number ID</span>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={bspForm.whatsappPhoneNumberId}
-                  onChange={(e) =>
-                    setBspForm((p) => ({ ...p, whatsappPhoneNumberId: e.target.value }))
-                  }
-                  placeholder="e.g. 123456789"
-                />
-              </label>
-              <label className="form-control">
-                <span className="label">Business ID</span>
-                <input
-                  type="text"
-                  className="input input-bordered"
-                  value={bspForm.whatsappBusinessId}
-                  onChange={(e) =>
-                    setBspForm((p) => ({ ...p, whatsappBusinessId: e.target.value }))
-                  }
-                  placeholder="e.g. 123456789012345"
-                />
-              </label>
-              <label className="form-control">
-                <span className="label">Access token</span>
-                <input
-                  type="password"
-                  className="input input-bordered"
-                  value={bspForm.whatsappAccessToken}
-                  onChange={(e) =>
-                    setBspForm((p) => ({ ...p, whatsappAccessToken: e.target.value }))
-                  }
-                  placeholder="Permanent or temporary token"
-                />
-              </label>
-              <label className="form-control">
-                <span className="label">Webhook secret</span>
-                <input
-                  type="password"
-                  className="input input-bordered"
-                  value={bspForm.whatsappWebhookSecret}
-                  onChange={(e) =>
-                    setBspForm((p) => ({
-                      ...p,
-                      whatsappWebhookSecret: e.target.value,
-                    }))
-                  }
-                  placeholder="App secret or custom verify token"
-                />
-              </label>
-              <button type="submit" className="btn btn-primary" disabled={bspSaving}>
-                {bspSaving ? (
-                  <span className="loading loading-spinner loading-sm" />
-                ) : (
-                  "Save BSP settings"
-                )}
-              </button>
-              {bspError && (
-                <div role="alert" className="alert alert-error">
-                  <span>{bspError}</span>
-                </div>
-              )}
-            </form>
-          </div>
-        </div>
-      )}
-
-      {providerType === "CLOUD_API" && (
-        <div className="card bg-base-200 shadow-sm">
           <div className="card-body">
             <h2 className="card-title text-lg">Meta Cloud API</h2>
             <p className="text-sm text-base-content/60">
@@ -554,8 +385,7 @@ export function WhatsAppSettingsClient({
               )}
             </form>
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

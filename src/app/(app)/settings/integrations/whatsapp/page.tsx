@@ -4,7 +4,6 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import type {
   MeResponse,
   WorkspaceCloudApiConfigResponse,
-  WorkspaceMessagingConfigPayload,
 } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
@@ -24,13 +23,9 @@ async function getCloudApiSafe(
 
 export default async function WhatsAppIntegrationRoute() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
-  const cloudApiConfig = await getCloudApiSafe(me.workspace.id);
-  const [settings, messagingConfig] = await Promise.all([
+  const [cloudApiConfig, settings] = await Promise.all([
+    getCloudApiSafe(me.workspace.id),
     serverFetch<WorkspaceSettings>(endpoints.workspaces.settings(me.workspace.id)),
-    // TODO: BSP | Fallback to BSP when messaging config fails; handle or remove when BSP is deprecated
-    serverFetch<WorkspaceMessagingConfigPayload>(
-      endpoints.workspaces.messagingConfig(me.workspace.id)
-    ).catch(() => ({ providerType: "BSP" as const })),
   ]);
 
   return (
@@ -42,7 +37,6 @@ export default async function WhatsAppIntegrationRoute() {
       <WhatsAppSettingsClient
         workspaceId={me.workspace.id}
         settings={settings}
-        messagingConfig={messagingConfig}
         cloudApiConfig={cloudApiConfig}
       />
     </PageContainer>

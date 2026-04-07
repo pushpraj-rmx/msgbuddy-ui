@@ -67,15 +67,12 @@ export default function LoginPage() {
     }
     const err = q.get("error");
     if (err) {
-      let message = err.length > 280 ? `${err.slice(0, 280)}…` : err;
-      if (err === "verify_failed") {
-        message =
-          "That verification link is invalid or expired. Use “Resend verification email” below if you still need to verify.";
-      }
-      if (err === "missing_verification_token") {
-        message = "Invalid verification link.";
-      }
-      setError(message);
+      const KNOWN_ERRORS: Record<string, string> = {
+        verify_failed:
+          "That verification link is invalid or expired. Use \u201cResend verification email\u201d below if you still need to verify.",
+        missing_verification_token: "Invalid verification link.",
+      };
+      setError(KNOWN_ERRORS[err] ?? "Something went wrong. Please try again.");
       window.history.replaceState(null, "", "/login");
     }
   }, []);

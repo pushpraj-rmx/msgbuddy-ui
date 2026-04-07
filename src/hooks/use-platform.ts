@@ -9,7 +9,7 @@ import {
   type PlatformWorkspacesListParams,
   type PlatformAuditLogsParams,
 } from "@/lib/api";
-import type { PlatformBsp, PlatformRole } from "@/lib/types";
+import type { PlatformRole } from "@/lib/types";
 
 export const platformKeys = {
   all: ["platform"] as const,
@@ -27,7 +27,6 @@ export const platformKeys = {
     [...platformKeys.all, "usageEvents", params] as const,
   auditLogs: (params: PlatformAuditLogsParams) =>
     [...platformKeys.all, "auditLogs", params] as const,
-  bspCredentials: () => [...platformKeys.all, "bspCredentials"] as const,
   channelAccounts: () => [...platformKeys.all, "channelAccounts"] as const,
   connectedClientBusinesses: () =>
     [...platformKeys.all, "connectedClientBusinesses"] as const,
@@ -125,34 +124,6 @@ export function usePlatformAuditLogs(params: PlatformAuditLogsParams) {
   return useQuery({
     queryKey: platformKeys.auditLogs(params),
     queryFn: () => platformApi.listAuditLogs(params),
-  });
-}
-
-export function useBspCredentials() {
-  return useQuery({
-    queryKey: platformKeys.bspCredentials(),
-    queryFn: () => platformApi.listBspCredentials(),
-  });
-}
-
-export function useUpsertBspCredential() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      bsp,
-      data,
-    }: {
-      bsp: PlatformBsp;
-      data: {
-        credentials: Record<string, string>;
-        webhookUrl?: string;
-        webhookSecret?: string;
-        isActive?: boolean;
-      };
-    }) => platformApi.upsertBspCredential(bsp, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: platformKeys.bspCredentials() });
-    },
   });
 }
 
