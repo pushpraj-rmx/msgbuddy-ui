@@ -11,6 +11,7 @@ import {
 } from "@/lib/messaging";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getWhatsappDeliveryHint } from "@/lib/whatsappDeliveryErrors";
+import { MessageActionBar } from "@/components/inbox/MessageActionBar";
 
 function formatFileSizeForDocument(bytes: number | null | undefined): string | null {
   if (bytes == null || typeof bytes !== "number" || bytes < 0 || !Number.isFinite(bytes)) {
@@ -130,13 +131,20 @@ function isRichMediaBubble(message: InboxMessage): boolean {
   );
 }
 
-export function MessageBubble({ message }: { message: InboxMessage }) {
+interface MessageBubbleProps {
+  message: InboxMessage;
+  onPin?: (message: InboxMessage) => void;
+  onStar?: (message: InboxMessage) => void;
+}
+
+export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
   const failed = isFailedMessage(message);
   const processing = isProcessingMessage(message);
   const hint = getWhatsappDeliveryHint(message.errorCode);
   const kind = getMessageType(message);
   const richMedia = isRichMediaBubble(message);
   const documentBubble = getMediaKind(message) === "document";
+  const [hovered, setHovered] = useState(false);
 
   let failedAtLabel: string | null = null;
   if (message.failedAt) {
@@ -153,6 +161,7 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
   );
 
   const imgFrame = imageFrameClassForBubble(message, failed);
+  const isAnimatedGif = (message.mediaMimeType ?? "").toLowerCase().includes("gif");
 
   const body = (() => {
     if (kind === "VIDEO") {
@@ -167,13 +176,25 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
       if (resolvedMediaUrl && !videoBroken) {
         return (
           <div className="flex flex-col gap-2">
-            <video
-              src={resolvedMediaUrl}
-              controls
-              playsInline
-              className={`max-h-64 max-w-full object-contain ${imgFrame}`}
-              onError={() => setVideoBroken(true)}
-            />
+            {isAnimatedGif ? (
+              <video
+                src={resolvedMediaUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className={`max-h-64 max-w-full object-contain ${imgFrame}`}
+                onError={() => setVideoBroken(true)}
+              />
+            ) : (
+              <video
+                src={resolvedMediaUrl}
+                controls
+                playsInline
+                className={`max-h-64 max-w-full object-contain ${imgFrame}`}
+                onError={() => setVideoBroken(true)}
+              />
+            )}
             {message.text?.trim() ? (
               <p className="whitespace-pre-wrap text-sm">{message.text}</p>
             ) : null}
@@ -382,6 +403,14 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
           <div className="whitespace-pre-wrap">
             {message.text?.trim() ?? ""}
           </div>
+          {message.campaignId && (
+            <a
+              href={`/campaigns?id=${message.campaignId}`}
+              className="text-xs text-primary underline-offset-2 hover:underline mt-1 self-start"
+            >
+              View campaign →
+            </a>
+          )}
         </div>
       );
     }
@@ -416,104 +445,135 @@ export function MessageBubble({ message }: { message: InboxMessage }) {
 
   return (
     <div
-      className={`chat ${
-        message.direction === "OUTBOUND" ? "chat-end" : "chat-start"
-      }`}
+      className="relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <div
-        className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden leading-relaxed ${
-          documentBubble ? "p-0" : richMedia ? "p-1" : "px-3 py-2"
-        } ${bubbleClassName(message, failed)}`}
-      >
-        {body}
-      </div>
-      {failed ? (
+      {/* Action bar — rendered outside .chat-bubble so DaisyUI overflow:hidden doesn't clip it */}
+      {(onPin || onStar) && (
         <div
-          className={`mt-2 max-w-[min(85%,28rem)] ${
-            message.direction === "OUTBOUND" ? "ml-auto" : ""
-          }`}
+          style={{
+            position: "absolute",
+            top: 0,
+            transform: "translateY(-110%)",
+            ...(message.direction === "OUTBOUND" ? { left: 8 } : { right: 8 }),
+            zIndex: 20,
+            opacity: hovered ? 1 : 0,
+            pointerEvents: hovered ? "auto" : "none",
+            transition: "opacity 0.15s ease",
+          }}
         >
-          {hint.hint && (hint.hint.length > 120 || hint.href) ? (
-            <details className="rounded-box border border-error/40 bg-error/5 px-3 py-2">
-              <summary className="cursor-pointer list-none text-sm font-medium text-error [&::-webkit-details-marker]:hidden">
-                {message.errorMessage?.trim() || "Delivery failed"}{" "}
-                <span className="text-xs font-normal text-base-content/60">
-                  (details)
-                </span>
-              </summary>
-              <div className="mt-2 flex flex-col gap-1 border-t border-error/20 pt-2 text-left text-xs text-base-content/90">
-                {hint.hint ? (
-                  <span>
-                    {hint.hint}
-                    {hint.href ? (
-                      <>
-                        {" "}
-                        <a
-                          href={hint.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="link link-primary"
-                        >
-                          Open Business Manager
-                        </a>
-                      </>
-                    ) : null}
-                  </span>
-                ) : null}
-                {message.errorCode ? (
-                  <span className="text-base-content/60">
-                    Code {message.errorCode}
-                  </span>
-                ) : null}
-                {failedAtLabel ? (
-                  <span className="text-base-content/60">{failedAtLabel}</span>
-                ) : null}
-              </div>
-            </details>
-          ) : (
-            <div
-              role="alert"
-              className="alert alert-error alert-soft text-sm py-2"
-            >
-              <div className="flex flex-col gap-1 text-left">
-                <span>
-                  {message.errorMessage?.trim() || "Delivery failed"}
-                </span>
-                {hint.hint ? (
-                  <span className="text-xs opacity-90">
-                    {hint.hint}
-                    {hint.href ? (
-                      <>
-                        {" "}
-                        <a
-                          href={hint.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="link link-primary"
-                        >
-                          Open Business Manager
-                        </a>
-                      </>
-                    ) : null}
-                  </span>
-                ) : null}
-                {message.errorCode ? (
-                  <span className="text-xs text-base-content/60">
-                    Code {message.errorCode}
-                  </span>
-                ) : null}
-                {failedAtLabel ? (
-                  <span className="text-xs text-base-content/60">
-                    {failedAtLabel}
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          )}
+          <MessageActionBar
+            isPinned={message.isPinned}
+            isStarred={message.isStarred}
+            text={message.text ?? undefined}
+            onPin={() => onPin?.(message)}
+            onStar={() => onStar?.(message)}
+            direction={message.direction}
+          />
         </div>
-      ) : null}
-      <div className="chat-footer mt-1 text-xs text-base-content/55">
-        {formatDeliveryStatusLabel(message)}
+      )}
+
+      <div
+        className={`chat ${
+          message.direction === "OUTBOUND" ? "chat-end" : "chat-start"
+        }`}
+      >
+        <div
+          className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden leading-relaxed ${
+            documentBubble ? "p-0" : richMedia ? "p-1" : "px-3 py-2"
+          } ${bubbleClassName(message, failed)}`}
+        >
+          {body}
+        </div>
+        {failed ? (
+          <div
+            className={`mt-2 max-w-[min(85%,28rem)] ${
+              message.direction === "OUTBOUND" ? "ml-auto" : ""
+            }`}
+          >
+            {hint.hint && (hint.hint.length > 120 || hint.href) ? (
+              <details className="rounded-box border border-error/40 bg-error/5 px-3 py-2">
+                <summary className="cursor-pointer list-none text-sm font-medium text-error [&::-webkit-details-marker]:hidden">
+                  {message.errorMessage?.trim() || "Delivery failed"}{" "}
+                  <span className="text-xs font-normal text-base-content/60">
+                    (details)
+                  </span>
+                </summary>
+                <div className="mt-2 flex flex-col gap-1 border-t border-error/20 pt-2 text-left text-xs text-base-content/90">
+                  {hint.hint ? (
+                    <span>
+                      {hint.hint}
+                      {hint.href ? (
+                        <>
+                          {" "}
+                          <a
+                            href={hint.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="link link-primary"
+                          >
+                            Open Business Manager
+                          </a>
+                        </>
+                      ) : null}
+                    </span>
+                  ) : null}
+                  {message.errorCode ? (
+                    <span className="text-base-content/60">
+                      Code {message.errorCode}
+                    </span>
+                  ) : null}
+                  {failedAtLabel ? (
+                    <span className="text-base-content/60">{failedAtLabel}</span>
+                  ) : null}
+                </div>
+              </details>
+            ) : (
+              <div
+                role="alert"
+                className="alert alert-error alert-soft text-sm py-2"
+              >
+                <div className="flex flex-col gap-1 text-left">
+                  <span>
+                    {message.errorMessage?.trim() || "Delivery failed"}
+                  </span>
+                  {hint.hint ? (
+                    <span className="text-xs opacity-90">
+                      {hint.hint}
+                      {hint.href ? (
+                        <>
+                          {" "}
+                          <a
+                            href={hint.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="link link-primary"
+                          >
+                            Open Business Manager
+                          </a>
+                        </>
+                      ) : null}
+                    </span>
+                  ) : null}
+                  {message.errorCode ? (
+                    <span className="text-xs text-base-content/60">
+                      Code {message.errorCode}
+                    </span>
+                  ) : null}
+                  {failedAtLabel ? (
+                    <span className="text-xs text-base-content/60">
+                      {failedAtLabel}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : null}
+        <div className="chat-footer mt-1 text-xs text-base-content/55">
+          {formatDeliveryStatusLabel(message)}
+        </div>
       </div>
     </div>
   );

@@ -54,8 +54,13 @@ function getInitialPermission(): NotificationPermission {
 }
 
 export function usePushSubscription(workspaceId: string) {
-  const [permission, setPermission] =
-    useState<NotificationPermission>(getInitialPermission);
+  // Always start with "default" so SSR and first client render match.
+  // A useEffect below updates to the real value after hydration.
+  const [permission, setPermission] = useState<NotificationPermission>("default");
+
+  useEffect(() => {
+    setPermission(getInitialPermission());
+  }, []);
 
   // Silently subscribe if already granted (e.g. returning visitor)
   useEffect(() => {

@@ -98,7 +98,8 @@ export function inferMimeFromFilenameForWhatsApp(name: string): string | null {
 }
 
 export function normalizeWhatsappMimeType(raw: string): string {
-  const t = raw.trim().toLowerCase();
+  // Strip codec/parameter suffix (e.g. "audio/ogg;codecs=opus" → "audio/ogg")
+  const t = raw.trim().toLowerCase().split(";")[0].trim();
   if (t === "image/jpg") return "image/jpeg";
   return t;
 }

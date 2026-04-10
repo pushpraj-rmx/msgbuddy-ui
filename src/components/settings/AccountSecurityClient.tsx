@@ -8,7 +8,9 @@ import {
 } from "@/app/actions/auth";
 import { setAccessToken } from "@/lib/auth";
 import type { LoginHistoryEvent } from "@/lib/api";
+import { meApi } from "@/lib/api";
 import { ErrorState } from "@/components/ui/states";
+import { AvatarCropUpload } from "@/components/ui/AvatarCropUpload";
 
 function formatLoginAction(action: string): string {
   const map: Record<string, string> = {
@@ -25,20 +27,55 @@ function formatLoginAction(action: string): string {
 
 export function AccountSecurityClient({
   accountEmail,
+  accountName,
+  accountAvatarUrl,
   hasPassword,
   loginHistory,
 }: {
   accountEmail: string;
+  accountName?: string;
+  accountAvatarUrl?: string | null;
   hasPassword: boolean;
   loginHistory: LoginHistoryEvent[];
 }) {
   const router = useRouter();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(accountAvatarUrl ?? null);
+  const [displayName, setDisplayName] = useState(accountName ?? "");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const [nameSaved, setNameSaved] = useState(false);
+  const [nameSaving, setNameSaving] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [changeError, setChangeError] = useState<string | null>(null);
   const [changeOk, setChangeOk] = useState(false);
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const onAvatarUploaded = async (url: string) => {
+    setAvatarUrl(url);
+    try {
+      await meApi.updateProfile({ avatarUrl: url });
+      router.refresh();
+    } catch {
+      // avatar is visually updated; silent failure is acceptable here
+    }
+  };
+
+  const onSaveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setNameError(null);
+    setNameSaved(false);
+    setNameSaving(true);
+    try {
+      await meApi.updateProfile({ name: displayName.trim() || undefined });
+      setNameSaved(true);
+      router.refresh();
+    } catch {
+      setNameError("Failed to save name.");
+    } finally {
+      setNameSaving(false);
+    }
+  };
 
   const onChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,6 +119,33 @@ export function AccountSecurityClient({
         <p className="text-sm text-base-content/70 mt-1">
           Signed in as <span className="font-medium">{accountEmail}</span>
         </p>
+      </div>
+
+      {/* Profile photo + name */}
+      <div className="space-y-4">
+        <h3 className="text-sm font-medium">Profile</h3>
+        <AvatarCropUpload
+          currentUrl={avatarUrl}
+          initials={displayName ? displayName.slice(0, 2).toUpperCase() : accountEmail.slice(0, 2).toUpperCase()}
+          onUploaded={onAvatarUploaded}
+        />
+        <form onSubmit={onSaveName} className="flex items-end gap-2 max-w-md">
+          <label className="form-control flex-1">
+            <span className="label-text text-sm">Display name</span>
+            <input
+              type="text"
+              className="input input-bordered w-full"
+              placeholder="Your name"
+              value={displayName}
+              onChange={(e) => { setDisplayName(e.target.value); setNameSaved(false); }}
+            />
+          </label>
+          <button type="submit" className="btn btn-primary btn-sm mb-0.5" disabled={nameSaving}>
+            {nameSaving ? <span className="loading loading-spinner loading-xs" /> : "Save"}
+          </button>
+        </form>
+        {nameError && <p className="text-xs text-error">{nameError}</p>}
+        {nameSaved && <p className="text-xs text-success">Name saved.</p>}
       </div>
 
       {hasPassword ? (

@@ -1,13 +1,7 @@
 "use client";
 
 import { useClientWabas, useOwnedWabas } from "@/hooks/use-onboarding";
-
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message
-    ? String((err as { response?: { data?: { message?: string } } }).response?.data?.message)
-    : "Something went wrong.";
-}
+import { getApiError } from "@/lib/api-error";
 
 function isMetaTokenMissingError(err: unknown): boolean {
   const message = getApiError(err);

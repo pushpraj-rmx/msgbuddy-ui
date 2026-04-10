@@ -9,13 +9,15 @@ export type MessageType =
   | "INTERACTIVE";
 
 export type MessageStatus =
+  | "SCHEDULED"
   | "PENDING"
   | "PROCESSING"
   | "QUEUED"
   | "SENT"
   | "DELIVERED"
   | "READ"
-  | "FAILED";
+  | "FAILED"
+  | "CANCELLED";
 
 /** Shape returned by GET /messages/conversation/:id */
 export type InboxMessage = {
@@ -40,6 +42,24 @@ export type InboxMessage = {
   errorCode?: string | null;
   errorMessage?: string | null;
   failedAt?: string | null;
+  campaignId?: string | null;
+  isPinned?: boolean;
+  pinnedAt?: string | null;
+  isStarred?: boolean;
+  starredAt?: string | null;
+  sendAt?: string | null;
+};
+
+/** Shape returned by GET /messages/conversation/:id/media */
+export type MediaItem = {
+  id: string;
+  mediaId?: string | null;
+  mediaUrl?: string | null;
+  mediaMimeType?: string | null;
+  mediaSize?: number | null;
+  type: MessageType | string;
+  direction: "INBOUND" | "OUTBOUND";
+  createdAt: string;
 };
 
 /** Infer wire `type` from MIME when `message.type` is missing (legacy rows). */

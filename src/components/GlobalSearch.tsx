@@ -97,21 +97,22 @@ export function GlobalSearch({
 
   return (
     <div ref={containerRef} className="relative w-full max-w-xl">
-      <label className="input input-bordered input-sm flex h-10 items-center gap-2 rounded-box border-base-300 bg-base-100">
-        <SearchRounded className="h-4 w-4 text-base-content/60" />
+      <label className="input input-bordered flex h-12 w-full items-center gap-2 rounded-full border-base-300 bg-base-200/60 text-sm transition-colors focus-within:border-primary/40 focus-within:bg-base-100 ">
+        <SearchRounded className="h-4 w-4 shrink-0 text-base-content/40" />
         <input
           ref={inputRef}
           id={inputId}
           type="text"
-          placeholder="Global search: contacts, email, phone, conversations..."
+          placeholder="Search contacts, conversations…"
           value={query}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
             setQuery(event.target.value);
             setOpen(true);
           }}
-          className="grow bg-transparent"
+          className="grow bg-transparent placeholder:text-base-content/40"
         />
+        <kbd className="kbd kbd-sm hidden shrink-0 text-base-content/30 sm:inline">⌘K</kbd>
       </label>
 
       {open && debounced.length >= 2 ? (
@@ -130,8 +131,8 @@ export function GlobalSearch({
                   {conversations.slice(0, 4).map((conversation) => {
                     const name =
                       conversation.contact?.name ||
-                      conversation.contact?.phone ||
-                      conversation.contact?.email ||
+                      conversation.contact?.phone || 2
+                    conversation.contact?.email ||
                       "Conversation";
                     return (
                       <Link

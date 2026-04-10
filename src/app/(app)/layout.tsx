@@ -2,7 +2,7 @@ import { AppLayout } from "@/components/AppLayout";
 import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
-import Link from "next/link";
+import { ReloadButton } from "@/components/ui/ReloadButton";
 
 export default async function AppGroupLayout({
   children,
@@ -16,24 +16,17 @@ export default async function AppGroupLayout({
     const message =
       err instanceof Error ? err.message : "Failed to load current user.";
     return (
-      <div className="min-h-[60dvh] p-6">
-        <div className="mx-auto max-w-xl space-y-3 rounded-box border border-base-300 bg-base-100 p-5">
-          <h1 className="text-lg font-semibold">Session error</h1>
-          <p className="text-sm text-base-content/70">
-            We couldn’t load your session profile. This is usually a temporary
-            backend error (not a logout).
-          </p>
-          <pre className="max-h-56 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 text-xs">
-            {message}
-          </pre>
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Link href="/dashboard" className="btn btn-sm btn-primary">
-              Retry
-            </Link>
-            <Link href="/login" className="btn btn-sm btn-ghost">
-              Go to login
-            </Link>
+      <div className="min-h-[60dvh] flex items-center justify-center p-6">
+        <div className="max-w-md w-full space-y-4 rounded-box border border-base-300 bg-base-100 p-6">
+          <div className="space-y-1">
+            <h1 className="text-base font-semibold">Service temporarily unavailable</h1>
+            <p className="text-sm text-base-content/70">
+              The server returned an error. Your session is fine — this is not a
+              logout. Please wait a moment and try again.
+            </p>
           </div>
+          <p className="font-mono text-xs text-base-content/40">{message}</p>
+          <ReloadButton />
         </div>
       </div>
     );

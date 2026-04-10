@@ -9,6 +9,7 @@ import { RightPanelProvider } from "./right-panel/RightPanelProvider";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import type { MeResponse } from "@/lib/api";
+import { conversationsApi } from "@/lib/api";
 
 const DRAWER_ID = "app-drawer";
 const DESKTOP_SIDEBAR_KEY = "desktop-sidebar-open";
@@ -41,11 +42,36 @@ export function AppLayout({
     }
   }, [isDesktopSidebarOpen]);
 
+  // Handle inline reply actions from push notification service worker
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) return;
+    const handler = async (event: MessageEvent) => {
+      if (event.data?.type !== "NOTIFICATION_REPLY") return;
+      const { conversationId, text } = event.data as { conversationId: string; text: string };
+      if (!conversationId || !text?.trim()) return;
+      try {
+        const conversation = await conversationsApi.getById(conversationId) as {
+          contactId?: string; channel?: string;
+        };
+        if (!conversation?.contactId) return;
+        await conversationsApi.sendMessage({
+          contactId: conversation.contactId,
+          text: text.trim(),
+          channel: (conversation.channel as "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS") ?? "WHATSAPP",
+        });
+      } catch {
+        // best-effort; user will see the reply wasn't sent if they open the app
+      }
+    };
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, []);
+
   return (
     <RightPanelProvider>
       <SessionRefresh />
       <AppShortcuts />
-      <div className="flex h-[100dvh] flex-col overflow-hidden bg-base-100">
+      <div className="flex h-[100dvh] flex-col overflow-hidden">
         <Topbar
           drawerId={DRAWER_ID}
           me={me}
@@ -72,10 +98,10 @@ export function AppLayout({
         >
           <input id={DRAWER_ID} type="checkbox" className="drawer-toggle" />
           <div className="drawer-content flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-            <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-base-100 pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+            <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
               <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
                 {/* Main + details pane: split row so content shrinks when details is open (no overlay). */}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-5">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4">
                   {children}
                 </div>
                 <GlobalRightPanel />

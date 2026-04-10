@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { mediaApi } from "@/lib/api";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
+import { getApiError } from "@/lib/api-error";
 
 export type MediaItem = {
   id: string;
@@ -15,11 +16,6 @@ export type MediaItem = {
 };
 
 const LIMIT = 50;
-
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response
-    ?.data?.message ?? "Something went wrong.";
-}
 
 export function MediaClient({ initialMedia }: { initialMedia: MediaItem[] }) {
   const [media, setMedia] = useState<MediaItem[]>(initialMedia);

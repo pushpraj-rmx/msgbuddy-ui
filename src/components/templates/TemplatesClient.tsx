@@ -21,6 +21,7 @@ import {
 } from "@/hooks/use-templates";
 import type { Template } from "@/lib/types";
 import { TemplateCreateModal } from "./TemplateCreateModal";
+import { getApiError } from "@/lib/api-error";
 
 const SORT_FIELDS = [
   { value: "updatedAt", label: "Updated" },
@@ -30,11 +31,6 @@ const SORT_FIELDS = [
 ] as const;
 
 const PAGE_SIZES = [10, 25, 50, 100];
-
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response
-    ?.data?.message ?? "Something went wrong.";
-}
 
 export function TemplatesClient() {
   const router = useRouter();
@@ -99,6 +95,15 @@ export function TemplatesClient() {
                 {row.original.description}
               </p>
             )}
+            {(row.original.channelTemplates ?? []).filter((ct) => !ct.deletedAt).length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {(row.original.channelTemplates ?? []).filter((ct) => !ct.deletedAt).map((ct) => (
+                  <span key={ct.id} className="badge badge-ghost badge-xs">
+                    {ct.channel}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         ),
       },
@@ -142,7 +147,10 @@ export function TemplatesClient() {
         cell: ({ row }) => {
           const t = row.original;
           return (
-            <div className="flex items-center gap-1">
+            <div
+              className="flex items-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
               <Link
                 href={`/templates/${t.id}`}
                 className="btn btn-ghost btn-xs"
@@ -151,16 +159,11 @@ export function TemplatesClient() {
               </Link>
               <button
                 type="button"
-                className="btn btn-ghost btn-xs"
-                disabled
-                title="Preview is moving to WhatsApp templates"
-              >
-                Preview
-              </button>
-              <button
-                type="button"
                 className="btn btn-ghost btn-xs text-error"
-                onClick={() => setDeleteConfirm(t)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDeleteConfirm(t);
+                }}
               >
                 Delete
               </button>
@@ -239,7 +242,7 @@ export function TemplatesClient() {
               </label>
               <input
                 type="search"
-                placeholder="Search messages…"
+                placeholder="Search templates…"
                 className="input input-bordered input-sm w-full"
                 value={search}
                 onChange={(e) => {
@@ -265,36 +268,6 @@ export function TemplatesClient() {
                 <option value="false">No</option>
               </select>
             </div>
-            <div className="form-control w-32">
-              <label className="label py-0">
-                <span className="label-text text-xs text-base-content/60">Sort</span>
-              </label>
-              <select
-                className="select select-bordered select-sm w-full"
-                value={sortBy}
-                onChange={(e) => {
-                  setSortBy(e.target.value);
-                  setPage(1);
-                }}
-              >
-                {SORT_FIELDS.map((f) => (
-                  <option key={f.value} value={f.value}>
-                    {f.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setSortOrder((o) => (o === "desc" ? "asc" : "desc"));
-                setPage(1);
-              }}
-              title={sortOrder === "desc" ? "Descending" : "Ascending"}
-            >
-              {sortOrder === "desc" ? "↓" : "↑"}
-            </button>
             <div className="form-control w-20">
               <label className="label py-0">
                 <span className="label-text text-xs text-base-content/60">Per page</span>
@@ -338,7 +311,7 @@ export function TemplatesClient() {
                 disabled={atLimit}
                 title={atLimit ? "Template limit reached" : undefined}
               >
-                Create message
+                Create template
               </button>
               <button
                 type="button"
@@ -408,12 +381,16 @@ export function TemplatesClient() {
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="text-center py-8 text-base-content/60">
-                    No messages found.
+                    No templates found.
                   </td>
                 </tr>
               ) : (
                 table.getRowModel().rows.map((row) => (
-                  <tr key={row.id}>
+                  <tr
+                    key={row.id}
+                    className="cursor-pointer hover:bg-base-200/40"
+                    onClick={() => router.push(`/templates/${row.original.id}`)}
+                  >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="align-middle text-sm">
                         {flexRender(
@@ -480,9 +457,9 @@ export function TemplatesClient() {
       {deleteConfirm && (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
-            <h3 className="font-semibold">Delete message?</h3>
+            <h3 className="font-semibold">Delete template?</h3>
             <p className="py-2 text-base-content/70">
-              “{deleteConfirm.name}” will be removed. This cannot be undone.
+              <strong>{deleteConfirm.name}</strong> will be permanently removed. This cannot be undone.
             </p>
             <div className="modal-action">
               <button

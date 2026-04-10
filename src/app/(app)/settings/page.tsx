@@ -52,6 +52,8 @@ export default async function SettingsPage() {
         cloudApiConfig={cloudApiConfig}
         meRole={me.role}
         accountEmail={me.user.email}
+        accountName={me.user.name}
+        accountAvatarUrl={me.user.avatarUrl}
         hasPassword={me.user.hasPassword === true}
         loginHistory={loginHistory}
       />

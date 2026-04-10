@@ -3,15 +3,18 @@
 import { useState } from "react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import type { Contact } from "@/lib/types";
+import { AvatarCropUpload } from "@/components/ui/AvatarCropUpload";
 
 export type ContactFormPayload = {
   phone?: string;
   phoneLabel?: string;
   name?: string;
+  designation?: string;
   email?: string;
   emailLabel?: string;
   isBlocked?: boolean;
   isOptedOut?: boolean;
+  avatarUrl?: string;
 };
 
 export function ContactFormModal({
@@ -29,27 +32,48 @@ export function ContactFormModal({
   const [phone, setPhone] = useState(contact?.phone ?? "");
   const [phoneLabel, setPhoneLabel] = useState(contact?.phoneLabel ?? "");
   const [name, setName] = useState(contact?.name ?? "");
+  const [designation, setDesignation] = useState(contact?.designation ?? "");
   const [email, setEmail] = useState(contact?.email ?? "");
   const [emailLabel, setEmailLabel] = useState(contact?.emailLabel ?? "");
   const [isBlocked, setIsBlocked] = useState(contact?.isBlocked ?? false);
   const [isOptedOut, setIsOptedOut] = useState(contact?.isOptedOut ?? false);
+  const [avatarUrl, setAvatarUrl] = useState<string | undefined>(
+    contact?.avatarUrl ?? undefined
+  );
 
   const handleSave = () => {
     onSave({
       ...(contact ? {} : { phone: phone.trim() }),
       phoneLabel: phoneLabel.trim() || undefined,
       name: name.trim() || undefined,
+      designation: designation.trim() || undefined,
       email: email.trim() || undefined,
       emailLabel: emailLabel.trim() || undefined,
-      ...(contact
-        ? { isBlocked, isOptedOut }
-        : {}),
+      ...(contact ? { isBlocked, isOptedOut } : {}),
+      avatarUrl,
     });
   };
+
+  const initials = name.trim()
+    ? name.trim().slice(0, 2).toUpperCase()
+    : (contact?.phone ?? phone).slice(-2);
 
   const formContent = (
     <>
       <div className="space-y-4">
+        {/* Avatar — only shown when editing an existing contact */}
+        {contact && (
+          <div className="space-y-1">
+            <label className="label-text text-sm font-medium">Photo</label>
+            <AvatarCropUpload
+              currentUrl={avatarUrl}
+              initials={initials}
+              onUploaded={setAvatarUrl}
+              size="md"
+            />
+          </div>
+        )}
+
         {!contact ? (
           <>
             <label className="label">
@@ -105,6 +129,16 @@ export function ContactFormModal({
           className="input input-bordered w-full"
           value={name}
           onChange={(e) => setName(e.target.value)}
+        />
+        <label className="label">
+          <span className="label-text">Designation (optional)</span>
+        </label>
+        <input
+          type="text"
+          placeholder="e.g. Senior Engineer, CEO"
+          className="input input-bordered w-full"
+          value={designation}
+          onChange={(e) => setDesignation(e.target.value)}
         />
         <label className="label">
           <span className="label-text">Email</span>

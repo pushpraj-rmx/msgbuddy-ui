@@ -15,10 +15,83 @@ import {
   DEFAULT_WHATSAPP_TEMPLATE_LANGUAGE,
   WHATSAPP_TEMPLATE_LANGUAGE_OPTIONS,
 } from "@/lib/whatsapp-template-languages";
+import { getApiError } from "@/lib/api-error";
 
 const BODY_MAX = 1024;
 const FOOTER_MAX = 60;
 const HEADER_TEXT_MAX = 60;
+
+function charCounterClass(current: number, max: number): string {
+  const ratio = current / max;
+  if (ratio >= 1) return "text-error font-semibold";
+  if (ratio >= 0.9) return "text-warning";
+  return "text-base-content/50";
+}
+
+/** Replace {{N}}/{{name}} placeholders with highlighted spans for preview. */
+function renderPreviewBody(text: string): React.ReactNode {
+  const parts = text.split(/(\{\{[^}]+\}\})/g);
+  return parts.map((part, i) =>
+    /^\{\{[^}]+\}\}$/.test(part) ? (
+      <span key={i} className="bg-primary/15 text-primary rounded px-0.5 font-mono text-xs">
+        {part}
+      </span>
+    ) : (
+      part
+    )
+  );
+}
+
+function WhatsAppBubblePreview({
+  headerType,
+  headerContent,
+  body,
+  footer,
+  buttons,
+}: {
+  headerType: string;
+  headerContent: string;
+  body: string;
+  footer: string;
+  buttons: Array<{ type: string; text: string }>;
+}) {
+  return (
+    <div className="flex justify-center py-2">
+      <div className="w-full max-w-xs bg-[#dcf8c6] rounded-xl shadow-md p-3 space-y-2 text-sm text-gray-800 dark:bg-[#1f5c36] dark:text-gray-100">
+        {headerType !== "NONE" && (
+          <div className="rounded-lg bg-black/10 dark:bg-white/10 px-2 py-1.5 text-xs font-medium text-center">
+            {headerType === "TEXT" ? (
+              <span>{headerContent || <span className="opacity-50 italic">Header text</span>}</span>
+            ) : (
+              <span className="opacity-70 uppercase tracking-wide">{headerType}</span>
+            )}
+          </div>
+        )}
+        <div className="whitespace-pre-wrap break-words leading-snug">
+          {body ? renderPreviewBody(body) : <span className="opacity-40 italic">Message body…</span>}
+        </div>
+        {footer && (
+          <div className="text-xs opacity-60 border-t border-black/10 dark:border-white/10 pt-1.5">
+            {footer}
+          </div>
+        )}
+        {buttons.length > 0 && (
+          <div className="border-t border-black/10 dark:border-white/10 pt-2 space-y-1.5">
+            {buttons.map((btn, i) => (
+              <div
+                key={i}
+                className="text-center text-[#075e54] dark:text-[#44c767] text-xs font-semibold py-1 rounded bg-white/60 dark:bg-white/10"
+              >
+                {btn.type === "URL" ? "🔗 " : btn.type === "PHONE_NUMBER" ? "📞 " : ""}
+                {btn.text || "(button)"}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const HEADER_TYPES: TemplateHeaderType[] = [
   "NONE",
@@ -115,11 +188,6 @@ function rowsToApiButtons(rows: CarouselButtonRow[]): unknown[] {
   });
 }
 
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message ?? "Something went wrong.";
-}
-
 function jsonToTextarea(v: unknown): string {
   if (v == null) return "";
   try {
@@ -201,7 +269,10 @@ export function ChannelTemplateVersionEditor({
   const [saveOk, setSaveOk] = useState<string | null>(null);
   // After the first manual "Save draft" succeeds, keep auto-saving on edits.
   const [autoSaveAfterManual, setAutoSaveAfterManual] = useState(false);
+  const [autoSavePending, setAutoSavePending] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [carouselUploadBusyByIndex, setCarouselUploadBusyByIndex] = useState<
     Record<number, boolean>
   >({});
@@ -398,6 +469,57 @@ export function ChannelTemplateVersionEditor({
       return;
     }
 
+    if (layoutType === "STANDARD" && standardButtonRows && standardButtonRows.length > 0) {
+      const QUICK_REPLY_MAX = 3;
+      const CTA_MAX = 2;
+      let quickReplyCount = 0;
+      let ctaCount = 0;
+      for (let i = 0; i < standardButtonRows.length; i++) {
+        const r = standardButtonRows[i];
+        const label = r.text.trim();
+        if (!label) {
+          setFormError(`Button ${i + 1}: label is required.`);
+          return;
+        }
+        if (label.length > META_TEMPLATE_BUTTON_LABEL_MAX) {
+          setFormError(
+            `Button ${i + 1}: label must be at most ${META_TEMPLATE_BUTTON_LABEL_MAX} characters.`
+          );
+          return;
+        }
+        if (r.type === "QUICK_REPLY") {
+          quickReplyCount++;
+        } else {
+          ctaCount++;
+        }
+        if (r.type === "URL") {
+          if (!r.url.trim()) {
+            setFormError(`Button ${i + 1}: URL is required.`);
+            return;
+          }
+          const placeholders = (r.url.match(/\{\{[^}]+\}\}/g) ?? []).length;
+          if (placeholders !== 1) {
+            setFormError(
+              `Button ${i + 1}: URL must contain exactly 1 placeholder (found ${placeholders}).`
+            );
+            return;
+          }
+        }
+        if (r.type === "PHONE_NUMBER" && !r.phone_number.trim()) {
+          setFormError(`Button ${i + 1}: phone number is required.`);
+          return;
+        }
+      }
+      if (quickReplyCount > QUICK_REPLY_MAX) {
+        setFormError(`Too many quick-reply buttons (${quickReplyCount}); max is ${QUICK_REPLY_MAX}.`);
+        return;
+      }
+      if (ctaCount > CTA_MAX) {
+        setFormError(`Too many CTA buttons (${ctaCount}); max is ${CTA_MAX}.`);
+        return;
+      }
+    }
+
     if (layoutType === "CAROUSEL") {
       if (carouselCards.length === 0) {
         setFormError("Add at least one carousel card.");
@@ -526,6 +648,7 @@ export function ChannelTemplateVersionEditor({
     carouselJson,
     carouselCards,
     carouselButtonRowsByIndex,
+    standardButtonRows,
     channelTemplateId,
     version.version,
     updateMutation,
@@ -606,8 +729,10 @@ export function ChannelTemplateVersionEditor({
       window.clearTimeout(autoSaveTimeoutRef.current);
     }
 
+    setAutoSavePending(true);
     autoSaveTimeoutRef.current = window.setTimeout(() => {
       lastAutoSavedSignatureRef.current = signature;
+      setAutoSavePending(false);
       onSave(true);
     }, 900);
 
@@ -760,25 +885,51 @@ export function ChannelTemplateVersionEditor({
     );
   }
 
+  const SaveButton = (
+    <button
+      type="button"
+      className="btn btn-primary btn-sm"
+      onClick={() => onSave(false)}
+      disabled={updateMutation.isPending}
+    >
+      {updateMutation.isPending ? (
+        <>
+          <span className="loading loading-spinner loading-sm" />
+          Saving…
+        </>
+      ) : (
+        "Save draft"
+      )}
+    </button>
+  );
+
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-4">
+    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-5">
+
+      {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm font-medium">Content</div>
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          onClick={() => onSave(false)}
-          disabled={updateMutation.isPending}
-        >
-          {updateMutation.isPending ? (
-            <>
-              <span className="loading loading-spinner loading-sm" />
-              Saving…
-            </>
-          ) : (
-            "Save draft"
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-medium">Content</div>
+          {autoSavePending && (
+            <span className="text-xs text-base-content/50 flex items-center gap-1">
+              <span className="loading loading-spinner loading-xs" />
+              Auto-saving…
+            </span>
           )}
-        </button>
+          {!autoSavePending && updateMutation.isPending && (
+            <span className="text-xs text-base-content/50">Saving…</span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={() => setShowPreview((p) => !p)}
+          >
+            {showPreview ? "Hide preview" : "Show preview"}
+          </button>
+          {SaveButton}
+        </div>
       </div>
 
       {formError && (
@@ -792,138 +943,182 @@ export function ChannelTemplateVersionEditor({
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <label className="form-control w-full">
-          <span className="label-text text-xs">Layout</span>
-          <select
-            className="select select-bordered select-sm w-full"
-            value={layoutType}
-            onChange={(e) =>
-              setLayoutType(e.target.value as TemplateVersionLayoutType)
-            }
-          >
-            <option value="STANDARD">Standard (header / body / footer)</option>
-            <option value="CAROUSEL">Carousel</option>
-          </select>
-        </label>
-        <label className="form-control w-full">
-          <span className="label-text text-xs">Language (Meta code)</span>
-          <select
-            className="select select-bordered select-sm w-full"
-            value={language}
-            onChange={(e) => setLanguage(e.target.value)}
-          >
-            {languageOptions.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label} ({o.value})
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <label className="form-control w-full">
-        <span className="label-text text-xs">
-          Body ({body.length}/{BODY_MAX}) · required
-        </span>
-        <textarea
-          className="textarea textarea-bordered w-full min-h-[120px] text-sm"
-          value={body}
-          maxLength={BODY_MAX}
-          onChange={(e) => setBody(e.target.value)}
-          placeholder="Main message. {{1}} / {{2}} or named placeholders depending on parameter format."
-        />
-      </label>
-
-      <label className="form-control w-full">
-        <span className="label-text text-xs">
-          Footer ({footer.length}/{FOOTER_MAX})
-        </span>
-        <input
-          type="text"
-          className="input input-bordered input-sm w-full"
-          value={footer}
-          maxLength={FOOTER_MAX}
-          onChange={(e) => setFooter(e.target.value)}
-          placeholder="Optional short footer"
-        />
-      </label>
-
-      {layoutType === "STANDARD" && (
-        <div className="grid grid-cols-1 gap-4">
+      {/* ── Section 1: Structure ── */}
+      <div className="space-y-3">
+        <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">Structure</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="form-control w-full">
-            <span className="label-text text-xs">Header type</span>
+            <span className="label-text text-xs">Layout</span>
             <select
-              className="select select-bordered select-sm w-full max-w-xs"
-              value={headerType}
+              className="select select-bordered select-sm w-full"
+              value={layoutType}
               onChange={(e) =>
-                setHeaderType(e.target.value as TemplateHeaderType)
+                setLayoutType(e.target.value as TemplateVersionLayoutType)
               }
             >
-              {HEADER_TYPES.map((h) => (
-                <option key={h} value={h}>
-                  {h}
+              <option value="STANDARD">Standard</option>
+              <option value="CAROUSEL">Carousel</option>
+            </select>
+          </label>
+          <label className="form-control w-full">
+            <span className="label-text text-xs">Language</span>
+            <select
+              className="select select-bordered select-sm w-full"
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+            >
+              {languageOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label} ({o.value})
                 </option>
               ))}
             </select>
           </label>
-
-          {headerType === "TEXT" && (
-            <label className="form-control w-full">
-              <span className="label-text text-xs">
-                Header text ({headerContent.length}/{HEADER_TEXT_MAX})
-              </span>
-              <input
-                type="text"
-                className="input input-bordered input-sm w-full"
-                value={headerContent}
-                maxLength={HEADER_TEXT_MAX}
-                onChange={(e) => setHeaderContent(e.target.value)}
-                placeholder="Optional header text"
-              />
-            </label>
-          )}
-
-          {(headerType === "IMAGE" ||
-            headerType === "VIDEO" ||
-            headerType === "DOCUMENT") && (
-            <div className="space-y-2">
-              <span className="label-text text-xs">
-                Header media (upload or paste asset handle)
-              </span>
-              <div className="flex flex-wrap items-center gap-2">
-                <input
-                  ref={fileRef}
-                  type="file"
-                  className="file-input file-input-bordered file-input-sm max-w-full"
-                  accept={mediaAccept}
-                  onChange={onUploadMedia}
-                  disabled={uploadBusy}
-                />
-                {uploadBusy && (
-                  <span className="loading loading-spinner loading-sm" />
-                )}
-              </div>
-              <input
-                type="text"
-                className="input input-bordered input-sm w-full font-mono text-xs"
-                value={headerContent}
-                onChange={(e) => setHeaderContent(e.target.value)}
-                placeholder="Asset handle from upload"
-              />
-            </div>
-          )}
         </div>
-      )}
+      </div>
 
+      <div className="divider my-0" />
+
+      {/* ── Section 2: Message (Standard layout) ── */}
       {layoutType === "STANDARD" && (
-        <div className="space-y-2 rounded-box border border-base-300 bg-base-200 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-medium">Buttons</span>
-            <span className="text-xs text-base-content/60">
-              Optional · QUICK_REPLY / URL / PHONE_NUMBER
-            </span>
+        <div className="space-y-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">Message</div>
+
+          {/* Header */}
+          <div className="space-y-2">
+            <label className="form-control w-full">
+              <span className="label-text text-xs">Header type</span>
+              <select
+                className="select select-bordered select-sm w-full max-w-xs"
+                value={headerType}
+                onChange={(e) => setHeaderType(e.target.value as TemplateHeaderType)}
+              >
+                {HEADER_TYPES.map((h) => (
+                  <option key={h} value={h}>{h}</option>
+                ))}
+              </select>
+            </label>
+
+            {headerType === "TEXT" && (
+              <label className="form-control w-full">
+                <span className="label-text text-xs">
+                  Header text{" "}
+                  <span className={charCounterClass(headerContent.length, HEADER_TEXT_MAX)}>
+                    ({headerContent.length}/{HEADER_TEXT_MAX})
+                  </span>
+                </span>
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={headerContent}
+                  maxLength={HEADER_TEXT_MAX}
+                  onChange={(e) => setHeaderContent(e.target.value)}
+                  placeholder="Short header line"
+                />
+              </label>
+            )}
+
+            {(headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT") && (
+              <div className="space-y-2">
+                <span className="label-text text-xs">
+                  Header media — upload or paste asset handle
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    className="file-input file-input-bordered file-input-sm max-w-full"
+                    accept={mediaAccept}
+                    onChange={onUploadMedia}
+                    disabled={uploadBusy}
+                  />
+                  {uploadBusy && <span className="loading loading-spinner loading-sm" />}
+                </div>
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full font-mono text-xs"
+                  value={headerContent}
+                  onChange={(e) => setHeaderContent(e.target.value)}
+                  placeholder="Asset handle from upload"
+                />
+              </div>
+            )}
           </div>
+
+          {/* Body */}
+          <div className="form-control w-full">
+            <div className="flex items-center justify-between mb-1">
+              <span className="label-text text-xs">
+                Body · required{" "}
+                <span className={charCounterClass(body.length, BODY_MAX)}>
+                  ({body.length}/{BODY_MAX})
+                </span>
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs font-mono"
+                title="Insert next positional placeholder at cursor"
+                onClick={() => {
+                  const el = bodyRef.current;
+                  const nextN =
+                    (body.match(/\{\{(\d+)\}\}/g) ?? []).reduce(
+                      (max, m) => Math.max(max, parseInt(m.replace(/\D/g, ""), 10)),
+                      0
+                    ) + 1;
+                  const insert = `{{${nextN}}}`;
+                  if (el) {
+                    const start = el.selectionStart ?? body.length;
+                    const end = el.selectionEnd ?? body.length;
+                    const next = body.slice(0, start) + insert + body.slice(end);
+                    setBody(next);
+                    requestAnimationFrame(() => {
+                      el.focus();
+                      el.setSelectionRange(start + insert.length, start + insert.length);
+                    });
+                  } else {
+                    setBody((b) => b + insert);
+                  }
+                }}
+              >
+                + Insert {"{{"}N{"}}"}
+              </button>
+            </div>
+            <textarea
+              ref={bodyRef}
+              className="textarea textarea-bordered w-full min-h-[120px] text-sm"
+              value={body}
+              maxLength={BODY_MAX}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Main message text. Use {{1}}, {{2}} (positional) or {{name}} (named) for variables."
+            />
+          </div>
+
+          {/* Footer */}
+          <label className="form-control w-full">
+            <span className="label-text text-xs">
+              Footer{" "}
+              <span className={charCounterClass(footer.length, FOOTER_MAX)}>
+                ({footer.length}/{FOOTER_MAX})
+              </span>
+            </span>
+            <input
+              type="text"
+              className="input input-bordered input-sm w-full"
+              value={footer}
+              maxLength={FOOTER_MAX}
+              onChange={(e) => setFooter(e.target.value)}
+              placeholder="Optional short footer text"
+            />
+          </label>
+
+          {/* Buttons */}
+          <div className="space-y-2 rounded-box border border-base-300 bg-base-200 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-xs font-medium">Buttons</span>
+              <span className="text-xs text-base-content/60">
+                Optional · max 3 quick-reply or 2 CTA
+              </span>
+            </div>
 
           {(!standardButtonRows || standardButtonRows.length === 0) ? (
             <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-3 text-sm text-base-content/60">
@@ -1087,16 +1282,35 @@ export function ChannelTemplateVersionEditor({
           >
             + Add button
           </button>
+          </div>
         </div>
       )}
 
+      {/* ── Section 2: Message (Carousel layout) ── */}
       {layoutType === "CAROUSEL" && (
-        <div className="space-y-3">
+        <div className="space-y-4">
+          <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">Message</div>
+
+          {/* Body (carousel has a main body too) */}
+          <label className="form-control w-full">
+            <span className="label-text text-xs">
+              Body ({body.length}/{BODY_MAX}) · required
+            </span>
+            <textarea
+              className="textarea textarea-bordered w-full min-h-[100px] text-sm"
+              value={body}
+              maxLength={BODY_MAX}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Main carousel message. Use {{1}} or named placeholders."
+            />
+          </label>
+
+          <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div className="text-sm font-medium">Carousel cards</div>
+              <div className="text-sm font-medium">Cards</div>
               <div className="text-xs text-base-content/60">
-                Add cards visually. Each card needs a header media handle and a body.
+                Each card needs a header media handle and a body.
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -1474,56 +1688,129 @@ export function ChannelTemplateVersionEditor({
               />
             </div>
           </details>
+          </div>
         </div>
       )}
 
-      <label className="form-control w-full max-w-md">
-        <span className="label-text text-xs">Parameter format</span>
-        <select
-          className="select select-bordered select-sm w-full"
-          value={parameterFormat}
-          onChange={(e) =>
-            setParameterFormat(e.target.value as "POSITIONAL" | "NAMED")
-          }
-        >
-          <option value="POSITIONAL">Positional (e.g. {"{{1}}"})</option>
-          <option value="NAMED">Named (e.g. {"{{name}}"})</option>
-        </select>
-      </label>
+      <div className="divider my-0" />
 
-      <label className="flex cursor-pointer items-start gap-3 rounded-box border border-base-300 bg-base-200 px-3 py-2 max-w-xl">
-        <input
-          type="checkbox"
-          className="checkbox checkbox-sm mt-0.5"
-          checked={allowCategoryChange}
-          onChange={(e) => setAllowCategoryChange(e.target.checked)}
-        />
-        <span className="text-sm">
-          <span className="font-medium">Allow Meta to match category to content</span>
-          <span className="block text-xs text-base-content/60 mt-0.5">
-            When unchecked, Meta will not auto-reclassify this template to marketing from content
-            on first create (<code className="text-xs">allow_category_change: false</code>). Applies
-            when syncing a new template to WhatsApp.
-          </span>
-        </span>
-      </label>
-
+      {/* ── Section 3: Advanced settings ── */}
       <details className="group">
-        <summary className="cursor-pointer text-sm text-base-content/70 hover:text-base-content">
-          Advanced: variables (JSON)
+        <summary className="cursor-pointer list-none">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-base-content/40 hover:text-base-content/60 select-none">
+            <span>Advanced</span>
+            <svg className="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 6 10" fill="currentColor">
+              <path d="M1 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            </svg>
+          </div>
         </summary>
-        <div className="mt-3 grid grid-cols-1 gap-3">
-          <label className="form-control w-full">
-            <span className="label-text text-xs">Variables (JSON array)</span>
-            <textarea
-              className="textarea textarea-bordered w-full min-h-[80px] font-mono text-xs"
-              value={variablesJson}
-              onChange={(e) => setVariablesJson(e.target.value)}
-              placeholder="[]"
-            />
+
+        <div className="mt-4 space-y-4">
+          <label className="form-control w-full max-w-xs">
+            <span className="label-text text-xs">Parameter format</span>
+            <select
+              className="select select-bordered select-sm w-full"
+              value={parameterFormat}
+              onChange={(e) =>
+                setParameterFormat(e.target.value as "POSITIONAL" | "NAMED")
+              }
+            >
+              <option value="POSITIONAL">Positional — {"{{1}}"}, {"{{2}}"}</option>
+              <option value="NAMED">Named — {"{{name}}"}, {"{{date}}"}</option>
+            </select>
           </label>
+
+          <label className="flex cursor-pointer items-start gap-3 rounded-box border border-base-300 bg-base-200 px-3 py-2 max-w-xl">
+            <input
+              type="checkbox"
+              className="checkbox checkbox-sm mt-0.5"
+              checked={allowCategoryChange}
+              onChange={(e) => setAllowCategoryChange(e.target.checked)}
+            />
+            <span className="text-sm">
+              <span className="font-medium">Allow Meta category auto-match</span>
+              <span className="block text-xs text-base-content/60 mt-0.5">
+                Uncheck to prevent Meta from auto-reclassifying this template to marketing
+                on first sync (<code className="text-xs">allow_category_change: false</code>).
+              </span>
+            </span>
+          </label>
+
+          <details className="group/vars">
+            <summary className="cursor-pointer text-xs text-base-content/60 hover:text-base-content">
+              Advanced: variables metadata (optional)
+            </summary>
+            <div className="mt-2 space-y-1">
+              <p className="text-xs text-base-content/50">
+                Optional JSON array of variable metadata (e.g. display names for campaign variable pickers). Most templates don't need this — leave blank unless you know what it does.
+              </p>
+              <textarea
+                className="textarea textarea-bordered w-full min-h-[80px] font-mono text-xs"
+                value={variablesJson}
+                onChange={(e) => setVariablesJson(e.target.value)}
+                placeholder='[{"key": "first_name", "label": "First name"}]'
+              />
+            </div>
+          </details>
         </div>
       </details>
+
+      {/* WhatsApp bubble preview */}
+      {showPreview && (
+        <div className="rounded-box border border-base-300 bg-base-200/50 p-3 space-y-2">
+          <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">
+            Preview
+          </div>
+          {layoutType === "STANDARD" ? (
+            <WhatsAppBubblePreview
+              headerType={headerType}
+              headerContent={headerContent}
+              body={body}
+              footer={footer}
+              buttons={
+                standardButtonRows
+                  ? standardButtonRows.map((r) => ({ type: r.type, text: r.text }))
+                  : []
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {body.trim() && (
+                <div className="text-xs text-base-content/60 italic">
+                  Carousel intro: {renderPreviewBody(body)}
+                </div>
+              )}
+              {carouselCards.length === 0 ? (
+                <div className="text-xs text-base-content/50">No carousel cards yet.</div>
+              ) : (
+                <div className="flex gap-3 overflow-x-auto pb-1">
+                  {carouselCards.map((card, idx) => (
+                    <div key={idx} className="min-w-[200px] max-w-[220px]">
+                      <WhatsAppBubblePreview
+                        headerType={card.headerFormat ?? "IMAGE"}
+                        headerContent={card.headerHandle ?? ""}
+                        body={card.body ?? ""}
+                        footer=""
+                        buttons={
+                          (carouselButtonRowsByIndex[idx] ?? []).map((r) => ({
+                            type: r.type,
+                            text: r.text,
+                          }))
+                        }
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Bottom save */}
+      <div className="flex justify-end pt-1">
+        {SaveButton}
+      </div>
     </div>
   );
 }

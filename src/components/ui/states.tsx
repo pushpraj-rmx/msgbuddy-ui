@@ -2,17 +2,15 @@ import type { ReactNode } from "react";
 
 export function LoadingState({ label = "Loading..." }: { label?: string }) {
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4">
-      <div className="flex items-center gap-2 text-sm text-base-content/70">
-        <span className="loading loading-spinner loading-sm" />
-        <span>{label}</span>
-      </div>
+    <div className="flex items-center gap-2.5 rounded-box border border-base-300 bg-base-100 px-4 py-3 text-sm text-base-content/60">
+      <span className="loading loading-spinner loading-sm shrink-0" />
+      <span>{label}</span>
     </div>
   );
 }
 
 export function EmptyState({
-  title = "No data",
+  title = "Nothing here yet",
   description,
   action,
 }: {
@@ -21,12 +19,12 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
+    <div className="flex flex-col items-center justify-center rounded-box border border-dashed border-base-300 bg-base-100 px-6 py-10 text-center">
       <p className="text-sm font-medium text-base-content">{title}</p>
       {description ? (
-        <p className="text-xs text-base-content/60">{description}</p>
+        <p className="mt-1 text-xs text-base-content/55">{description}</p>
       ) : null}
-      {action ? <div>{action}</div> : null}
+      {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );
 }
@@ -39,10 +37,9 @@ export function ErrorState({
   action?: ReactNode;
 }) {
   return (
-    <div className="rounded-box border border-error/40 bg-error/10 p-4 space-y-2">
+    <div className="rounded-box border border-error/30 bg-error/8 px-4 py-3">
       <p className="text-sm font-medium text-error">{message}</p>
-      {action ? <div>{action}</div> : null}
+      {action ? <div className="mt-3">{action}</div> : null}
     </div>
   );
 }
-

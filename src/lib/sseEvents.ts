@@ -104,6 +104,7 @@ export function inboxMessageFromSseWire(raw: unknown): InboxMessage | null {
     errorCode: o.errorCode == null ? null : String(o.errorCode),
     errorMessage: o.errorMessage == null ? null : String(o.errorMessage),
     failedAt: optDateStringOrNull(o.failedAt),
+    campaignId: o.campaignId == null ? null : String(o.campaignId),
   };
 }
 

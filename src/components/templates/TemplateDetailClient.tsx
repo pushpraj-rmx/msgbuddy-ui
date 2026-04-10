@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   useTemplate,
   useUpdateTemplate,
   useChannelTemplateState,
   channelTemplateKeys,
 } from "@/hooks/use-templates";
-import type { ChannelTemplate, ChannelTemplateStateRequirement, TemplateChannel, WorkspaceRole } from "@/lib/types";
+import type { ChannelTemplate, ChannelTemplateStateRequirement, TemplateCategory, TemplateChannel, WorkspaceRole } from "@/lib/types";
 import { templatesApi } from "@/lib/api";
 import { channelTemplateRequirementHref } from "@/lib/site";
 import {
@@ -18,11 +18,7 @@ import {
   isChannelTemplateCategoryPending,
   isWhatsAppAccountRestriction,
 } from "@/lib/sseEvents";
-
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message ?? "Something went wrong.";
-}
+import { getApiError } from "@/lib/api-error";
 
 function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
   const stateQuery = useChannelTemplateState(ct.id, { refetchInterval: 10_000 });
@@ -79,23 +75,31 @@ function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
 
       {requirements.length > 0 && (
         <div className="mt-3 space-y-2">
-          {requirements.map((r) => (
-            <div key={r.code} className="flex items-center justify-between gap-3 rounded-lg border border-base-300/80 bg-base-100 px-3 py-2">
-              <div className="text-sm">
-                <div className="font-medium">{r.code}</div>
-                <div className="text-base-content/70">{r.message}</div>
+          {requirements.map((r) => {
+            const codeLabel =
+              r.code === "NO_VERSION"
+                ? "No version yet"
+                : r.code === "NO_SENDABLE_VERSION"
+                  ? "Approval needed"
+                  : r.code;
+            return (
+              <div key={r.code} className="flex items-center justify-between gap-3 rounded-lg border border-base-300/80 bg-base-100 px-3 py-2">
+                <div className="text-sm">
+                  <div className="font-medium">{codeLabel}</div>
+                  <div className="text-base-content/70">{r.message}</div>
+                </div>
+                {r.action && (
+                  <a
+                    className="btn btn-outline btn-sm"
+                    href={channelTemplateRequirementHref(r.action.href)}
+                    title={r.action.type}
+                  >
+                    {r.action.label}
+                  </a>
+                )}
               </div>
-              {r.action && (
-                <a
-                  className="btn btn-outline btn-sm"
-                  href={channelTemplateRequirementHref(r.action.href)}
-                  title={r.action.type}
-                >
-                  {r.action.label}
-                </a>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -115,11 +119,15 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isActive, setIsActive] = useState(true);
-  const [addWhatsAppBusy, setAddWhatsAppBusy] = useState(false);
-  const [addWhatsAppError, setAddWhatsAppError] = useState<string | null>(null);
-
+  const [addWaOpen, setAddWaOpen] = useState(false);
+  const [waCategory, setWaCategory] = useState<TemplateCategory>("UTILITY");
   const templateQuery = useTemplate(templateId);
   const updateMutation = useUpdateTemplate();
+  const addWhatsAppMutation = useMutation({
+    mutationFn: (category: TemplateCategory) =>
+      templatesApi.addWhatsApp(templateId, { category }),
+    onSuccess: (ct) => router.push(`/channel-templates/${ct.id}`),
+  });
 
   const template = templateQuery.data;
   const channelTemplates = useMemo(
@@ -180,18 +188,6 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
     [channelTemplates]
   );
 
-  const addWhatsApp = useCallback(async () => {
-    setAddWhatsAppBusy(true);
-    setAddWhatsAppError(null);
-    try {
-      const ct = await templatesApi.addWhatsApp(templateId, { category: "UTILITY" });
-      router.push(`/channel-templates/${ct.id}`);
-    } catch (err: unknown) {
-      setAddWhatsAppError(getApiError(err) || "Failed to add WhatsApp.");
-    } finally {
-      setAddWhatsAppBusy(false);
-    }
-  }, [router, templateId]);
 
   const openEdit = useCallback(() => {
     if (!template) return;
@@ -258,9 +254,6 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
                 {template.description}
               </div>
             )}
-            <div className="mt-2 text-xs text-base-content/60">
-              groupKey: <span className="font-mono">{template.groupKey}</span>
-            </div>
           </div>
           <button className="btn btn-outline btn-sm" onClick={openEdit}>
             Edit
@@ -271,43 +264,27 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Channels</h2>
-          <div className="flex items-center gap-2">
+          {!hasWhatsApp && (
             <button
-              className={
-                hasWhatsApp
-                  ? "btn btn-ghost btn-sm cursor-not-allowed opacity-50"
-                  : "btn btn-primary btn-sm"
-              }
+              className="btn btn-primary btn-sm"
               type="button"
-              onClick={addWhatsApp}
-              disabled={addWhatsAppBusy || hasWhatsApp}
-              title={hasWhatsApp ? "WhatsApp already added" : undefined}
+              onClick={() => setAddWaOpen(true)}
+              disabled={addWhatsAppMutation.isPending}
             >
-              {addWhatsAppBusy ? (
+              {addWhatsAppMutation.isPending ? (
                 <>
                   <span className="loading loading-spinner loading-sm" />
                   Adding…
                 </>
-              ) : hasChannel("WHATSAPP") ? (
-                "WhatsApp added"
               ) : (
-                "Add WhatsApp"
+                "+ Add WhatsApp"
               )}
             </button>
-            <button className="btn btn-ghost btn-sm opacity-50" type="button" disabled>
-              Add Telegram
-            </button>
-            <button className="btn btn-ghost btn-sm opacity-50" type="button" disabled>
-              Add Email
-            </button>
-            <button className="btn btn-ghost btn-sm opacity-50" type="button" disabled>
-              Add SMS
-            </button>
-          </div>
+          )}
         </div>
-        {addWhatsAppError && (
+        {addWhatsAppMutation.isError && (
           <div role="alert" className="alert alert-error">
-            <span>{addWhatsAppError}</span>
+            <span>{getApiError(addWhatsAppMutation.error) || "Failed to add WhatsApp."}</span>
           </div>
         )}
         {channelTemplates.length === 0 ? (
@@ -323,10 +300,59 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
         )}
       </div>
 
+      {addWaOpen && (
+        <dialog open className="modal modal-middle">
+          <div className="modal-box">
+            <h3 className="text-lg font-semibold">Add WhatsApp channel</h3>
+            <p className="text-sm text-base-content/60 mt-1">
+              Choose the initial template category. Meta uses this to classify your messages.
+            </p>
+            <div className="mt-4 space-y-3">
+              <label className="form-control w-full">
+                <span className="label-text">Category</span>
+                <select
+                  className="select select-bordered w-full"
+                  value={waCategory}
+                  onChange={(e) => setWaCategory(e.target.value as TemplateCategory)}
+                >
+                  <option value="UTILITY">Utility — transactional, order updates, alerts</option>
+                  <option value="MARKETING">Marketing — promotions, offers</option>
+                  <option value="AUTHENTICATION">Authentication — OTP, verification codes</option>
+                </select>
+              </label>
+            </div>
+            <div className="modal-action">
+              <button
+                className="btn btn-ghost"
+                type="button"
+                onClick={() => setAddWaOpen(false)}
+                disabled={addWhatsAppMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => {
+                  setAddWaOpen(false);
+                  addWhatsAppMutation.mutate(waCategory);
+                }}
+                disabled={addWhatsAppMutation.isPending}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop" onSubmit={() => setAddWaOpen(false)}>
+            <button type="submit">close</button>
+          </form>
+        </dialog>
+      )}
+
       {editOpen && (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
-            <h3 className="text-lg font-semibold">Edit message</h3>
+            <h3 className="text-lg font-semibold">Edit template</h3>
             <div className="mt-4 space-y-3">
               <label className="label">
                 <span className="label-text">Name</span>
@@ -353,7 +379,12 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
                   checked={isActive}
                   onChange={(e) => setIsActive(e.target.checked)}
                 />
-                <span className="label-text">Active</span>
+                <span className="label-text">
+                  Active
+                  <span className="block text-xs font-normal text-base-content/60">
+                    Inactive templates are hidden from campaign selection.
+                  </span>
+                </span>
               </label>
             </div>
             <div className="modal-action">

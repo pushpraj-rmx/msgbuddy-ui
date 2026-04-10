@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-/** Primary page title for assistive tech; Topbar mirrors the label visually. */
 export function PageHeader({
   title,
   description,

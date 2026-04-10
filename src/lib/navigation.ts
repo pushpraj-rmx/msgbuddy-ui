@@ -8,6 +8,7 @@ import GroupsRounded from "@mui/icons-material/GroupsRounded";
 import HomeRounded from "@mui/icons-material/HomeRounded";
 import LabelRounded from "@mui/icons-material/LabelRounded";
 import LayersRounded from "@mui/icons-material/LayersRounded";
+import BugReportRounded from "@mui/icons-material/BugReportRounded";
 import NotificationsRounded from "@mui/icons-material/NotificationsRounded";
 import PersonRounded from "@mui/icons-material/PersonRounded";
 import PhotoRounded from "@mui/icons-material/PhotoRounded";
@@ -47,6 +48,7 @@ export function getAppNav(platformRole: string): AppNavItem[] {
     { href: "/media", label: "Media", Icon: PhotoRounded },
     { href: "/analytics", label: "Analytics", Icon: BarChartRounded },
     { href: "/notifications", label: "Notifications", Icon: NotificationsRounded },
+    { href: "/feedback", label: "Feedback", Icon: BugReportRounded },
     { href: "/usage", label: "Usage", Icon: LayersRounded },
     { href: "/settings", label: "Settings", Icon: SettingsRounded, showInDock: true },
   ];
@@ -84,6 +86,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/platform")) return "Platform";
   if (pathname.startsWith("/onboarding")) return "Onboarding";
   if (pathname.startsWith("/notifications")) return "Notifications";
+  if (pathname.startsWith("/feedback")) return "Feedback";
   if (pathname.startsWith("/usage")) return "Usage";
   return "MsgBuddy";
 }

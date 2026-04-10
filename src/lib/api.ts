@@ -1,5 +1,6 @@
 import api, { fetchWithAuthRefresh } from "./axios";
 import { API_BASE_URL, endpoints } from "./endpoints";
+import type { InboxMessage, MediaItem } from "./messaging";
 import type {
   Contact,
   ContactsListResponse,
@@ -38,6 +39,11 @@ import type {
   OnboardingWabaListResponse,
   NotificationItem,
   NotificationsListResponse,
+  FeedbackReport,
+  PaginatedFeedbackResponse,
+  FeedbackType,
+  FeedbackPriority,
+  FeedbackAttachment,
 } from "./types";
 
 export type {
@@ -72,6 +78,8 @@ export interface RegisterPendingVerificationResponse {
 export interface User {
   id: string;
   email: string;
+  name?: string;
+  avatarUrl?: string | null;
   /** True when the account can sign in with email + password (not Google-only). */
   hasPassword?: boolean;
 }
@@ -174,6 +182,9 @@ export const authApi = {
 export interface ConversationFilters {
   status?: "OPEN" | "CLOSED" | "ARCHIVED";
   channel?: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
+  assignedUserId?: string;
+  priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
+  tagIds?: string;
   search?: string;
   unreadOnly?: boolean;
   awaitingReplyOnly?: boolean;
@@ -241,6 +252,7 @@ export type SendMessagePayload =
       idempotencyKey?: string;
       channel?: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
       type?: "TEXT";
+      sendAt?: string;
     }
   | {
       contactId: string;
@@ -249,6 +261,7 @@ export type SendMessagePayload =
       text?: string;
       idempotencyKey?: string;
       channel: "WHATSAPP";
+      sendAt?: string;
     }
   | {
       contactId: string;
@@ -256,6 +269,7 @@ export type SendMessagePayload =
       channelTemplateVersionId: string;
       templateVariables?: Record<string, string>;
       idempotencyKey?: string;
+      sendAt?: string;
     };
 
 /** POST /v2/media/:id/prepare-whatsapp */
@@ -364,6 +378,48 @@ export const conversationsApi = {
     status: "PENDING" | "PROCESSING" | "QUEUED" | "SENT" | "DELIVERED" | "READ" | "FAILED"
   ) => {
     const response = await api.put(endpoints.messages.updateStatus(id), { status });
+    return response.data;
+  },
+  // ─── Pin ────────────────────────────────────────────────────────────────────
+  getPinnedMessages: async (conversationId: string) => {
+    const response = await api.get(endpoints.messages.pinnedByConversation(conversationId));
+    return response.data;
+  },
+  pinMessage: async (messageId: string) => {
+    const response = await api.post(endpoints.messages.pin(messageId));
+    return response.data;
+  },
+  unpinMessage: async (messageId: string) => {
+    const response = await api.delete(endpoints.messages.pin(messageId));
+    return response.data;
+  },
+  // ─── Star ───────────────────────────────────────────────────────────────────
+  starMessage: async (messageId: string) => {
+    const response = await api.post(endpoints.messages.star(messageId));
+    return response.data;
+  },
+  unstarMessage: async (messageId: string) => {
+    const response = await api.delete(endpoints.messages.star(messageId));
+    return response.data;
+  },
+  listStarred: async (cursor?: string, limit?: number) => {
+    const response = await api.get(endpoints.messages.starred, { params: { cursor, limit } });
+    return response.data as { messages: InboxMessage[]; nextCursor: string | null };
+  },
+  // ─── Media gallery ──────────────────────────────────────────────────────────
+  listConversationMedia: async (conversationId: string, cursor?: string, limit?: number) => {
+    const response = await api.get(endpoints.messages.mediaByConversation(conversationId), {
+      params: { cursor, limit },
+    });
+    return response.data as { media: MediaItem[]; nextCursor: string | null };
+  },
+  // ─── Scheduled ──────────────────────────────────────────────────────────────
+  listScheduled: async (cursor?: string, limit?: number) => {
+    const response = await api.get(endpoints.messages.scheduled, { params: { cursor, limit } });
+    return response.data as { messages: InboxMessage[]; nextCursor: string | null };
+  },
+  cancelScheduledMessage: async (messageId: string) => {
+    const response = await api.delete(endpoints.messages.byId(messageId));
     return response.data;
   },
 };
@@ -543,6 +599,7 @@ export const contactsApi = {
       emailLabel?: string;
       isBlocked?: boolean;
       isOptedOut?: boolean;
+      avatarUrl?: string;
     }
   ): Promise<Contact> => {
     const response = await api.put<Contact>(endpoints.contacts.byId(id), data);
@@ -820,13 +877,21 @@ export const templatesApi = {
     }>;
   }> => {
     const response = await api.get(endpoints.templates.metaImportPreview);
-    return response.data as any;
+    return response.data;
   },
-  metaImport: async (providerTemplateIds?: string[]): Promise<any> => {
+  metaImport: async (providerTemplateIds?: string[]): Promise<{
+    total: number;
+    templatesCreated: number;
+    channelTemplatesCreated: number;
+    versionsCreated: number;
+    linked: number;
+    skipped: number;
+    errors: Array<{ providerTemplateId: string; name: string; error: string }>;
+  }> => {
     const response = await api.post(endpoints.templates.metaImport, {
       providerTemplateIds,
     });
-    return response.data as any;
+    return response.data;
   },
 };
 
@@ -1059,6 +1124,13 @@ function parseBytesReceivedFromPayload(data: unknown): number | undefined {
   }
   return undefined;
 }
+
+export const meApi = {
+  updateProfile: async (data: { name?: string; avatarUrl?: string }) => {
+    const response = await api.patch(endpoints.auth.meProfile, data);
+    return response.data as { user: { id: string; email: string; name?: string; avatarUrl?: string; hasPassword?: boolean } };
+  },
+};
 
 export const mediaApi = {
   list: async (params?: { limit?: number; cursor?: string }) => {
@@ -1972,6 +2044,71 @@ export const onboardingApi = {
   listClientWabas: async (): Promise<OnboardingWabaListResponse> => {
     const response = await api.get<OnboardingWabaListResponse>(
       endpoints.onboarding.wabaClient
+    );
+    return response.data;
+  },
+};
+
+export interface CreateFeedbackPayload {
+  type: FeedbackType;
+  title: string;
+  description: string;
+  priority?: FeedbackPriority;
+  attachments?: FeedbackAttachment[];
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListFeedbackParams {
+  type?: FeedbackType;
+  status?: string;
+  page?: number;
+  limit?: number;
+  all?: boolean;
+}
+
+export interface UpdateFeedbackPayload {
+  status?: string;
+  adminNote?: string;
+}
+
+export const feedbackApi = {
+  list: async (params: ListFeedbackParams = {}): Promise<PaginatedFeedbackResponse> => {
+    const response = await api.get<PaginatedFeedbackResponse>(
+      endpoints.feedback.list,
+      { params }
+    );
+    return response.data;
+  },
+  getById: async (id: string): Promise<FeedbackReport> => {
+    const response = await api.get<FeedbackReport>(endpoints.feedback.byId(id));
+    return response.data;
+  },
+  create: async (payload: CreateFeedbackPayload): Promise<FeedbackReport> => {
+    const response = await api.post<FeedbackReport>(
+      endpoints.feedback.list,
+      payload
+    );
+    return response.data;
+  },
+  adminUpdate: async (id: string, payload: UpdateFeedbackPayload): Promise<FeedbackReport> => {
+    const response = await api.patch<FeedbackReport>(
+      endpoints.feedback.byId(id),
+      payload
+    );
+    return response.data;
+  },
+  delete: async (id: string): Promise<void> => {
+    await api.delete(endpoints.feedback.byId(id));
+  },
+  vote: async (id: string): Promise<{ voteCount: number; hasVoted: boolean }> => {
+    const response = await api.post<{ voteCount: number; hasVoted: boolean }>(
+      endpoints.feedback.vote(id)
+    );
+    return response.data;
+  },
+  unvote: async (id: string): Promise<{ voteCount: number; hasVoted: boolean }> => {
+    const response = await api.delete<{ voteCount: number; hasVoted: boolean }>(
+      endpoints.feedback.vote(id)
     );
     return response.data;
   },

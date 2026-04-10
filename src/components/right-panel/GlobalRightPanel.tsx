@@ -29,7 +29,7 @@ export function GlobalRightPanel() {
   return (
     <aside
       aria-label={panel?.title || "Details"}
-      className="flex h-full min-h-0 w-[min(18rem,42vw)] shrink-0 flex-col border-l border-base-300 bg-base-100 shadow-sm sm:w-[min(22rem,34vw)] lg:w-96"
+      className="flex h-full min-h-0 w-[clamp(18rem,28vw,32rem)] shrink-0 flex-col border-l border-base-300 bg-base-100 shadow-sm"
     >
       <div className="flex min-h-0 shrink-0 items-center justify-between gap-2 border-b border-base-300 px-3 py-2.5">
         <h2 className="min-w-0 truncate text-sm font-medium text-base-content/90">

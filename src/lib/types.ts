@@ -11,6 +11,7 @@ export type Contact = {
   name?: string;
   email?: string;
   emailLabel?: string;
+  designation?: string;
   /** Profile / avatar image URL when provided by API (absolute or path served by API). */
   avatarUrl?: string | null;
   isBlocked: boolean;
@@ -564,4 +565,48 @@ export type OnboardingWaba = {
 export type OnboardingWabaListResponse = {
   wabas: OnboardingWaba[];
   count: number;
+};
+
+export type FeedbackType = "BUG" | "FEATURE_REQUEST";
+export type FeedbackPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type FeedbackStatus =
+  | "OPEN"
+  | "IN_REVIEW"
+  | "PLANNED"
+  | "IN_PROGRESS"
+  | "DONE"
+  | "WONT_FIX";
+
+export type FeedbackAttachment = {
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+};
+
+export type FeedbackReport = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  type: FeedbackType;
+  title: string;
+  description: string;
+  priority: FeedbackPriority;
+  status: FeedbackStatus;
+  attachments?: FeedbackAttachment[];
+  metadata?: Record<string, unknown>;
+  voteCount: number;
+  adminNote?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  hasVoted: boolean;
+  submittedBy?: string | null;
+};
+
+export type PaginatedFeedbackResponse = {
+  items: FeedbackReport[];
+  total: number;
+  page: number;
+  limit: number;
 };

@@ -7,6 +7,7 @@ import { WhatsAppOnboardingPanel } from "@/components/integrations/WhatsAppOnboa
 import {
   workspaceApi,
   whatsappApi,
+  usageApi,
   type WhatsAppConnection,
   type WhatsAppPhoneStatus,
   type WorkspaceCloudApiConfigResponse,
@@ -174,6 +175,16 @@ export function WhatsAppSettingsClient({
     retry: 1,
   });
 
+  const limitsQuery = useQuery({
+    queryKey: ["usage", "limits"],
+    queryFn: () => usageApi.limits(),
+    staleTime: 60_000,
+    retry: 1,
+  });
+
+  const maxNumbers: number = (limitsQuery.data as { limits?: { maxNumbers?: number } } | undefined)?.limits?.maxNumbers ?? Infinity;
+  const atLimit = (connectionsQuery.data?.length ?? 0) >= maxNumbers;
+
   const disconnectMutation = useMutation({
     mutationFn: (cloudApiAccountId: string) => whatsappApi.disconnect(cloudApiAccountId),
     onSuccess: async () => {
@@ -225,6 +236,7 @@ export function WhatsAppSettingsClient({
       <WhatsAppIntegrationPage
         variant="connectOnly"
         initialCloudApiConfig={cloudApiConfigState}
+        atLimit={atLimit}
         onConnected={async () => {
           await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connections"] });
         }}

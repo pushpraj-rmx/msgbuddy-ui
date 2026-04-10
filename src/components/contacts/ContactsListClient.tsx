@@ -12,6 +12,7 @@ import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { contactsApi, type ContactsListSort, tagsApi } from "@/lib/api";
+import { getApiError } from "@/lib/api-error";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import {
   isContactBulkUpdated,
@@ -89,11 +90,6 @@ function sortContacts(
   });
 }
 
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response
-    ?.data?.message ?? "Something went wrong.";
-}
-
 function toCsvCell(value: string | number | boolean | null | undefined): string {
   if (value == null) return "";
   const text = String(value);
@@ -130,7 +126,7 @@ export function ContactsListClient({
   const [importing, setImporting] = useState(false);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(
     null
   );
@@ -270,6 +266,10 @@ export function ContactsListClient({
             setSelectedContactId(null);
             setSelectedContactRow(null);
           }}
+          onDeleted={() => {
+            setSelectedContactId(null);
+            setSelectedContactRow(null);
+          }}
         />
       ),
     });
@@ -290,6 +290,7 @@ export function ContactsListClient({
       phone: string;
       phoneLabel?: string;
       name?: string;
+      designation?: string;
       email?: string;
       emailLabel?: string;
     }) => contactsApi.create(payload),
@@ -310,6 +311,7 @@ export function ContactsListClient({
       id: string;
       payload: {
         name?: string;
+        designation?: string;
         email?: string;
         phoneLabel?: string;
         emailLabel?: string;
@@ -342,12 +344,19 @@ export function ContactsListClient({
     onError: (err) => setError(getApiError(err)),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => contactsApi.delete(id),
-    onSuccess: () => {
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      await Promise.all(ids.map((id) => contactsApi.delete(id)));
+    },
+    onSuccess: (_, ids) => {
       invalidateContacts();
       invalidateSegmentPreview();
-      setDeleteTarget(null);
+      setSelectedContactIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      setBulkDeleteOpen(false);
       setError(null);
     },
     onError: (err) => setError(getApiError(err)),
@@ -552,15 +561,11 @@ export function ContactsListClient({
     }
   };
 
-  const handleDeleteConfirm = (contact: Contact) => {
-    deleteMutation.mutate(contact.id);
-  };
-
   const pending =
     createMutation.isPending ||
     updateMutation.isPending ||
     consentMutation.isPending ||
-    deleteMutation.isPending ||
+    bulkDeleteMutation.isPending ||
     bulkAssignTagMutation.isPending;
 
   const openDrawer = (contact: ContactRow) => {
@@ -747,14 +752,24 @@ export function ContactsListClient({
             )}
           </button>
           {selectedContactIds.size > 0 && (
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => setBulkTagOpen(true)}
-              disabled={bulkAssignTagMutation.isPending}
-            >
-              Add tag to {selectedContactIds.size} selected
-            </button>
+            <>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => setBulkTagOpen(true)}
+                disabled={bulkAssignTagMutation.isPending}
+              >
+                Add tag to {selectedContactIds.size} selected
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm text-error border-error/40 hover:border-error"
+                onClick={() => setBulkDeleteOpen(true)}
+                disabled={bulkDeleteMutation.isPending}
+              >
+                Delete selected ({selectedContactIds.size})
+              </button>
+            </>
           )}
           <Link
             href="/people/tags"
@@ -957,6 +972,8 @@ export function ContactsListClient({
                   "name" in contact ? (contact.name || "Unnamed") : "Unnamed";
                 const email =
                   "email" in contact ? (contact.email || "") : "";
+                const designation =
+                  "designation" in contact ? ((contact as { designation?: string }).designation || "") : "";
                 const isActiveRow = selectedContactId === contact.id;
                 return (
                   <tr
@@ -991,9 +1008,9 @@ export function ContactsListClient({
                         />
                         <div>
                           <p className="text-sm font-semibold text-base-content">{name}</p>
-                          {email && (
+                          {designation && (
                             <p className="text-xs text-base-content/55">
-                              {email}
+                              {designation}
                             </p>
                           )}
                         </div>
@@ -1218,29 +1235,33 @@ export function ContactsListClient({
         </dialog>
       )}
 
-      {deleteTarget && (
+      {bulkDeleteOpen && (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
-            <h3 className="text-lg font-semibold">Delete contact</h3>
+            <h3 className="text-lg font-semibold">Delete selected contacts</h3>
             <p className="mt-2 text-sm text-base-content/70">
-              Delete {deleteTarget.name || deleteTarget.phone}? This will
-              soft-delete the contact; they will no longer appear in the list.
+              Soft-delete {selectedContactIds.size} contact
+              {selectedContactIds.size !== 1 ? "s" : ""}? They will be marked as
+              deleted and will no longer appear in this list.
             </p>
             <div className="modal-action">
               <button
                 type="button"
                 className="btn btn-ghost"
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => setBulkDeleteOpen(false)}
+                disabled={bulkDeleteMutation.isPending}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="btn btn-error"
-                onClick={() => handleDeleteConfirm(deleteTarget)}
-                disabled={deleteMutation.isPending}
+                onClick={() =>
+                  bulkDeleteMutation.mutate(Array.from(selectedContactIds))
+                }
+                disabled={bulkDeleteMutation.isPending}
               >
-                {deleteMutation.isPending ? (
+                {bulkDeleteMutation.isPending ? (
                   <span className="loading loading-spinner loading-sm" />
                 ) : (
                   "Delete"
@@ -1251,7 +1272,7 @@ export function ContactsListClient({
           <form method="dialog" className="modal-backdrop">
             <button
               type="button"
-              onClick={() => setDeleteTarget(null)}
+              onClick={() => setBulkDeleteOpen(false)}
               aria-label="Close"
             />
           </form>

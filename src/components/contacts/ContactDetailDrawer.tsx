@@ -1,6 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { getApiError } from "@/lib/api-error";
 import { contactsApi, tagsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
@@ -66,12 +68,17 @@ export function ContactDetailPanelContent({
   contactId,
   initialContact,
   onEdit,
+  onDeleted,
 }: {
   contactId: string;
   initialContact?: Contact | null;
   onEdit: (contact: Contact) => void;
+  /** Called after a successful soft-delete so the parent can close the panel. */
+  onDeleted?: () => void;
 }) {
   const queryClient = useQueryClient();
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const { data: contact = initialContact } = useQuery({
     queryKey: ["contacts", contactId],
     queryFn: () =>
@@ -100,6 +107,17 @@ export function ContactDetailPanelContent({
     onSuccess: invalidateContact,
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: () => contactsApi.delete(contactId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["contacts", "list"] });
+      setDeleteError(null);
+      onDeleted?.();
+      setDeleteConfirm(false);
+    },
+    onError: (err) => setDeleteError(getApiError(err)),
+  });
+
   if (!contact) return null;
 
   const tags = contact.tags ?? [];
@@ -116,14 +134,32 @@ export function ContactDetailPanelContent({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">{contact.name || "Unnamed"}</h2>
-            <button
-              type="button"
-              className="btn btn-outline btn-sm"
-              onClick={() => onEdit(contact)}
-            >
-              Edit contact
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={() => onEdit(contact)}
+              >
+                Edit contact
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm text-error"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteConfirm(true);
+                }}
+                disabled={deleteMutation.isPending}
+              >
+                Delete
+              </button>
+            </div>
           </div>
+          {deleteError ? (
+            <p className="text-sm text-error" role="alert">
+              {deleteError}
+            </p>
+          ) : null}
           {contact.email && (
             <p className="mt-0.5 text-sm text-base-content/70">
               {contact.email}
@@ -191,6 +227,48 @@ export function ContactDetailPanelContent({
           <span>{contact.isOptedOut ? "Yes" : "No"}</span>
         </div>
       </div>
+
+      {deleteConfirm ? (
+        <dialog open className="modal modal-middle">
+          <div className="modal-box">
+            <h3 className="text-lg font-semibold">Delete contact</h3>
+            <p className="mt-2 text-sm text-base-content/70">
+              Delete {contact.name || contact.phone}? This soft-deletes the
+              contact; they will be marked as deleted and no longer appear in
+              this list.
+            </p>
+            <div className="modal-action">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setDeleteConfirm(false)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-error"
+                onClick={() => deleteMutation.mutate()}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? (
+                  <span className="loading loading-spinner loading-sm" />
+                ) : (
+                  "Delete"
+                )}
+              </button>
+            </div>
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button
+              type="button"
+              onClick={() => setDeleteConfirm(false)}
+              aria-label="Close"
+            />
+          </form>
+        </dialog>
+      ) : null}
     </div>
   );
 }

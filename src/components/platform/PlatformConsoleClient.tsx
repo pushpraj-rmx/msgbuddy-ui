@@ -19,6 +19,7 @@ import {
 } from "@/hooks/use-platform";
 import { isSuperAdmin } from "@/lib/platform-access";
 import type { PlatformRole, PlatformWorkspaceStatus } from "@/lib/types";
+import { getApiError } from "@/lib/api-error";
 
 type TabKey =
   | "workspaces"
@@ -28,13 +29,6 @@ type TabKey =
   | "auditLogs"
   | "channelAccounts"
   | "connectedClientBusinesses";
-
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message
-    ? String((err as { response?: { data?: { message?: string } } }).response?.data?.message)
-    : "Something went wrong.";
-}
 
 function formatDate(value?: string | null): string {
   if (!value) return "-";

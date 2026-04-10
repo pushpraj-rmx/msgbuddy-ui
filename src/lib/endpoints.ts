@@ -22,6 +22,7 @@ export const endpoints = {
     /** GET — browser navigates to API; API redirects to Google, then back to `/v2/auth/google/callback`, then to the app. */
     googleStart: `${P}/auth/google`,
     me: `${P}/me`,
+    meProfile: `${P}/me/profile`,
     refresh: `${P}/auth/refresh`,
     logout: `${P}/auth/logout`,
     logoutAll: `${P}/auth/logout-all`,
@@ -62,11 +63,19 @@ export const endpoints = {
   messages: {
     listByConversation: (conversationId: string) =>
       `${P}/messages/conversation/${conversationId}`,
+    pinnedByConversation: (conversationId: string) =>
+      `${P}/messages/conversation/${conversationId}/pinned`,
+    mediaByConversation: (conversationId: string) =>
+      `${P}/messages/conversation/${conversationId}/media`,
     search: `${P}/messages/search`,
     send: `${P}/messages`,
     policy: (contactId: string) => `${P}/messages/policy/${contactId}`,
     byId: (id: string) => `${P}/messages/${id}`,
     updateStatus: (id: string) => `${P}/messages/${id}/status`,
+    pin: (id: string) => `${P}/messages/${id}/pin`,
+    star: (id: string) => `${P}/messages/${id}/star`,
+    starred: `${P}/messages/starred`,
+    scheduled: `${P}/messages/scheduled`,
   },
   integrations: {
     list: `${P}/integrations`,
@@ -268,5 +277,10 @@ export const endpoints = {
   onboarding: {
     wabaOwned: `${P}/onboarding/waba/owned`,
     wabaClient: `${P}/onboarding/waba/client`,
+  },
+  feedback: {
+    list: `${P}/feedback`,
+    byId: (id: string) => `${P}/feedback/${id}`,
+    vote: (id: string) => `${P}/feedback/${id}/vote`,
   },
 };

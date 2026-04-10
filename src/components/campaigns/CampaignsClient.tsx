@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { getApiError } from "@/lib/api-error";
 import {
   analyticsApi,
   campaignsApi,
@@ -28,6 +30,7 @@ import {
 import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { CampaignDetailView } from "./CampaignDetailView";
+import { CampaignMetaSidebar } from "./CampaignMetaSidebar";
 
 export type Campaign = {
   id: string;
@@ -93,11 +96,6 @@ type CampaignRunJob = {
 /** Matches API CampaignAudienceType (SEGMENT needs audienceQuery — use API for now). */
 const AUDIENCE_TYPES = ["ALL", "SPECIFIC", "SEGMENT"] as const;
 
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response
-    ?.data?.message ?? "Something went wrong.";
-}
-
 function formatReportValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
   if (typeof value === "number" || typeof value === "boolean") {
@@ -118,6 +116,7 @@ export function CampaignsClient({
   initialCampaigns: Campaign[];
   templates: Template[];
 }) {
+  const searchParams = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
   const [selectedId, setSelectedId] = useState<string | null>(
     initialCampaigns[0]?.id ?? null
@@ -197,6 +196,14 @@ export function CampaignsClient({
       setLoading(false);
     }
   }, []);
+
+  // Honour ?id= deep-link from inbox "View campaign →" links.
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id && campaigns.some((c) => c.id === id)) {
+      setSelectedId(id);
+    }
+  }, [campaigns, searchParams]);
 
   const openWizard = async () => {
     setWizardOpen(true);
@@ -641,6 +648,19 @@ export function CampaignsClient({
     showRawReport,
   ]);
 
+  const campaignMetaPanel = useMemo(() => {
+    if (!selectedCampaign) return null;
+    return (
+      <CampaignMetaSidebar
+        status={statusLabel}
+        channel={channelLabel}
+        tone={tone}
+        runs={runs}
+        mergedMetrics={mergedMetrics}
+      />
+    );
+  }, [selectedCampaign, statusLabel, channelLabel, tone, runs, mergedMetrics]);
+
   useEffect(() => {
     if (!selectedCampaign) {
       clearRightPanelContent("campaigns");
@@ -650,11 +670,11 @@ export function CampaignsClient({
       source: "campaigns",
       title: formatCampaignListTitle(selectedCampaign.name),
       openAfter: isXlUp,
-      content: campaignDetailPanel,
+      content: campaignMetaPanel,
     });
   }, [
     selectedCampaign,
-    campaignDetailPanel,
+    campaignMetaPanel,
     clearRightPanelContent,
     setRightPanelContent,
     isXlUp,
@@ -665,8 +685,8 @@ export function CampaignsClient({
   }, [clearRightPanelContent]);
 
   return (
-    <div className="flex max-w-md flex-col gap-6 lg:max-w-[min(100%,420px)]">
-      <aside className="flex flex-col gap-5">
+    <div className="flex h-full min-h-0 gap-0">
+      <aside className="flex w-64 shrink-0 flex-col gap-5 overflow-y-auto border-r border-base-300 pr-4 lg:w-72 lg:pr-5">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold tracking-tight text-base-content">
             Campaigns
@@ -733,6 +753,16 @@ export function CampaignsClient({
         </button>
       </aside>
 
+      {/* Main content: campaign detail */}
+      <div className="min-w-0 flex-1 overflow-y-auto pl-4 lg:pl-6">
+        {selectedCampaign ? (
+          campaignDetailPanel
+        ) : (
+          <div className="flex h-full items-center justify-center text-sm text-base-content/50">
+            Select a campaign to view details
+          </div>
+        )}
+      </div>
 
       {wizardOpen && (
         <dialog open className="modal modal-middle">

@@ -107,8 +107,9 @@ export function Topbar({
   }, [mobileSearchOpen]);
 
   return (
-    <header className="sticky top-0 z-10 grid min-h-15 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,44rem)_minmax(0,1fr)] items-center gap-2 border-b border-base-300 bg-base-100 px-4 pt-[env(safe-area-inset-top,0px)]">
-      <div className="flex min-w-0 items-center justify-self-start gap-2">
+    <header className="sticky top-0 z-10 relative flex min-h-15 shrink-0 items-center border-b border-base-300 pt-[env(safe-area-inset-top,0px)]">
+      {/* Sidebar-aligned section — same width as sidebar */}
+      <div className="flex shrink-0 items-center gap-2 px-4 lg:w-64">
         <label
           htmlFor={drawerId}
           className="btn btn-ghost btn-square drawer-button lg:hidden"
@@ -138,14 +139,23 @@ export function Topbar({
         >
           <BrandLogo className="h-7 w-auto" priority />
         </Link>
-        <h1 className="hidden min-w-0 truncate text-sm font-medium text-base-content xl:block">
+      </div>
+
+      {/* Absolutely centered search — true center of the full header */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="pointer-events-auto hidden w-full max-w-xl px-4 md:block">
+          <GlobalSearch variant="desktop" />
+        </div>
+      </div>
+
+      {/* Page title in flow (xl only) + spacer to push right section to end */}
+      <div className="flex min-w-0 flex-1 items-center px-4">
+        <h1 className="hidden shrink-0 text-xl font-bold text-base-content/60 xl:block">
           {pageTitle}
         </h1>
       </div>
-      <div className="hidden min-w-0 w-full justify-self-center px-2 md:flex">
-        <GlobalSearch variant="desktop" />
-      </div>
-      <div className="flex items-center justify-self-end gap-1">
+
+      <div className="flex shrink-0 items-center gap-1 px-4">
         <button
           type="button"
           className="btn btn-ghost btn-square md:hidden"
@@ -234,30 +244,35 @@ export function Topbar({
                   notifications.map((item) => {
                     const href =
                       item.data &&
-                      typeof item.data.href === "string" &&
-                      item.data.href.startsWith("/")
+                        typeof item.data.href === "string" &&
+                        item.data.href.startsWith("/")
                         ? item.data.href
                         : "/notifications";
                     const isUnread = !item.readAt;
                     return (
                       <div
                         key={item.id}
-                        className={`rounded-box border p-2 ${isUnread ? "border-base-300 bg-base-200" : "border-base-300"}`}
+                        className={`rounded-box border px-3 py-2 ${isUnread
+                          ? "border-primary/20 bg-primary/5"
+                          : "border-base-300"
+                          }`}
                       >
                         <Link href={href} className="block">
-                          <p className="text-sm font-medium">{item.title}</p>
-                          <p className="mt-0.5 text-xs text-base-content/70">
+                          <p className={`text-sm ${isUnread ? "font-semibold" : "font-medium"}`}>
+                            {item.title}
+                          </p>
+                          <p className="mt-0.5 text-xs text-base-content/60 line-clamp-2">
                             {item.body}
                           </p>
                         </Link>
-                        <div className="mt-1 flex items-center justify-between">
-                          <span className="text-xs text-base-content/60">
+                        <div className="mt-1.5 flex items-center justify-between">
+                          <span className="text-xs text-base-content/40">
                             {formatRelativeTime(item.createdAt)}
                           </span>
                           {isUnread ? (
                             <button
                               type="button"
-                              className="btn btn-ghost btn-xs px-2"
+                              className="btn btn-ghost btn-xs text-xs"
                               onClick={() => markRead.mutate(item.id)}
                               disabled={markRead.isPending}
                             >
@@ -280,30 +295,34 @@ export function Topbar({
           <button
             tabIndex={0}
             role="button"
-            className="btn btn-ghost btn-circle avatar placeholder transition-all duration-150"
+            className="btn btn-ghost btn-square avatar placeholder"
             aria-label="User menu"
           >
-            <div className="bg-primary/20 text-primary w-9 rounded-full">
-              <span className="text-xs font-semibold">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/15">
+              <span className="text-xs font-bold text-primary">
                 {me.user.email.slice(0, 2).toUpperCase()}
               </span>
             </div>
           </button>
-          <ul
+          <div
             tabIndex={0}
-            className="menu dropdown-content z-1 mt-2 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+            className="dropdown-content z-20 mt-2 w-60 rounded-box border border-base-300 bg-base-100 shadow-xl"
           >
-            <li className="menu-title">
-              <span className="truncate text-xs font-medium text-base-content/60">
+            <div className="border-b border-base-300 px-4 py-3">
+              <p className="text-xs font-medium text-base-content/50">Signed in as</p>
+              <p className="mt-0.5 truncate text-sm font-medium text-base-content">
                 {me.user.email}
-              </span>
-            </li>
-            <li>
-              <button type="button" onClick={handleLogout}>
-                Log out
-              </button>
-            </li>
-          </ul>
+              </p>
+              <p className="text-xs text-base-content/50">{me.workspace.name}</p>
+            </div>
+            <ul className="menu menu-sm p-2">
+              <li>
+                <button type="button" onClick={handleLogout} className="text-error hover:bg-error/10">
+                  Log out
+                </button>
+              </li>
+            </ul>
+          </div>
         </div>
       </div>
 

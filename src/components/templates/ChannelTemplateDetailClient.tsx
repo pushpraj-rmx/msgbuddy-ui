@@ -30,10 +30,21 @@ import {
 } from "@/lib/sseEvents";
 import { ChannelTemplateVersionEditor } from "./ChannelTemplateVersionEditor";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
+import { getApiError } from "@/lib/api-error";
 
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message ?? "Something went wrong.";
+function statusLabel(status: TemplateVersionStatus): string {
+  switch (status) {
+    case "DRAFT": return "Draft";
+    case "PENDING": return "Pending review";
+    case "APPROVED": return "Approved";
+    case "REJECTED": return "Rejected";
+    case "PROVIDER_PENDING": return "Under Meta review";
+    case "PROVIDER_APPROVED": return "Live on WhatsApp";
+    case "PROVIDER_REJECTED": return "Rejected by Meta";
+    case "PROVIDER_PAUSED": return "Paused by Meta";
+    case "PROVIDER_DISABLED": return "Disabled by Meta";
+    default: return status;
+  }
 }
 
 function statusBadge(status: TemplateVersionStatus) {
@@ -49,7 +60,80 @@ function statusBadge(status: TemplateVersionStatus) {
             : status === "REJECTED" || status === "PROVIDER_REJECTED"
               ? "badge-error"
               : "badge-ghost";
-  return <span className={`badge badge-sm ${cls}`}>{status}</span>;
+  return <span className={`badge badge-sm ${cls}`}>{statusLabel(status)}</span>;
+}
+
+const WA_STEPS: { key: TemplateVersionStatus | string; label: string }[] = [
+  { key: "DRAFT", label: "Draft" },
+  { key: "PENDING", label: "Submit" },
+  { key: "APPROVED", label: "Approve" },
+  { key: "PROVIDER_PENDING", label: "Meta review" },
+  { key: "PROVIDER_APPROVED", label: "Live" },
+];
+
+function waStepIndex(status: TemplateVersionStatus): { index: number; failed: boolean } {
+  switch (status) {
+    case "DRAFT": return { index: 0, failed: false };
+    case "PENDING": return { index: 1, failed: false };
+    case "APPROVED": return { index: 2, failed: false };
+    case "PROVIDER_PENDING": return { index: 3, failed: false };
+    case "PROVIDER_APPROVED": return { index: 4, failed: false };
+    case "REJECTED": return { index: 1, failed: true };
+    case "PROVIDER_REJECTED": return { index: 3, failed: true };
+    default: return { index: 0, failed: false };
+  }
+}
+
+function VersionWorkflowStepper({ status }: { status: TemplateVersionStatus }) {
+  const { index: current, failed } = waStepIndex(status);
+  return (
+    <div className="flex items-center gap-0 text-xs w-full overflow-x-auto pb-1">
+      {WA_STEPS.map((step, i) => {
+        const done = i < current;
+        const active = i === current;
+        const isFailed = active && failed;
+        return (
+          <div key={step.key} className="flex items-center min-w-0">
+            <div className="flex flex-col items-center gap-0.5 min-w-[56px]">
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${
+                  isFailed
+                    ? "bg-error text-error-content"
+                    : done
+                      ? "bg-success text-success-content"
+                      : active
+                        ? "bg-primary text-primary-content"
+                        : "bg-base-300 text-base-content/40"
+                }`}
+              >
+                {isFailed ? "✕" : done ? "✓" : i + 1}
+              </div>
+              <span
+                className={`text-center leading-tight ${
+                  isFailed
+                    ? "text-error font-medium"
+                    : active
+                      ? "text-primary font-medium"
+                      : done
+                        ? "text-success"
+                        : "text-base-content/40"
+                }`}
+              >
+                {step.label}
+              </span>
+            </div>
+            {i < WA_STEPS.length - 1 && (
+              <div
+                className={`h-0.5 flex-1 min-w-[12px] mx-1 rounded transition-colors ${
+                  i < current ? "bg-success" : "bg-base-300"
+                }`}
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function previewText(s: string | null | undefined, max = 160) {
@@ -211,14 +295,27 @@ function VersionCompareModal({
         </div>
         <div>
           <dt className="text-xs uppercase text-base-content/50">Buttons</dt>
-          <dd className="font-mono text-xs bg-base-200 rounded p-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-words">
-            {jsonOrDash(v.buttons)}
+          <dd className="flex flex-wrap gap-1 mt-1">
+            {Array.isArray(v.buttons) && v.buttons.length > 0
+              ? (v.buttons as Array<{ type?: string; text?: string; url?: string }>).map((btn, i) => (
+                  <span key={i} className="badge badge-outline badge-sm gap-1">
+                    {btn.type === "QUICK_REPLY" ? "↩" : btn.type === "URL" ? "🔗" : "📞"}
+                    {btn.text ?? btn.type ?? "button"}
+                  </span>
+                ))
+              : <span className="text-base-content/50">—</span>}
           </dd>
         </div>
         <div>
           <dt className="text-xs uppercase text-base-content/50">Variables</dt>
-          <dd className="font-mono text-xs bg-base-200 rounded p-2 max-h-24 overflow-y-auto whitespace-pre-wrap break-words">
-            {jsonOrDash(v.variables)}
+          <dd className="flex flex-wrap gap-1 mt-1">
+            {Array.isArray(v.variables) && v.variables.length > 0
+              ? (v.variables as Array<{ key?: string; name?: string }>).map((vr, i) => (
+                  <span key={i} className="badge badge-ghost badge-sm font-mono">
+                    {vr.key ?? vr.name ?? String(vr)}
+                  </span>
+                ))
+              : <span className="text-base-content/50">—</span>}
           </dd>
         </div>
       </dl>
@@ -262,7 +359,7 @@ export function ChannelTemplateDetailClient({
   const [createOpen, setCreateOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-  const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -303,6 +400,15 @@ export function ChannelTemplateDetailClient({
   const syncMutation = useSyncChannelTemplateVersion();
   const refreshProviderMutation = useRefreshChannelTemplateProviderState();
   const updateChannelTemplateMutation = useUpdateChannelTemplate();
+
+  const anyMutationPending =
+    activateMutation.isPending ||
+    submitMutation.isPending ||
+    approveMutation.isPending ||
+    rejectMutation.isPending ||
+    archiveMutation.isPending ||
+    syncMutation.isPending ||
+    refreshProviderMutation.isPending;
 
   useEffect(() => {
     let cancelled = false;
@@ -468,12 +574,12 @@ export function ChannelTemplateDetailClient({
         {
           onSuccess: (data) => {
             if (!data.success) {
-              setSyncFeedback(data.error ?? "Refresh failed.");
+              setSyncFeedback({ type: "error", message: data.error ?? "Refresh failed." });
             } else {
-              setSyncFeedback("Fetched current state from Meta.");
+              setSyncFeedback({ type: "success", message: "Fetched current state from Meta." });
             }
           },
-          onError: (err) => setSyncFeedback(getApiError(err)),
+          onError: (err) => setSyncFeedback({ type: "error", message: getApiError(err) }),
         }
       );
       return;
@@ -484,14 +590,15 @@ export function ChannelTemplateDetailClient({
       {
         onSuccess: (data) => {
           if (!data.success) {
-            setSyncFeedback(data.error ?? "Send failed.");
+            setSyncFeedback({ type: "error", message: data.error ?? "Send failed." });
           } else {
-            setSyncFeedback(
-              "Sent to Meta for WhatsApp review. Status updates when WhatsApp finishes review."
-            );
+            setSyncFeedback({
+              type: "success",
+              message: "Sent to Meta for WhatsApp review. Status updates when WhatsApp finishes review.",
+            });
           }
         },
-        onError: (err) => setSyncFeedback(getApiError(err)),
+        onError: (err) => setSyncFeedback({ type: "error", message: getApiError(err) }),
       }
     );
   }, [channelTemplateId, refreshProviderMutation, syncMutation, version]);
@@ -503,12 +610,12 @@ export function ChannelTemplateDetailClient({
       {
         onSuccess: (data) => {
           if (!data.success) {
-            setSyncFeedback(data.error ?? "Refresh failed.");
+            setSyncFeedback({ type: "error", message: data.error ?? "Refresh failed." });
           } else {
-            setSyncFeedback("Fetched current state from Meta.");
+            setSyncFeedback({ type: "success", message: "Fetched current state from Meta." });
           }
         },
-        onError: (err) => setSyncFeedback(getApiError(err)),
+        onError: (err) => setSyncFeedback({ type: "error", message: getApiError(err) }),
       }
     );
   }, [channelTemplateId, refreshProviderMutation]);
@@ -550,11 +657,6 @@ export function ChannelTemplateDetailClient({
     );
   }
 
-  const syncFeedbackIsSuccess =
-    syncFeedback != null &&
-    (syncFeedback.startsWith("Fetched") ||
-      syncFeedback.startsWith("Sent to Meta") ||
-      syncFeedback.startsWith("Synced"));
 
   return (
     <div className="space-y-4">
@@ -638,10 +740,12 @@ export function ChannelTemplateDetailClient({
           <div
             role="status"
             className={
-              syncFeedbackIsSuccess ? "alert alert-success text-sm mt-3" : "alert alert-error text-sm mt-3"
+              syncFeedback.type === "success"
+                ? "alert alert-success text-sm mt-3"
+                : "alert alert-error text-sm mt-3"
             }
           >
-            <span>{syncFeedback}</span>
+            <span>{syncFeedback.message}</span>
           </div>
         )}
 
@@ -846,6 +950,9 @@ export function ChannelTemplateDetailClient({
                 {version.isActive && <span className="badge badge-success">Active</span>}
                 {version.archivedAt && <span className="badge badge-ghost">Archived</span>}
               </div>
+              {state?.channel === "WHATSAPP" && !version.archivedAt && (
+                <VersionWorkflowStepper status={version.status} />
+              )}
 
               {version.syncError && (
                 <div role="alert" className="alert alert-error">
@@ -876,35 +983,35 @@ export function ChannelTemplateDetailClient({
                 <button
                   className="btn btn-outline btn-sm"
                   onClick={onSubmit}
-                  disabled={submitMutation.isPending || version.status !== "DRAFT" || version.isLocked}
+                  disabled={anyMutationPending || version.status !== "DRAFT" || version.isLocked}
                 >
                   Submit
                 </button>
                 <button
                   className="btn btn-outline btn-sm"
                   onClick={onApprove}
-                  disabled={approveMutation.isPending || version.status !== "PENDING"}
+                  disabled={anyMutationPending || version.status !== "PENDING"}
                 >
                   Approve
                 </button>
                 <button
                   className="btn btn-outline btn-sm"
                   onClick={() => setRejectOpen(true)}
-                  disabled={version.status !== "PENDING"}
+                  disabled={anyMutationPending || version.status !== "PENDING"}
                 >
                   Reject
                 </button>
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={onActivate}
-                  disabled={activateMutation.isPending || !canActivate}
+                  disabled={anyMutationPending || !canActivate}
                 >
                   Activate
                 </button>
                 <button
                   className="btn btn-ghost btn-sm text-error"
                   onClick={onArchive}
-                  disabled={archiveMutation.isPending || !!version.archivedAt}
+                  disabled={anyMutationPending || !!version.archivedAt}
                 >
                   Archive
                 </button>
@@ -912,11 +1019,7 @@ export function ChannelTemplateDetailClient({
                   type="button"
                   className="btn btn-outline btn-sm"
                   onClick={onSyncToProvider}
-                  disabled={
-                    !canSyncToProvider ||
-                    syncMutation.isPending ||
-                    refreshProviderMutation.isPending
-                  }
+                  disabled={anyMutationPending || !canSyncToProvider}
                   title={syncToProviderTitle}
                 >
                   {syncMutation.isPending || refreshProviderMutation.isPending ? (

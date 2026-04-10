@@ -143,33 +143,131 @@ function KpiCard({
   );
 }
 
-function Sparkline({ points }: { points: TimeSeriesPoint[] }) {
-  const { bars, max } = useMemo(() => {
-    const vals = points.map((p) => (p.sent ?? 0) + (p.inbound ?? 0));
-    const m = Math.max(1, ...vals);
-    return { bars: vals, max: m };
-  }, [points]);
+function LineGraph({ points }: { points: TimeSeriesPoint[] }) {
+  const n = points.length;
 
-  if (points.length === 0) {
+  const paths = useMemo(() => {
+    if (n === 0) return null;
+    const TOP = 8;
+    const BOTTOM = 92;
+    const sentVals = points.map((p) => p.sent ?? 0);
+    const inboundVals = points.map((p) => p.inbound ?? 0);
+    const m = Math.max(1, ...sentVals, ...inboundVals);
+    const toX = (i: number) => (n <= 1 ? 50 : (i / (n - 1)) * 100);
+    const toY = (v: number) => BOTTOM - (v / m) * (BOTTOM - TOP);
+    const coords = (vals: number[]): [number, number][] =>
+      vals.map((v, i) => [toX(i), toY(v)]);
+    const line = (cs: [number, number][]) =>
+      cs.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(" ");
+    const area = (cs: [number, number][]) =>
+      cs.length < 2
+        ? ""
+        : `${line(cs)} L${cs[cs.length - 1][0].toFixed(2)},${BOTTOM} L${cs[0][0].toFixed(2)},${BOTTOM} Z`;
+    const sc = coords(sentVals);
+    const ic = coords(inboundVals);
+    return {
+      sentLine: n > 1 ? line(sc) : "",
+      inboundLine: n > 1 ? line(ic) : "",
+      sentArea: area(sc),
+      inboundArea: area(ic),
+      sentDots: sc,
+      inboundDots: ic,
+      sentVals,
+      inboundVals,
+    };
+  }, [points, n]);
+
+  if (n === 0) {
     return (
-      <div className="flex h-24 items-end justify-center rounded-box bg-base-200 text-sm text-base-content/60">
+      <div className="flex h-24 items-center justify-center rounded-box bg-base-200 text-sm text-base-content/60">
         No activity in this range
       </div>
     );
   }
 
   return (
-    <div className="flex h-24 items-end gap-0.5 sm:gap-1" title="Messages per day (outbound + inbound)">
-      {bars.map((v, i) => (
-        <div
-          key={points[i]?.date ?? i}
-          className="min-w-0 flex-1 rounded-t bg-primary/80"
-          style={{
-            height: `${Math.max(8, (v / max) * 100)}%`,
-            opacity: 0.55 + (v / max) * 0.45,
-          }}
-        />
-      ))}
+    <div className="space-y-1">
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="h-24 w-full overflow-visible"
+        aria-label="Daily message volume"
+      >
+        {/* Gridlines */}
+        {[8, 50, 92].map((y) => (
+          <line
+            key={y}
+            x1="0" y1={y} x2="100" y2={y}
+            stroke="currentColor"
+            strokeOpacity="0.08"
+            style={{ vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+            strokeWidth="0.8"
+          />
+        ))}
+        {/* Area fills */}
+        {paths?.sentArea && (
+          <path
+            d={paths.sentArea}
+            style={{ fill: "oklch(var(--p) / 0.12)" }}
+          />
+        )}
+        {paths?.inboundArea && (
+          <path
+            d={paths.inboundArea}
+            style={{ fill: "oklch(var(--s) / 0.12)" }}
+          />
+        )}
+        {/* Lines */}
+        {paths?.sentLine && (
+          <path
+            d={paths.sentLine}
+            fill="none"
+            style={{ stroke: "oklch(var(--p))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+        {paths?.inboundLine && (
+          <path
+            d={paths.inboundLine}
+            fill="none"
+            style={{ stroke: "oklch(var(--s))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        )}
+        {/* Dots */}
+        {paths?.sentDots.map(([cx, cy], i) => (
+          <circle
+            key={`s${i}`}
+            cx={cx} cy={cy} r="1.2"
+            style={{ fill: "oklch(var(--p))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+          >
+            <title>{points[i]?.date}: {paths.sentVals[i]} sent</title>
+          </circle>
+        ))}
+        {paths?.inboundDots.map(([cx, cy], i) => (
+          <circle
+            key={`ib${i}`}
+            cx={cx} cy={cy} r="1.2"
+            style={{ fill: "oklch(var(--s))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+          >
+            <title>{points[i]?.date}: {paths.inboundVals[i]} inbound</title>
+          </circle>
+        ))}
+      </svg>
+      <div className="flex items-center gap-3 text-xs text-base-content/55">
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-1.5 w-3 rounded-full bg-primary/80" />
+          Sent
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-1.5 w-3 rounded-full bg-secondary/80" />
+          Inbound
+        </span>
+      </div>
     </div>
   );
 }
@@ -314,7 +412,7 @@ export function DashboardClient() {
             <span className="font-medium">Activity</span>
             <span className="text-xs text-base-content/50">Daily volume</span>
           </div>
-          <Sparkline points={timeSeries} />
+          <LineGraph points={timeSeries} />
           {timeSeries.length > 0 ? (
             <div className="flex flex-wrap justify-between gap-1 text-xs text-base-content/60">
               {timeSeries.map((p) => (

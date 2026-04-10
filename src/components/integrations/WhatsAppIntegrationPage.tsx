@@ -74,10 +74,12 @@ function isConnected(config: WorkspaceCloudApiConfigResponse | null): boolean {
 export function WhatsAppIntegrationPage({
   initialCloudApiConfig = null,
   variant = "single",
+  atLimit = false,
   onConnected,
 }: {
   initialCloudApiConfig?: WorkspaceCloudApiConfigResponse | null;
   variant?: "single" | "connectOnly";
+  atLimit?: boolean;
   onConnected?: () => void;
 }) {
   const [status, setStatus] = useState<ConnectionStatus>(() =>
@@ -399,51 +401,63 @@ export function WhatsAppIntegrationPage({
             <p className="text-base-content/80">
               Connect an additional WhatsApp Business phone number using Meta Embedded Signup.
             </p>
-            {cancelMessage && <p className="text-sm text-warning">{cancelMessage}</p>}
-            {exchangeError && <p className="text-sm text-error">{exchangeError}</p>}
-            {needsPhoneNumberId ? (
-              <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
-                <p className="text-sm text-base-content/80">
-                  Enter the Meta phone number ID for the number you want to use, then retry. If this
-                  fails, start Connect with Facebook again — OAuth codes are often single-use.
-                </p>
-                <label className="input input-bordered flex items-center gap-2 w-full max-w-md">
-                  <span className="label text-xs whitespace-nowrap">Phone number ID</span>
-                  <input
-                    type="text"
-                    className="grow font-mono text-sm"
-                    value={retryPhoneNumberId}
-                    onChange={(e) => setRetryPhoneNumberId(e.target.value.trim())}
-                    placeholder="From Meta Business Suite"
-                  />
-                </label>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm"
-                  onClick={handleRetryExchangeWithPhoneId}
-                  disabled={!retryPhoneNumberId.trim()}
-                >
-                  Retry exchange with phone number ID
-                </button>
+            {atLimit ? (
+              <div role="alert" className="alert alert-warning">
+                <span>
+                  You&apos;ve reached your plan&apos;s phone number limit. Upgrade your plan to
+                  connect more numbers.
+                </span>
               </div>
-            ) : null}
-            <div className="card-actions">
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={handleConnect}
-                disabled={!sdkReady || status === "loading"}
-              >
-                {status === "loading" ? (
-                  <>
-                    <span className="loading loading-spinner loading-sm" />
-                    Connecting…
-                  </>
-                ) : (
-                  "Connect with Facebook"
-                )}
-              </button>
-            </div>
+            ) : (
+              <>
+                {cancelMessage && <p className="text-sm text-warning">{cancelMessage}</p>}
+                {exchangeError && <p className="text-sm text-error">{exchangeError}</p>}
+                {needsPhoneNumberId ? (
+                  <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
+                    <p className="text-sm text-base-content/80">
+                      Enter the Meta phone number ID for the number you want to use, then retry. If
+                      this fails, start Connect with Facebook again — OAuth codes are often
+                      single-use.
+                    </p>
+                    <label className="input input-bordered flex items-center gap-2 w-full max-w-md">
+                      <span className="label text-xs whitespace-nowrap">Phone number ID</span>
+                      <input
+                        type="text"
+                        className="grow font-mono text-sm"
+                        value={retryPhoneNumberId}
+                        onChange={(e) => setRetryPhoneNumberId(e.target.value.trim())}
+                        placeholder="From Meta Business Suite"
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={handleRetryExchangeWithPhoneId}
+                      disabled={!retryPhoneNumberId.trim()}
+                    >
+                      Retry exchange with phone number ID
+                    </button>
+                  </div>
+                ) : null}
+                <div className="card-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={handleConnect}
+                    disabled={!sdkReady || status === "loading"}
+                  >
+                    {status === "loading" ? (
+                      <>
+                        <span className="loading loading-spinner loading-sm" />
+                        Connecting…
+                      </>
+                    ) : (
+                      "Connect with Facebook"
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -690,7 +704,7 @@ export function WhatsAppIntegrationPage({
       </div>
       {status === "error" && (
         <div role="alert" className="alert alert-error">
-          <span>Failed to connect. Please try again.</span>
+          <span>{exchangeError ?? "Failed to connect. Please try again."}</span>
         </div>
       )}
     </div>

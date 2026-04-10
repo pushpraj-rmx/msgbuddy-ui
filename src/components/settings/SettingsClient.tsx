@@ -55,6 +55,8 @@ export function SettingsClient({
   cloudApiConfig,
   meRole,
   accountEmail,
+  accountName,
+  accountAvatarUrl,
   hasPassword,
   loginHistory,
 }: {
@@ -64,6 +66,8 @@ export function SettingsClient({
   cloudApiConfig: WorkspaceCloudApiConfigResponse | null;
   meRole: string;
   accountEmail: string;
+  accountName?: string;
+  accountAvatarUrl?: string | null;
   hasPassword: boolean;
   loginHistory: LoginHistoryEvent[];
 }) {
@@ -157,6 +161,8 @@ export function SettingsClient({
     <section className="space-y-6">
       <AccountSecurityClient
         accountEmail={accountEmail}
+        accountName={accountName}
+        accountAvatarUrl={accountAvatarUrl}
         hasPassword={hasPassword}
         loginHistory={loginHistory}
       />
