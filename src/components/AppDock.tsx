@@ -5,9 +5,17 @@ import { usePathname } from "next/navigation";
 import { getAppNav, isActivePath } from "@/lib/navigation";
 
 /** Primary shortcuts on small screens; hidden from `lg` (sidebar + topbar suffice). */
-export function AppDock({ platformRole }: { platformRole: string }) {
+export function AppDock({
+  platformRole,
+  workspaceRole,
+}: {
+  platformRole: string;
+  workspaceRole?: string;
+}) {
   const pathname = usePathname();
-  const items = getAppNav(platformRole).filter((item) => item.showInDock);
+  const items = getAppNav(platformRole, workspaceRole).filter(
+    (item) => item.showInDock
+  );
 
   return (
     <nav

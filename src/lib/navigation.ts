@@ -16,6 +16,12 @@ import RocketLaunchRounded from "@mui/icons-material/RocketLaunchRounded";
 import SettingsRounded from "@mui/icons-material/SettingsRounded";
 import TerminalRounded from "@mui/icons-material/TerminalRounded";
 import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
+import {
+  canAccessAnalyticsNav,
+  canAccessCampaigns,
+  canAccessUsagePage,
+  canViewTemplates,
+} from "@/lib/workspace-access";
 
 /** MUI Material Icons, rounded variant (`SvgIcon`) used in nav / dock / sidebar. */
 type NavIcon = ComponentType<SvgIconProps>;
@@ -28,7 +34,10 @@ export type AppNavItem = {
   children?: Array<{ href: string; label: string; Icon: NavIcon }>;
 };
 
-export function getAppNav(platformRole: string): AppNavItem[] {
+export function getAppNav(
+  platformRole: string,
+  workspaceRole?: string,
+): AppNavItem[] {
   const items: AppNavItem[] = [
     { href: "/dashboard", label: "Dashboard", Icon: HomeRounded, showInDock: true },
     { href: "/inbox", label: "Inbox", Icon: ForumRounded, showInDock: true },
@@ -61,6 +70,17 @@ export function getAppNav(platformRole: string): AppNavItem[] {
     items.push({ href: "/onboarding", label: "Onboarding", Icon: TerminalRounded });
   }
 
+  const wr = workspaceRole;
+  if (wr != null && wr !== "") {
+    return items.filter((item) => {
+      if (item.href === "/campaigns" && !canAccessCampaigns(wr)) return false;
+      if (item.href === "/templates" && !canViewTemplates(wr)) return false;
+      if (item.href === "/analytics" && !canAccessAnalyticsNav(wr)) return false;
+      if (item.href === "/usage" && !canAccessUsagePage(wr)) return false;
+      return true;
+    });
+  }
+
   return items;
 }
 
@@ -75,6 +95,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/people/segments")) return "Segments";
   if (pathname.startsWith("/people/tags")) return "Tags";
   if (pathname.startsWith("/people/contacts")) return "Contacts";
+  if (pathname.startsWith("/campaigns/new")) return "New campaign";
   if (pathname.startsWith("/campaigns")) return "Campaigns";
   if (pathname.startsWith("/templates")) return "Templates";
   if (pathname.startsWith("/media")) return "Media";
@@ -82,6 +103,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/settings/integrations/whatsapp")) return "WhatsApp";
   if (pathname.startsWith("/settings/integrations")) return "Integrations";
   if (pathname.startsWith("/settings/team")) return "Team";
+  if (pathname.startsWith("/settings/password")) return "Password";
   if (pathname.startsWith("/settings")) return "Settings";
   if (pathname.startsWith("/platform")) return "Platform";
   if (pathname.startsWith("/onboarding")) return "Onboarding";

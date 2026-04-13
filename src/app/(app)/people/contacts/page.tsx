@@ -21,6 +21,7 @@ export default async function PeopleContactsPage() {
         description="Manage people and jump into Inbox when you need to message."
       />
       <ContactsPageClient
+        key={me.workspace.id}
         workspaceId={me.workspace.id}
         initialContacts={initialContacts.contacts ?? []}
         initialNextCursor={initialContacts.nextCursor ?? undefined}

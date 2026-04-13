@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import type { MeResponse } from "@/lib/api";
 import { getAppNav, isActivePath } from "@/lib/navigation";
+import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
 
 function closeDrawer(drawerId: string) {
   (document.getElementById(drawerId) as HTMLInputElement | null)?.click();
@@ -23,29 +24,11 @@ export function Sidebar({
   me: MeResponse;
 }) {
   const pathname = usePathname();
-  const nav = getAppNav(me.platformRole ?? "NONE");
+  const nav = getAppNav(me.platformRole ?? "NONE", String(me.role));
   const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>({});
-
-  const workspaceInitials = me.workspace.name.slice(0, 2).toUpperCase();
-  const userInitials = me.user.email.slice(0, 2).toUpperCase();
 
   return (
     <aside className="flex h-full min-h-0 w-64 flex-col border-r border-base-300 bg-base-100">
-      {/* Workspace header */}
-      <div className="flex shrink-0 items-center gap-2.5 border-b border-base-300 px-4 py-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15">
-          <span className="text-xs font-bold text-primary">{workspaceInitials}</span>
-        </div>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-base-content">
-            {me.workspace.name}
-          </p>
-          <p className="text-xs text-base-content/50 capitalize">
-            {String(me.role).toLowerCase()}
-          </p>
-        </div>
-      </div>
-
       {/* Nav */}
       <nav
         className="min-h-0 flex-1 overflow-y-auto p-3 max-lg:pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))]"
@@ -131,18 +114,16 @@ export function Sidebar({
         </ul>
       </nav>
 
-      {/* User footer */}
+      {/* Workspace switcher — bottom of sidebar */}
       <div className="shrink-0 border-t border-base-300 p-3">
-        <div className="flex items-center gap-2.5 rounded-lg px-2 py-2">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15">
-            <span className="text-xs font-semibold text-primary">{userInitials}</span>
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-medium text-base-content">
-              {me.user.email}
-            </p>
-          </div>
-        </div>
+        <p className="mb-1.5 text-xs font-medium text-base-content/60">Workspace</p>
+        <WorkspaceSwitcher
+          currentWorkspaceId={me.workspace.id}
+          currentName={me.workspace.name}
+        />
+        <p className="mt-2 truncate text-xs text-base-content/50 capitalize">
+          {String(me.role).toLowerCase()}
+        </p>
       </div>
     </aside>
   );

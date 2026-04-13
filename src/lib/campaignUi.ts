@@ -209,7 +209,12 @@ export function showResume(status: string): boolean {
 
 export function showPause(status: string): boolean {
   const s = normalizeStatus(status);
-  return s === "RUNNING" || s === "IN_PROGRESS";
+  return (
+    s === "RUNNING" ||
+    s === "IN_PROGRESS" ||
+    s === "ACTIVE" ||
+    s === "PROCESSING"
+  );
 }
 
 export function showCancel(status: string): boolean {
@@ -217,11 +222,45 @@ export function showCancel(status: string): boolean {
   return (
     s === "RUNNING" ||
     s === "IN_PROGRESS" ||
+    s === "ACTIVE" ||
+    s === "PROCESSING" ||
     s === "PAUSED" ||
     s === "SCHEDULED" ||
     s === "QUEUED" ||
     s === "DRAFT" ||
     s === "PENDING"
+  );
+}
+
+/** Stop / cancel the current run (not drafts). Matches API `CampaignStatus` (e.g. ACTIVE). */
+export function showStopCampaign(status: string): boolean {
+  const s = normalizeStatus(status);
+  return (
+    s === "RUNNING" ||
+    s === "IN_PROGRESS" ||
+    s === "ACTIVE" ||
+    s === "PROCESSING" ||
+    s === "PAUSED" ||
+    s === "SCHEDULED" ||
+    s === "QUEUED" ||
+    s === "PENDING"
+  );
+}
+
+/** Clear stuck BullMQ jobs for this campaign (recovery). */
+export function showDrainQueue(status: string): boolean {
+  const s = normalizeStatus(status);
+  return (
+    s === "RUNNING" ||
+    s === "IN_PROGRESS" ||
+    s === "ACTIVE" ||
+    s === "PROCESSING" ||
+    s === "PAUSED" ||
+    s === "SCHEDULED" ||
+    s === "QUEUED" ||
+    s === "PENDING" ||
+    s === "CANCELLED" ||
+    s === "CANCELED"
   );
 }
 

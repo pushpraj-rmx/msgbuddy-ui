@@ -1,16 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
-import {
-  changePasswordAction,
-  logoutAllAction,
-} from "@/app/actions/auth";
-import { setAccessToken } from "@/lib/auth";
+import { useState } from "react";
+import { logoutAllAction } from "@/app/actions/auth";
 import type { LoginHistoryEvent } from "@/lib/api";
 import { meApi } from "@/lib/api";
-import { ErrorState } from "@/components/ui/states";
 import { AvatarCropUpload } from "@/components/ui/AvatarCropUpload";
+import { SettingsGearMenu } from "@/components/settings/SettingsGearMenu";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 function formatLoginAction(action: string): string {
   const map: Record<string, string> = {
@@ -30,13 +28,17 @@ export function AccountSecurityClient({
   accountName,
   accountAvatarUrl,
   hasPassword,
+  memberCount,
   loginHistory,
+  meRole,
 }: {
   accountEmail: string;
   accountName?: string;
   accountAvatarUrl?: string | null;
   hasPassword: boolean;
+  memberCount: number;
   loginHistory: LoginHistoryEvent[];
+  meRole: string;
 }) {
   const router = useRouter();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(accountAvatarUrl ?? null);
@@ -44,12 +46,10 @@ export function AccountSecurityClient({
   const [nameError, setNameError] = useState<string | null>(null);
   const [nameSaved, setNameSaved] = useState(false);
   const [nameSaving, setNameSaving] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [changeError, setChangeError] = useState<string | null>(null);
-  const [changeOk, setChangeOk] = useState(false);
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
-  const [isPending, startTransition] = useTransition();
+
+  const showTeamLink = roleHasWorkspacePermission(meRole, "members.view");
+  const showIntegrationsLink = roleHasWorkspacePermission(meRole, "settings.manage");
 
   const onAvatarUploaded = async (url: string) => {
     setAvatarUrl(url);
@@ -77,28 +77,6 @@ export function AccountSecurityClient({
     }
   };
 
-  const onChangePassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    setChangeError(null);
-    setChangeOk(false);
-    startTransition(async () => {
-      const result = await changePasswordAction(currentPassword, newPassword);
-      if (!result.success) {
-        setChangeError(result.error || "Could not change password.");
-        return;
-      }
-      setChangeOk(true);
-      setCurrentPassword("");
-      setNewPassword("");
-      if (result.accessToken) {
-        setAccessToken(result.accessToken, {
-          expiresInSeconds: result.expiresIn,
-        });
-      }
-      router.refresh();
-    });
-  };
-
   const onLogoutAll = () => {
     const ok = window.confirm(
       "Sign out all sessions on every device? You will need to sign in again on this device."
@@ -113,17 +91,26 @@ export function AccountSecurityClient({
   };
 
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-6">
-      <div>
+    <div className="rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
+      <div className="mb-6">
         <h2 className="text-base font-medium">Account &amp; security</h2>
-        <p className="text-sm text-base-content/70 mt-1">
+        <p className="mt-1 text-sm text-base-content/70">
           Signed in as <span className="font-medium">{accountEmail}</span>
         </p>
       </div>
 
+      <div className="divide-y divide-base-300">
       {/* Profile photo + name */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-medium">Profile</h3>
+      <div className="space-y-4 pb-6">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium">Profile</h3>
+          <SettingsGearMenu
+            memberCount={memberCount}
+            hasPassword={hasPassword}
+            showTeamLink={showTeamLink}
+            showIntegrationsLink={showIntegrationsLink}
+          />
+        </div>
         <AvatarCropUpload
           currentUrl={avatarUrl}
           initials={displayName ? displayName.slice(0, 2).toUpperCase() : accountEmail.slice(0, 2).toUpperCase()}
@@ -146,69 +133,18 @@ export function AccountSecurityClient({
         </form>
         {nameError && <p className="text-xs text-error">{nameError}</p>}
         {nameSaved && <p className="text-xs text-success">Name saved.</p>}
+        {!hasPassword ? (
+          <p className="text-sm text-base-content/70">
+            You sign in with Google.{" "}
+            <Link href="/settings/password" className="link link-primary">
+              Set a password
+            </Link>{" "}
+            if you want to sign in with email and password too.
+          </p>
+        ) : null}
       </div>
 
-      {hasPassword ? (
-        <div className="space-y-3">
-          <h3 className="text-sm font-medium">Change password</h3>
-          <form onSubmit={onChangePassword} className="space-y-3 max-w-md">
-            {changeError ? <ErrorState message={changeError} /> : null}
-            {changeOk ? (
-              <div
-                role="status"
-                className="rounded-box border border-success/30 bg-success/10 px-3 py-2 text-sm text-success"
-              >
-                Password updated. Other sessions were signed out; you stay
-                signed in here.
-              </div>
-            ) : null}
-            <label className="form-control w-full">
-              <span className="label-text text-sm">Current password</span>
-              <input
-                type="password"
-                autoComplete="current-password"
-                className="input input-bordered w-full"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-              />
-            </label>
-            <label className="form-control w-full">
-              <span className="label-text text-sm">New password</span>
-              <input
-                type="password"
-                autoComplete="new-password"
-                className="input input-bordered w-full"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-                minLength={6}
-              />
-            </label>
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm"
-              disabled={isPending}
-            >
-              {isPending ? (
-                <>
-                  <span className="loading loading-spinner loading-xs" />
-                  Updating…
-                </>
-              ) : (
-                "Update password"
-              )}
-            </button>
-          </form>
-        </div>
-      ) : (
-        <p className="text-sm text-base-content/70 max-w-xl">
-          You sign in with Google. Password change is not available for this
-          account.
-        </p>
-      )}
-
-      <div className="space-y-2">
+      <div className="space-y-2 pt-6 pb-6">
         <h3 className="text-sm font-medium">Sessions</h3>
         <p className="text-sm text-base-content/70 max-w-xl">
           Sign out everywhere revokes access on all devices and browsers.
@@ -230,37 +166,49 @@ export function AccountSecurityClient({
         </button>
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-sm font-medium">Recent sign-in activity</h3>
-        {loginHistory.length === 0 ? (
-          <p className="text-sm text-base-content/60">No events yet.</p>
-        ) : (
-          <div className="overflow-x-auto rounded-box border border-base-300">
-            <table className="table table-sm">
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Event</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loginHistory.map((row) => (
-                  <tr key={row.id}>
-                    <td className="whitespace-nowrap text-xs">
-                      {new Date(row.createdAt).toLocaleString(undefined, {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                    </td>
-                    <td className="text-sm">
-                      {formatLoginAction(row.action)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      <div className="pt-6">
+        <details className="group rounded-box border border-base-300 bg-base-200/20">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-base-content">
+            Recent sign-in activity
+            {loginHistory.length > 0 ? (
+              <span className="ml-2 font-normal text-base-content/60">
+                ({loginHistory.length})
+              </span>
+            ) : null}
+          </summary>
+          <div className="border-t border-base-300 px-4 pb-4 pt-3">
+            {loginHistory.length === 0 ? (
+              <p className="text-sm text-base-content/60">No events yet.</p>
+            ) : (
+              <div className="max-h-60 overflow-y-auto overflow-x-auto rounded-box border border-base-300 bg-base-100">
+                <table className="table table-sm">
+                  <thead className="sticky top-0 z-[1] bg-base-200/95 backdrop-blur-sm">
+                    <tr>
+                      <th>When</th>
+                      <th>Event</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loginHistory.map((row) => (
+                      <tr key={row.id}>
+                        <td className="whitespace-nowrap text-xs">
+                          {new Date(row.createdAt).toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </td>
+                        <td className="text-sm">
+                          {formatLoginAction(row.action)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
+        </details>
+      </div>
       </div>
     </div>
   );

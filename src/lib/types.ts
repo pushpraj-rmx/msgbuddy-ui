@@ -382,7 +382,13 @@ export type NotificationsListResponse = {
 };
 
 // Auth and platform module (aligned with backend API)
-export type WorkspaceRole = "OWNER" | "ADMIN" | "AGENT";
+export type WorkspaceRole =
+  | "OWNER"
+  | "ADMIN"
+  | "SUPERVISOR"
+  | "AGENT"
+  | "AUDITOR"
+  | "VIEWER";
 export type PlatformRole = "SUPERADMIN" | "SUPPORT" | "NONE";
 
 export type OffsetPaginatedResponse<T> = {

@@ -85,8 +85,7 @@ export async function loginAction(email: string, password: string) {
 
 export async function registerAction(
   email: string,
-  password: string,
-  workspace: string
+  password: string
 ): Promise<
   | { success: true; requiresEmailVerification: true; email: string }
   | { success: false; error: string }
@@ -95,7 +94,7 @@ export async function registerAction(
     const response = await fetch(`${API_BASE_URL}${endpoints.auth.register}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, workspace }),
+      body: JSON.stringify({ email, password }),
       credentials: "include",
     });
 
@@ -246,6 +245,88 @@ export async function changePasswordAction(
     return {
       success: false as const,
       error: error instanceof Error ? error.message : "Change failed",
+    };
+  }
+}
+
+export async function selectWorkspaceAction(workspaceId: string) {
+  try {
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+    const response = await fetch(
+      `${API_BASE_URL}${endpoints.auth.selectWorkspace}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken
+            ? { Authorization: `Bearer ${accessToken}` }
+            : {}),
+        },
+        body: JSON.stringify({ workspaceId }),
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        success: false as const,
+        error:
+          (data as { message?: string }).message ||
+          "Could not switch workspace",
+      };
+    }
+    const payload = (await response.json()) as AuthResponse;
+    await setAuthCookies(payload);
+    return {
+      success: true as const,
+      accessToken: payload.accessToken,
+      expiresIn: payload.expiresIn,
+    };
+  } catch (error: unknown) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Could not switch workspace",
+    };
+  }
+}
+
+export async function setPasswordAction(newPassword: string) {
+  try {
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get(ACCESS_TOKEN_COOKIE)?.value;
+    const response = await fetch(
+      `${API_BASE_URL}${endpoints.auth.setPassword}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken
+            ? { Authorization: `Bearer ${accessToken}` }
+            : {}),
+        },
+        body: JSON.stringify({ newPassword }),
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        success: false as const,
+        error: (data as { message?: string }).message || "Could not set password",
+      };
+    }
+    const payload = (await response.json()) as AuthResponse;
+    await setAuthCookies(payload);
+    return {
+      success: true as const,
+      accessToken: payload.accessToken,
+      expiresIn: payload.expiresIn,
+    };
+  } catch (error: unknown) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Could not set password",
     };
   }
 }

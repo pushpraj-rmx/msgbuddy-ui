@@ -18,6 +18,7 @@ export default async function InboxPage() {
         description="Manage conversations and reply in real-time."
       />
       <InboxClient
+        key={me.workspace.id}
         initialConversations={initialConversations}
         workspaceId={me.workspace.id}
         currentUserId={me.user.id}

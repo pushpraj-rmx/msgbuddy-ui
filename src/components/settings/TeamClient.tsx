@@ -3,6 +3,10 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { workspaceApi, type WorkspaceMemberResponseDto } from "@/lib/api";
+import {
+  permissionsForWorkspaceRole,
+  workspaceRolePermissionSummary,
+} from "@/lib/workspace-role-permissions";
 import type { WorkspaceRole } from "@/lib/types";
 
 type MemberRow = {
@@ -13,7 +17,23 @@ type MemberRow = {
   user?: { id?: string; email?: string; name?: string | null };
 };
 
-const ROLES: WorkspaceRole[] = ["OWNER", "ADMIN", "AGENT"];
+const ROLES: WorkspaceRole[] = [
+  "OWNER",
+  "ADMIN",
+  "SUPERVISOR",
+  "AGENT",
+  "AUDITOR",
+  "VIEWER",
+];
+
+const ROLE_SORT_RANK: Record<string, number> = {
+  OWNER: 0,
+  ADMIN: 1,
+  SUPERVISOR: 2,
+  AGENT: 3,
+  AUDITOR: 4,
+  VIEWER: 5,
+};
 
 function normalizeMember(m: WorkspaceMemberResponseDto | MemberRow): MemberRow {
   return {
@@ -51,7 +71,7 @@ export function TeamClient({
 
   const sorted = useMemo(() => {
     const copy = [...members];
-    const rank = (r: string) => (r === "OWNER" ? 0 : r === "ADMIN" ? 1 : 2);
+    const rank = (r: string) => ROLE_SORT_RANK[r] ?? 99;
     copy.sort((a, b) => rank(String(a.role)) - rank(String(b.role)));
     return copy;
   }, [members]);
@@ -84,16 +104,16 @@ export function TeamClient({
     }
   };
 
-  const onChangeRole = async (memberId: string, role: WorkspaceRole) => {
-    if (!canManage) return;
-    setBusyId(memberId);
+  const onChangeRole = async (targetUserId: string, rowId: string, role: WorkspaceRole) => {
+    if (!canManage || !targetUserId) return;
+    setBusyId(rowId);
     setError(null);
     try {
-      const updated = await workspaceApi.updateMemberRole(workspaceId, memberId, {
+      const updated = await workspaceApi.updateMemberRole(workspaceId, targetUserId, {
         role,
       });
       setMembers((prev) =>
-        prev.map((m) => (m.id === memberId ? normalizeMember(updated) : m))
+        prev.map((m) => (m.id === rowId ? normalizeMember(updated) : m))
       );
       refreshServerData();
     } catch (e) {
@@ -103,15 +123,15 @@ export function TeamClient({
     }
   };
 
-  const onRemove = async (memberId: string) => {
-    if (!canManage) return;
+  const onRemove = async (targetUserId: string, rowId: string) => {
+    if (!canManage || !targetUserId) return;
     const ok = window.confirm("Remove this member from the workspace?");
     if (!ok) return;
-    setBusyId(memberId);
+    setBusyId(rowId);
     setError(null);
     try {
-      await workspaceApi.removeMember(workspaceId, memberId);
-      setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      await workspaceApi.removeMember(workspaceId, targetUserId);
+      setMembers((prev) => prev.filter((m) => m.id !== rowId));
       refreshServerData();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to remove member");
@@ -186,6 +206,9 @@ export function TeamClient({
             <tr>
               <th className="text-xs font-medium text-base-content/60">User</th>
               <th className="text-xs font-medium text-base-content/60">Role</th>
+              <th className="text-xs font-medium text-base-content/60 min-w-[12rem] max-w-[18rem]">
+                Permissions
+              </th>
               <th className="text-xs font-medium text-base-content/60">Status</th>
               <th className="text-right text-xs font-medium text-base-content/60">
                 Actions
@@ -194,11 +217,15 @@ export function TeamClient({
           </thead>
           <tbody>
             {sorted.map((member) => {
-              const isSelf = !!meUserId && member.user?.id === meUserId;
+              const targetUserId = member.user?.id ?? "";
+              const isSelf = !!meUserId && targetUserId === meUserId;
               const isBusy = busyId === member.id;
               const role = String(member.role) as WorkspaceRole;
-              const canEditThisRole = canManage && !isBusy;
-              const canRemove = canManage && !isSelf && role !== "OWNER";
+              const rolePermissions = permissionsForWorkspaceRole(role);
+              const canEditThisRole =
+                canManage && !isBusy && !!targetUserId;
+              const canRemove =
+                canManage && !isSelf && role !== "OWNER" && !!targetUserId;
 
               return (
                 <tr key={member.id}>
@@ -224,9 +251,13 @@ export function TeamClient({
                     {canManage ? (
                       <select
                         className="select select-bordered select-sm w-36"
-                        value={ROLES.includes(role) ? role : "AGENT"}
+                        value={ROLES.includes(role as WorkspaceRole) ? role : "AGENT"}
                         onChange={(e) =>
-                          onChangeRole(member.id, e.target.value as WorkspaceRole)
+                          onChangeRole(
+                            targetUserId,
+                            member.id,
+                            e.target.value as WorkspaceRole
+                          )
                         }
                         disabled={!canEditThisRole || role === "OWNER"}
                       >
@@ -241,6 +272,19 @@ export function TeamClient({
                     )}
                   </td>
 
+                  <td className="text-sm align-top">
+                    <p
+                      className="text-xs leading-snug text-base-content/80 line-clamp-3"
+                      title={
+                        rolePermissions.length
+                          ? rolePermissions.join("\n")
+                          : workspaceRolePermissionSummary(role)
+                      }
+                    >
+                      {workspaceRolePermissionSummary(role)}
+                    </p>
+                  </td>
+
                   <td className="text-sm">
                     {member.isActive === false ? (
                       <span className="badge badge-warning badge-soft">inactive</span>
@@ -253,7 +297,7 @@ export function TeamClient({
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
-                      onClick={() => onRemove(member.id)}
+                      onClick={() => onRemove(targetUserId, member.id)}
                       disabled={!canRemove || isBusy}
                     >
                       {isBusy ? "Working..." : "Remove"}

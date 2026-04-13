@@ -1,15 +1,18 @@
 "use client";
 
 import type { Dispatch, SetStateAction } from "react";
+import { useEffect, useState } from "react";
 import {
   type CampaignStatusTone,
   formatCampaignHeroTitle,
   mergeReportWithProgress,
+  normalizeStatus,
   parseReportMetrics,
-  showCancel,
+  showDrainQueue,
   showPause,
   showResume,
   showStart,
+  showStopCampaign,
   statusBadgeClasses,
   statusHeroClasses,
 } from "@/lib/campaignUi";
@@ -21,6 +24,8 @@ export type Campaign = {
   channel: string;
   channelTemplateVersionId?: string;
   templateBindings?: Record<string, unknown> | null;
+  scheduledAt?: string | null;
+  timezone?: string;
 };
 
 type CampaignProgress = {
@@ -57,6 +62,14 @@ type CampaignRunJob = {
   processedAt?: string | null;
   createdAt?: string | null;
 };
+
+function isoToDatetimeLocalValue(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const z = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`;
+}
 
 function formatReportValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
@@ -114,8 +127,19 @@ export type CampaignDetailViewProps = {
   progressBarCaption: string | null;
   loading: boolean;
   handleAction: (
-    action: "start" | "pause" | "resume" | "cancel" | "duplicate" | "delete"
+    action:
+      | "start"
+      | "pause"
+      | "resume"
+      | "cancel"
+      | "drainQueue"
+      | "duplicate"
+      | "delete"
   ) => void | Promise<void>;
+  onSaveSchedule: (payload: {
+    scheduledAt: string | null;
+    timezone: string;
+  }) => void | Promise<void>;
   handleRename: () => void;
   loadProgress: () => void;
   runs: CampaignRun[];
@@ -149,6 +173,7 @@ export function CampaignDetailView({
   progressBarCaption,
   loading,
   handleAction,
+  onSaveSchedule,
   handleRename,
   loadProgress,
   runs,
@@ -167,6 +192,26 @@ export function CampaignDetailView({
   showRawReport,
   setShowRawReport,
 }: CampaignDetailViewProps) {
+  const statusNorm = normalizeStatus(selectedCampaign.status);
+  const canEditSchedule =
+    statusNorm === "DRAFT" || statusNorm === "SCHEDULED";
+
+  const [planAt, setPlanAt] = useState(() =>
+    isoToDatetimeLocalValue(selectedCampaign.scheduledAt)
+  );
+  const [planTz, setPlanTz] = useState(
+    () => selectedCampaign.timezone ?? "UTC"
+  );
+
+  useEffect(() => {
+    setPlanAt(isoToDatetimeLocalValue(selectedCampaign.scheduledAt));
+    setPlanTz(selectedCampaign.timezone ?? "UTC");
+  }, [
+    selectedCampaign.id,
+    selectedCampaign.scheduledAt,
+    selectedCampaign.timezone,
+  ]);
+
   return (
 
           <>
@@ -254,6 +299,87 @@ export function CampaignDetailView({
                 </div>
               ) : null}
 
+              {canEditSchedule ? (
+                <div className="rounded-box border border-base-300 bg-base-100 px-4 py-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+                    Planned send
+                  </p>
+                  <p className="mt-1 text-xs text-base-content/60">
+                    Set a future time to mark the campaign as scheduled. Sending
+                    still starts when you press Start (there is no automatic send
+                    at this time).
+                  </p>
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+                    <label className="form-control w-full min-w-0 sm:max-w-xs">
+                      <span className="label-text text-xs text-base-content/70">
+                        Date &amp; time
+                      </span>
+                      <input
+                        type="datetime-local"
+                        className="input input-bordered input-sm w-full"
+                        value={planAt}
+                        onChange={(e) => setPlanAt(e.target.value)}
+                        disabled={loading}
+                      />
+                    </label>
+                    <label className="form-control w-full min-w-0 sm:max-w-xs">
+                      <span className="label-text text-xs text-base-content/70">
+                        Timezone
+                      </span>
+                      <input
+                        type="text"
+                        className="input input-bordered input-sm w-full"
+                        value={planTz}
+                        onChange={(e) => setPlanTz(e.target.value)}
+                        placeholder="e.g. America/New_York"
+                        disabled={loading}
+                      />
+                    </label>
+                    <div className="flex flex-wrap gap-2 pb-0.5">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={loading || !planAt.trim()}
+                        onClick={() =>
+                          void onSaveSchedule({
+                            scheduledAt: new Date(planAt).toISOString(),
+                            timezone: planTz.trim() || "UTC",
+                          })
+                        }
+                      >
+                        Save plan
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        disabled={
+                          loading ||
+                          !selectedCampaign.scheduledAt
+                        }
+                        onClick={() =>
+                          void onSaveSchedule({
+                            scheduledAt: null,
+                            timezone: planTz.trim() || "UTC",
+                          })
+                        }
+                      >
+                        Clear plan
+                      </button>
+                    </div>
+                  </div>
+                  {selectedCampaign.scheduledAt ? (
+                    <p className="mt-2 text-xs text-base-content/55">
+                      Stored:{" "}
+                      {new Date(selectedCampaign.scheduledAt).toLocaleString(
+                        undefined,
+                        { timeZone: planTz || "UTC" }
+                      )}{" "}
+                      ({planTz || "UTC"})
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
               <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
                 <div className="flex flex-wrap items-center gap-2">
                   {showStart(selectedCampaign.status) ? (
@@ -286,7 +412,7 @@ export function CampaignDetailView({
                       <span aria-hidden>⏸</span> Pause
                     </button>
                   ) : null}
-                  {showCancel(selectedCampaign.status) ? (
+                  {showStopCampaign(selectedCampaign.status) ? (
                     <button
                       type="button"
                       className="btn btn-outline btn-error gap-1"
@@ -349,6 +475,56 @@ export function CampaignDetailView({
                   Sync state
                 </button>
               </div>
+
+              {showStopCampaign(selectedCampaign.status) ||
+              showDrainQueue(selectedCampaign.status) ? (
+                <div className="w-full space-y-3 rounded-box border border-warning/25 bg-warning/5 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-base-content/60">
+                    Cancel or clear queue
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {showStopCampaign(selectedCampaign.status) ? (
+                      <div className="flex flex-col gap-2 rounded-box border border-base-300 bg-base-100 p-4">
+                        <p className="text-sm font-semibold text-base-content">
+                          Cancel campaign
+                        </p>
+                        <p className="text-xs leading-relaxed text-base-content/65">
+                          Ends the active run, skips remaining recipients, and marks the
+                          campaign as cancelled. Same as the Cancel button above.
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn-error btn-outline btn-sm mt-auto w-full sm:w-auto"
+                          onClick={() => void handleAction("cancel")}
+                          disabled={loading}
+                        >
+                          Cancel campaign
+                        </button>
+                      </div>
+                    ) : null}
+                    {showDrainQueue(selectedCampaign.status) ? (
+                      <div className="flex flex-col gap-2 rounded-box border border-base-300 bg-base-100 p-4">
+                        <p className="text-sm font-semibold text-base-content">
+                          Clear send queue
+                        </p>
+                        <p className="text-xs leading-relaxed text-base-content/65">
+                          Removes stuck jobs from the Redis send queue only. Does not
+                          change the database — use after errors or if jobs are stuck
+                          after a stop.
+                        </p>
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm mt-auto w-full sm:w-auto"
+                          onClick={() => void handleAction("drainQueue")}
+                          disabled={loading}
+                        >
+                          Clear queue
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </section>
 
             <div className="divider my-0" />

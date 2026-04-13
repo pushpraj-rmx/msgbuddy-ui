@@ -55,7 +55,6 @@ export type {
 export interface RegisterRequest {
   email: string;
   password: string;
-  workspace: string;
 }
 
 export interface LoginRequest {
@@ -183,7 +182,6 @@ export interface ConversationFilters {
   status?: "OPEN" | "CLOSED" | "ARCHIVED";
   channel?: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
   assignedUserId?: string;
-  priority?: "LOW" | "NORMAL" | "HIGH" | "URGENT";
   tagIds?: string;
   search?: string;
   unreadOnly?: boolean;
@@ -210,8 +208,6 @@ export type ConversationSendPolicyDto = {
   latestInboundAt?: string | null;
   windowClosesAt?: string | null;
 };
-
-export type ConversationPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 
 export type ConversationNote = {
   id: string;
@@ -342,10 +338,6 @@ export const conversationsApi = {
   },
   unassign: async (id: string) => {
     const response = await api.put(endpoints.conversations.unassign(id));
-    return response.data;
-  },
-  setPriority: async (id: string, priority: ConversationPriority) => {
-    const response = await api.put(endpoints.conversations.priority(id), { priority });
     return response.data;
   },
   listNotes: async (id: string): Promise<ConversationNote[]> => {
@@ -1051,6 +1043,11 @@ export const campaignsApi = {
   cancel: async (id: string) => {
     const response = await api.post(endpoints.campaigns.cancel(id));
     return response.data;
+  },
+  /** Remove stuck jobs from Redis only; use cancel for a full stop + DB update. */
+  drainQueue: async (id: string) => {
+    const response = await api.post(endpoints.campaigns.drainQueue(id));
+    return response.data as { campaignId: string; removedFromQueue: number };
   },
   duplicate: async (id: string) => {
     const response = await api.post(endpoints.campaigns.duplicate(id));

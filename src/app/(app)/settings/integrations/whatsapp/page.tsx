@@ -35,6 +35,7 @@ export default async function WhatsAppIntegrationRoute() {
         description="Connect and configure WhatsApp for this workspace."
       />
       <WhatsAppSettingsClient
+        key={me.workspace.id}
         workspaceId={me.workspace.id}
         settings={settings}
         cloudApiConfig={cloudApiConfig}

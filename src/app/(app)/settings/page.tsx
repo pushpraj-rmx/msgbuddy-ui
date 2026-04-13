@@ -13,6 +13,7 @@ import type {
 } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 async function getCloudApiSafe(
   workspaceId: string
@@ -28,16 +29,30 @@ async function getCloudApiSafe(
 
 export default async function SettingsPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
-  const [workspace, settings, members, cloudApiConfig, loginHistory] =
-    await Promise.all([
-      serverFetch<Workspace>(endpoints.workspaces.byId(me.workspace.id)),
-      serverFetch<WorkspaceSettings>(endpoints.workspaces.settings(me.workspace.id)),
-      serverFetch<Member[]>(endpoints.workspaces.members(me.workspace.id)),
-      getCloudApiSafe(me.workspace.id),
-      serverFetch<LoginHistoryEvent[]>(`${endpoints.auth.loginHistory}?limit=50`).catch(
-        () => [] as LoginHistoryEvent[]
-      ),
-    ]);
+  const canSettings = roleHasWorkspacePermission(me.role, "settings.manage");
+  const canMembers = roleHasWorkspacePermission(me.role, "members.view");
+
+  const workspace = await serverFetch<Workspace>(
+    endpoints.workspaces.byId(me.workspace.id)
+  );
+
+  const [settings, members, cloudApiConfig, loginHistory] = await Promise.all([
+    canSettings
+      ? serverFetch<WorkspaceSettings>(
+          endpoints.workspaces.settings(me.workspace.id)
+        )
+      : Promise.resolve<WorkspaceSettings>({
+          timezone: workspace.timezone,
+          locale: workspace.locale,
+        }),
+    canMembers
+      ? serverFetch<Member[]>(endpoints.workspaces.members(me.workspace.id))
+      : Promise.resolve<Member[]>([]),
+    canSettings ? getCloudApiSafe(me.workspace.id) : Promise.resolve(null),
+    serverFetch<LoginHistoryEvent[]>(`${endpoints.auth.loginHistory}?limit=50`).catch(
+      () => [] as LoginHistoryEvent[]
+    ),
+  ]);
 
   return (
     <PageContainer>

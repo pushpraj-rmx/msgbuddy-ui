@@ -9106,16 +9106,11 @@
                     "password": {
                         "type": "string",
                         "example": "SuperSecret123"
-                    },
-                    "workspace": {
-                        "type": "string",
-                        "example": "Acme Workspace"
                     }
                 },
                 "required": [
                     "email",
-                    "password",
-                    "workspace"
+                    "password"
                 ]
             },
             "AuthResponseDto": {

@@ -169,7 +169,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         return (
           <div className="flex flex-col items-center gap-2 py-2 min-w-[8rem]">
             <span className="loading loading-spinner loading-md" />
-            <span className="text-sm">Receiving…</span>
+            <span>Receiving…</span>
           </div>
         );
       }
@@ -196,14 +196,14 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
               />
             )}
             {message.text?.trim() ? (
-              <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+              <p className="whitespace-pre-wrap">{message.text}</p>
             ) : null}
           </div>
         );
       }
       if (resolvedMediaUrl && videoBroken) {
         return (
-          <div className="flex flex-col gap-2 text-sm">
+          <div className="flex flex-col gap-2">
             <span className="text-base-content/70">
               Couldn&apos;t load this video. The link may be wrong, expired, or blocked.
             </span>
@@ -214,7 +214,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         );
       }
       return (
-        <div className="text-sm text-base-content/80">
+        <div className="text-base-content/80">
           {message.text?.trim() || "Video"}
         </div>
       );
@@ -225,7 +225,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         return (
           <div className="flex flex-col items-center gap-2 py-2 min-w-[8rem]">
             <span className="loading loading-spinner loading-md" />
-            <span className="text-sm">Receiving…</span>
+            <span>Receiving…</span>
           </div>
         );
       }
@@ -234,13 +234,13 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
           <div className="flex flex-col gap-2">
             <audio src={resolvedMediaUrl} controls className="w-full max-w-sm" />
             {message.text?.trim() ? (
-              <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+              <p className="whitespace-pre-wrap">{message.text}</p>
             ) : null}
           </div>
         );
       }
       return (
-        <div className="text-sm text-base-content/80">
+        <div className="text-base-content/80">
           {message.text?.trim() || "Audio"}
         </div>
       );
@@ -264,7 +264,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                 <span className="loading loading-spinner loading-sm text-base-content/70" />
               </div>
               <div className="min-w-0 flex-1 space-y-1">
-                <p className="truncate text-sm font-medium text-base-content">
+                <p className="truncate font-medium text-base-content">
                   {docName}
                 </p>
                 <p className="text-xs text-base-content/55">{metaLine}</p>
@@ -300,7 +300,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                   {badgeText}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-base-content">
+                  <p className="truncate font-medium text-base-content">
                     {docName}
                   </p>
                   <p className="mt-0.5 text-xs text-base-content/55">{metaLine}</p>
@@ -313,7 +313,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
               </div>
             </a>
             {message.text?.trim() ? (
-              <p className="whitespace-pre-wrap px-0.5 text-sm text-base-content/90">
+              <p className="whitespace-pre-wrap text-base-content/90">
                 {message.text}
               </p>
             ) : null}
@@ -321,7 +321,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         );
       }
       return (
-        <div className="text-sm text-base-content/80">
+        <div className="text-base-content/80">
           {message.text?.trim() || docName}
         </div>
       );
@@ -332,7 +332,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         return (
           <div className="flex flex-col items-center gap-2 py-2 min-w-[8rem]">
             <span className="loading loading-spinner loading-md" />
-            <span className="text-sm">Receiving…</span>
+            <span>Receiving…</span>
           </div>
         );
       }
@@ -350,11 +350,11 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
             ) : (
               <div className="flex flex-col items-center gap-2 py-2">
                 <span className="loading loading-spinner loading-md" />
-                <span className="text-sm">Receiving…</span>
+                <span>Receiving…</span>
               </div>
             )}
             {message.text?.trim() ? (
-              <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+              <p className="whitespace-pre-wrap">{message.text}</p>
             ) : null}
           </div>
         );
@@ -370,14 +370,14 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
               onError={() => setImgBroken(true)}
             />
             {message.text?.trim() ? (
-              <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+              <p className="whitespace-pre-wrap">{message.text}</p>
             ) : null}
           </div>
         );
       }
       if (resolvedMediaUrl && imgBroken) {
         return (
-          <div className="flex flex-col gap-2 text-sm">
+          <div className="flex flex-col gap-2">
             <span className="text-base-content/70">
               Couldn&apos;t load this image. The link may be wrong, expired, or blocked.
             </span>
@@ -388,7 +388,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         );
       }
       return (
-        <div className="text-sm text-base-content/80">
+        <div className="text-base-content/80">
           {message.text?.trim() || "Image"}
         </div>
       );
@@ -396,7 +396,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
 
     if (kind === "TEMPLATE") {
       return (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
             WhatsApp template
           </span>
@@ -406,7 +406,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
           {message.campaignId && (
             <a
               href={`/campaigns?id=${message.campaignId}`}
-              className="text-xs text-primary underline-offset-2 hover:underline mt-1 self-start"
+              className="text-xs text-primary underline-offset-2 hover:underline self-start"
             >
               View campaign →
             </a>
@@ -417,7 +417,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
 
     if (kind === "INTERACTIVE") {
       return (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
             Interactive
           </span>
@@ -437,7 +437,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
     }
 
     return (
-      <div className="text-sm text-base-content/80">
+      <div className="text-base-content/80">
         This message type isn&apos;t shown in the app yet.
       </div>
     );
@@ -480,8 +480,8 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         }`}
       >
         <div
-          className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden leading-relaxed ${
-            documentBubble ? "p-0" : richMedia ? "p-1" : "px-3 py-2"
+          className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden text-sm leading-relaxed ${
+            documentBubble ? "p-0" : richMedia ? "p-1.5" : "px-3 py-2.5"
           } ${bubbleClassName(message, failed)}`}
         >
           {body}
@@ -567,7 +567,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                     </span>
                   ) : null}
                 </div>
-              </div>
+              </div> 
             )}
           </div>
         ) : null}

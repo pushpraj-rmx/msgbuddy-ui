@@ -7,6 +7,7 @@ import type {
 } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 async function getCloudApiSafe(
   workspaceId: string
@@ -26,6 +27,21 @@ function isWhatsAppConnected(config: WorkspaceCloudApiConfigResponse | null) {
 
 export default async function IntegrationsSettingsPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
+
+  if (!roleHasWorkspacePermission(me.role, "settings.manage")) {
+    return (
+      <PageContainer>
+        <PageHeader
+          title="Integrations"
+          description="Manage external channel connections for this workspace."
+        />
+        <div role="alert" className="alert alert-warning">
+          <span>You don’t have permission to manage integrations.</span>
+        </div>
+      </PageContainer>
+    );
+  }
+
   const cloudApiConfig = await getCloudApiSafe(me.workspace.id);
   const connected = isWhatsAppConnected(cloudApiConfig);
 

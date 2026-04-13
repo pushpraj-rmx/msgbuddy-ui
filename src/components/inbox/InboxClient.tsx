@@ -14,6 +14,7 @@ import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
 import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
 import { AddCircle } from "@mui/icons-material";
 import TuneRounded from "@mui/icons-material/TuneRounded";
+import MoreVert from "@mui/icons-material/MoreVert";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -25,7 +26,6 @@ import {
   channelTemplatesApi,
   workspaceApi,
   tagsApi,
-  type ConversationPriority,
   type ConversationNote,
   type WorkspaceMemberResponseDto,
   type ConversationSendPolicyDto,
@@ -73,7 +73,6 @@ export type Conversation = {
   awaitingReply?: boolean;
   turn?: "YOUR_TURN" | "WAITING_ON_CUSTOMER";
   snoozedUntil?: string | null;
-  priority?: ConversationPriority;
   assignedUserId?: string | null;
   unreadCount?: number;
   lastMessageAt?: string;
@@ -159,13 +158,6 @@ const CHANNEL_OPTIONS: Array<{ value: ChannelFilter; label: string }> = [
   { value: "SMS", label: "SMS" },
 ];
 
-const PRIORITY_OPTIONS: Array<{ value: ConversationPriority; label: string }> = [
-  { value: "LOW", label: "Low" },
-  { value: "NORMAL", label: "Normal" },
-  { value: "HIGH", label: "High" },
-  { value: "URGENT", label: "Urgent" },
-];
-
 const LIMIT = 50;
 
 type TemplateVariableRow = {
@@ -182,6 +174,21 @@ function newTemplateVariableRow(): TemplateVariableRow {
   };
 }
 
+/** Max visible lines for the reply box before scrolling (see useLayoutEffect on draft). */
+const DRAFT_COMPOSER_MAX_LINES = 5;
+
+function readInboxDraftsFromStorage(storageKey: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
 export function InboxClient({
   initialConversations,
   workspaceId,
@@ -193,6 +200,7 @@ export function InboxClient({
   currentUserId: string;
   mode?: "inbox" | "contactsQueue";
 }) {
+  const draftsStorageKey = `inbox-drafts:${workspaceId}:${currentUserId}:${mode}`;
   const {
     setContent: setRightPanelContent,
     clearContent: clearRightPanelContent,
@@ -204,7 +212,6 @@ export function InboxClient({
   >("all");
   const [channelFilter, setChannelFilter] = useState<ChannelFilter | null>(null);
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
-  const [priorityFilter, setPriorityFilter] = useState<ConversationPriority | null>(null);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [listSearch, setListSearch] = useState("");
   const [showTagPanel, setShowTagPanel] = useState(false);
@@ -237,12 +244,18 @@ export function InboxClient({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
-  const draftInputRef = useRef<HTMLInputElement>(null);
+  const draftInputRef = useRef<HTMLTextAreaElement>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const voiceRecorder = useVoiceRecorder();
   const messagesScrollRef = useRef<HTMLDivElement>(null);
   /** After switching threads, jump to bottom once; after local send, smooth scroll. No auto-scroll on later SSE/poll. */
   const scrollThreadIntentRef = useRef<"none" | "auto" | "smooth">("none");
+  /**
+   * Last conversation id we finished loading messages for (success or failure).
+   * Prevents consuming scroll intent while `messages` still belongs to a previous thread
+   * (layout effects run before the fetch effect clears state and sets loading).
+   */
+  const messagesLoadedForConversationIdRef = useRef<string | null>(null);
   const isAtBottomRef = useRef(true);
   const unreadNewRef = useRef(0);
   const [unreadNewCount, setUnreadNewCount] = useState(0);
@@ -312,7 +325,11 @@ export function InboxClient({
   >({});
   const [draftsByConversation, setDraftsByConversation] = useState<
     Record<string, string>
-  >({});
+  >(() =>
+    typeof window === "undefined"
+      ? {}
+      : readInboxDraftsFromStorage(draftsStorageKey)
+  );
 
   const searchParams = useSearchParams();
   const isLgUp = useMediaQuery("(min-width: 1024px)");
@@ -320,7 +337,18 @@ export function InboxClient({
   const [mobilePane, setMobilePane] = useState<"list" | "thread">("list");
   const handledHandoffKeyRef = useRef<string | null>(null);
   const preserveStartContactSelectionRef = useRef(false);
-  const draftSyncConversationRef = useRef<string | null>(null);
+  /** Latest draft for blur / conversation-switch flush without re-rendering on every keystroke. */
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  /** Mirrors `draftsByConversation` for synchronous merge when `selectedId` changes (avoids stale functional updater `prevMap`). */
+  const draftsByConversationRef = useRef(draftsByConversation);
+  draftsByConversationRef.current = draftsByConversation;
+  /** Conversation id the reply box had when focused — blur may run after `selectedId` already changed. */
+  const draftComposerConversationIdRef = useRef<string | null>(null);
+  /** Previous `selectedId` for persisting the composer when switching threads. */
+  const prevConversationIdForDraftRef = useRef<string | null>(null);
   const handoffContactId = searchParams.get("contactId");
   const handoffConversationId = searchParams.get("conversationId");
   const shouldFocusReply = searchParams.get("focus") === "reply";
@@ -329,7 +357,6 @@ export function InboxClient({
     () => conversations.find((c) => c.id === selectedId) ?? null,
     [conversations, selectedId]
   );
-  const draftsStorageKey = `inbox-drafts:${workspaceId}:${currentUserId}:${mode}`;
   const selectedViewers = selectedId ? viewersByConversation[selectedId] ?? [] : [];
   const otherViewers = selectedViewers.filter((id) => id !== currentUserId);
   const activeContactId =
@@ -365,16 +392,17 @@ export function InboxClient({
     return undefined;
   }, [policyLoading, sendPolicy]);
 
+  /** Reload drafts when storage key changes (e.g. workspace switch). Initial load uses useState lazy init. */
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(draftsStorageKey);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Record<string, string>;
-      if (parsed && typeof parsed === "object") {
-        setDraftsByConversation(parsed);
+      const parsed = readInboxDraftsFromStorage(draftsStorageKey);
+      setDraftsByConversation(parsed);
+      const sid = selectedIdRef.current;
+      if (sid && parsed[sid] !== undefined) {
+        setDraft(parsed[sid]!);
       }
     } catch {
-      // ignore malformed local storage
+      // ignore
     }
   }, [draftsStorageKey]);
 
@@ -386,32 +414,68 @@ export function InboxClient({
     }
   }, [draftsByConversation, draftsStorageKey]);
 
+  /** When switching threads: persist the previous thread's draft, then load the new one from the map. */
   useLayoutEffect(() => {
-    if (selectedId) {
-      setDraft(draftsByConversation[selectedId] ?? "");
-      draftSyncConversationRef.current = null;
-      return;
-    }
-    setDraft("");
-    draftSyncConversationRef.current = null;
-  }, [draftsByConversation, selectedId]);
+    const prevId = prevConversationIdForDraftRef.current;
+    const merged = { ...draftsByConversationRef.current };
 
-  useEffect(() => {
-    if (!selectedId) return;
-    if (draftSyncConversationRef.current !== selectedId) {
-      draftSyncConversationRef.current = selectedId;
-      return;
+    if (prevId !== null && prevId !== selectedId) {
+      const t = draftRef.current.trim();
+      if (!t) {
+        if (prevId in merged) delete merged[prevId];
+      } else {
+        merged[prevId] = draftRef.current;
+      }
     }
+
+    const load = selectedId ? (merged[selectedId] ?? "") : "";
+
+    prevConversationIdForDraftRef.current = selectedId;
+    draftComposerConversationIdRef.current = selectedId;
+    draftsByConversationRef.current = merged;
+    setDraftsByConversation(merged);
+    setDraft(load);
+  }, [selectedId]);
+
+  const persistDraftToStorageMap = useCallback(() => {
+    const convId =
+      draftComposerConversationIdRef.current ?? selectedIdRef.current;
+    if (!convId) return;
     setDraftsByConversation((prev) => {
-      if (!draft.trim()) {
-        if (!(selectedId in prev)) return prev;
+      const text = draftRef.current.trim();
+      if (!text) {
+        if (!(convId in prev)) return prev;
         const next = { ...prev };
-        delete next[selectedId];
+        delete next[convId];
         return next;
       }
-      if (prev[selectedId] === draft) return prev;
-      return { ...prev, [selectedId]: draft };
+      if (prev[convId] === draftRef.current) return prev;
+      return { ...prev, [convId]: draftRef.current };
     });
+  }, []);
+
+  /** DaisyUI / browsers often ignore `field-sizing:content`; grow up to 5 lines then scroll. */
+  useLayoutEffect(() => {
+    const el = draftInputRef.current;
+    if (!el) return;
+    const styles = getComputedStyle(el);
+    const fontSizePx = parseFloat(styles.fontSize);
+    const parsedLh = parseFloat(styles.lineHeight);
+    const line =
+      Number.isFinite(parsedLh) && parsedLh > 0
+        ? parsedLh
+        : Number.isFinite(fontSizePx) && fontSizePx > 0
+          ? fontSizePx * 1.375
+          : 20;
+    const padY =
+      (parseFloat(styles.paddingTop) || 0) +
+      (parseFloat(styles.paddingBottom) || 0);
+    const maxH = line * DRAFT_COMPOSER_MAX_LINES + padY;
+
+    el.style.maxHeight = `${maxH}px`;
+    el.style.height = "0px";
+    const next = Math.min(el.scrollHeight, maxH);
+    el.style.height = `${next}px`;
   }, [draft, selectedId]);
 
   // Close emoji picker on outside click
@@ -494,10 +558,16 @@ export function InboxClient({
     isAtBottomRef.current = true;
     unreadNewRef.current = 0;
     setUnreadNewCount(0);
+    messagesLoadedForConversationIdRef.current = null;
   }, [selectedId]);
 
   useLayoutEffect(() => {
     if (!selectedId || messageLoading) return;
+
+    if (messagesLoadedForConversationIdRef.current !== selectedId) {
+      // Still showing another thread's messages, or fetch not finished — keep scroll intent.
+      return;
+    }
 
     const container = messagesScrollRef.current;
     const scrollToBottom = (behavior: ScrollBehavior) => {
@@ -505,8 +575,19 @@ export function InboxClient({
       container.scrollTo({ top: container.scrollHeight, behavior });
     };
 
+    const intent = scrollThreadIntentRef.current;
+
     if (!sortedMessages.length) {
-      // No messages yet — don't consume the scroll intent; wait for messages to load.
+      if (intent === "auto") {
+        scrollThreadIntentRef.current = "none";
+        if (container) {
+          container.scrollTo({ top: 0, behavior: "auto" });
+        }
+        void conversationsApi.read(selectedId).catch(() => { });
+        setConversations((prev) =>
+          prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
+        );
+      }
       return;
     }
 
@@ -514,11 +595,10 @@ export function InboxClient({
       return;
     }
 
-    const intent = scrollThreadIntentRef.current;
     if (intent === "auto") {
       scrollThreadIntentRef.current = "none";
       scrollToBottom("auto");
-      void conversationsApi.read(selectedId).catch(() => {});
+      void conversationsApi.read(selectedId).catch(() => { });
       setConversations((prev) =>
         prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
       );
@@ -545,7 +625,7 @@ export function InboxClient({
       if (atBottom && !wasAtBottom) {
         unreadNewRef.current = 0;
         setUnreadNewCount(0);
-        void conversationsApi.read(selectedId).catch(() => {});
+        void conversationsApi.read(selectedId).catch(() => { });
         setConversations((prev) =>
           prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
         );
@@ -839,7 +919,6 @@ export function InboxClient({
       const extraFilters = {
         ...(channelFilter && { channel: channelFilter }),
         ...(assigneeFilter && { assignedUserId: assigneeFilter }),
-        ...(priorityFilter && { priority: priorityFilter }),
         ...(tagFilter.length > 0 && { tagIds: tagFilter.join(",") }),
         ...(listSearch.trim() && { search: listSearch.trim() }),
       };
@@ -879,7 +958,7 @@ export function InboxClient({
     } finally {
       setListLoading(false);
     }
-  }, [mode, queueFilter, status, channelFilter, assigneeFilter, priorityFilter, tagFilter, listSearch]);
+  }, [mode, queueFilter, status, channelFilter, assigneeFilter, tagFilter, listSearch]);
 
   const fetchMessages = useCallback(
     async (conversationId: string, options?: { silent?: boolean }) => {
@@ -911,6 +990,9 @@ export function InboxClient({
       } finally {
         if (!silent) {
           setMessageLoading(false);
+        }
+        if (conversationId === selectedIdRef.current) {
+          messagesLoadedForConversationIdRef.current = conversationId;
         }
       }
     },
@@ -1180,7 +1262,7 @@ export function InboxClient({
                     const container = messagesScrollRef.current;
                     container?.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
                   });
-                  void conversationsApi.read(selectedId).catch(() => {});
+                  void conversationsApi.read(selectedId).catch(() => { });
                   setConversations((prev) =>
                     prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
                   );
@@ -1435,9 +1517,8 @@ export function InboxClient({
         | "archive"
         | "read"
         | "assign"
-        | "unassign"
-        | "priority",
-      payload?: { userId?: string; priority?: ConversationPriority }
+        | "unassign",
+      payload?: { userId?: string }
     ) => {
       if (!selectedId || conversationActionBusy) return;
       setConversationActionBusy(true);
@@ -1450,9 +1531,6 @@ export function InboxClient({
           await conversationsApi.assign(selectedId, payload.userId);
         }
         if (operation === "unassign") await conversationsApi.unassign(selectedId);
-        if (operation === "priority" && payload?.priority) {
-          await conversationsApi.setPriority(selectedId, payload.priority);
-        }
         await refreshConversationById(selectedId);
         await fetchConversations(status, null, false);
       } catch (error: unknown) {
@@ -1588,6 +1666,7 @@ export function InboxClient({
             typeof crypto !== "undefined" ? crypto.randomUUID() : undefined,
         });
         setDraft("");
+        if (selectedId) clearDraftForConversation(selectedId);
         setPendingMediaId(null);
         clearPendingMediaPreview();
         await refreshThreadAfterSend(activeContactId, "WHATSAPP");
@@ -1633,6 +1712,7 @@ export function InboxClient({
           });
         }
         setDraft("");
+        if (selectedId) clearDraftForConversation(selectedId);
         setPendingImages((prev) => {
           prev.forEach((img) => URL.revokeObjectURL(img.previewUrl));
           return [];
@@ -1667,6 +1747,7 @@ export function InboxClient({
           channel: "WHATSAPP",
         });
         setDraft("");
+        if (selectedId) clearDraftForConversation(selectedId);
         setPendingMediaId(null);
         clearPendingMediaPreview();
         await refreshThreadAfterSend(activeContactId, "WHATSAPP");
@@ -1709,6 +1790,7 @@ export function InboxClient({
       }
       await conversationsApi.sendMessage(sendPayload);
       setDraft("");
+      if (selectedId) clearDraftForConversation(selectedId);
       setScheduleAt("");
       await refreshThreadAfterSend(activeContactId, activeChannel);
     } catch (error: unknown) {
@@ -2227,20 +2309,6 @@ export function InboxClient({
                           {ch.label}
                         </button>
                       ))}
-                      {/* Priority chips */}
-                      {PRIORITY_OPTIONS.map((p) => (
-                        <button
-                          key={p.value}
-                          type="button"
-                          onClick={() => setPriorityFilter(priorityFilter === p.value ? null : p.value)}
-                          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${priorityFilter === p.value
-                            ? "border-primary bg-primary text-primary-content"
-                            : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
-                            }`}
-                        >
-                          {p.label}
-                        </button>
-                      ))}
                       {/* Assigned to me */}
                       <button
                         type="button"
@@ -2458,74 +2526,6 @@ export function InboxClient({
                         {otherViewers.slice(0, 2).join(", ")} is viewing this
                       </span>
                     ) : null}
-                    <div className="hidden items-center gap-1 md:flex">
-                      <button
-                        type="button"
-                        className="btn btn-xs btn-ghost"
-                        onClick={() => runConversationAction("open")}
-                        disabled={conversationActionBusy}
-                      >
-                        Open
-                      </button>
-                      {mode === "inbox" ? (
-                        <>
-                          <button
-                            type="button"
-                            className="btn btn-xs btn-ghost"
-                            onClick={() => runConversationAction("close")}
-                            disabled={conversationActionBusy}
-                          >
-                            Close
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-xs btn-ghost"
-                            onClick={() => runConversationAction("archive")}
-                            disabled={conversationActionBusy}
-                          >
-                            Archive
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-xs btn-ghost"
-                          onClick={toggleSnooze}
-                          disabled={conversationActionBusy}
-                        >
-                          {selectedConversation.snoozedUntil &&
-                            new Date(selectedConversation.snoozedUntil).getTime() > Date.now()
-                            ? "Unsnooze"
-                            : "Snooze 1h"}
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="btn btn-xs btn-ghost"
-                        onClick={() => runConversationAction("read")}
-                        disabled={conversationActionBusy}
-                      >
-                        Mark read
-                      </button>
-                    </div>
-
-                    <select
-                      className="select select-bordered select-xs w-28"
-                      value={selectedConversation.priority || "NORMAL"}
-                      onChange={(event) =>
-                        runConversationAction("priority", {
-                          priority: event.target.value as ConversationPriority,
-                        })
-                      }
-                      disabled={conversationActionBusy}
-                      aria-label="Conversation priority"
-                    >
-                      <option value="LOW">LOW</option>
-                      <option value="NORMAL">NORMAL</option>
-                      <option value="HIGH">HIGH</option>
-                      <option value="URGENT">URGENT</option>
-                    </select>
-
                     <select
                       className="select select-bordered select-xs w-40"
                       value={assigneeUserId}
@@ -2543,24 +2543,117 @@ export function InboxClient({
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
-                      className="btn btn-xs btn-outline"
-                      onClick={() =>
-                        runConversationAction("assign", { userId: assigneeUserId })
-                      }
-                      disabled={conversationActionBusy || !assigneeUserId}
-                    >
-                      Assign
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-xs btn-ghost"
-                      onClick={() => runConversationAction("unassign")}
-                      disabled={conversationActionBusy}
-                    >
-                      Unassign
-                    </button>
+                    <div className="dropdown dropdown-end">
+                      <button
+                        type="button"
+                        tabIndex={0}
+                        className="btn btn-ghost btn-square btn-sm shrink-0"
+                        aria-label="Conversation actions"
+                        aria-haspopup="menu"
+                        disabled={conversationActionBusy}
+                      >
+                        <MoreVert className="h-5 w-5" />
+                      </button>
+                      <ul
+                        tabIndex={0}
+                        className="dropdown-content menu z-[60] w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg"
+                        role="menu"
+                        aria-label="Conversation actions"
+                      >
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full justify-start text-left font-normal"
+                            onClick={() => void runConversationAction("open")}
+                            disabled={conversationActionBusy}
+                          >
+                            Open
+                          </button>
+                        </li>
+                        {mode === "inbox" ? (
+                          <>
+                            <li role="none">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="w-full justify-start text-left font-normal"
+                                onClick={() => void runConversationAction("close")}
+                                disabled={conversationActionBusy}
+                              >
+                                Close
+                              </button>
+                            </li>
+                            <li role="none">
+                              <button
+                                type="button"
+                                role="menuitem"
+                                className="w-full justify-start text-left font-normal"
+                                onClick={() => void runConversationAction("archive")}
+                                disabled={conversationActionBusy}
+                              >
+                                Archive
+                              </button>
+                            </li>
+                          </>
+                        ) : (
+                          <li role="none">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="w-full justify-start text-left font-normal"
+                              onClick={() => void toggleSnooze()}
+                              disabled={conversationActionBusy}
+                            >
+                              {selectedConversation.snoozedUntil &&
+                              new Date(selectedConversation.snoozedUntil).getTime() > Date.now()
+                                ? "Unsnooze"
+                                : "Snooze 1h"}
+                            </button>
+                          </li>
+                        )}
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full justify-start text-left font-normal"
+                            onClick={() => void runConversationAction("read")}
+                            disabled={conversationActionBusy}
+                          >
+                            Mark read
+                          </button>
+                        </li>
+                        <li className="my-1 px-1" role="separator">
+                          <hr className="border-base-300" />
+                        </li>
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full justify-start text-left font-normal"
+                            onClick={() =>
+                              void runConversationAction("assign", {
+                                userId: assigneeUserId,
+                              })
+                            }
+                            disabled={conversationActionBusy || !assigneeUserId}
+                          >
+                            Assign
+                          </button>
+                        </li>
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full justify-start text-left font-normal"
+                            onClick={() => void runConversationAction("unassign")}
+                            disabled={conversationActionBusy}
+                          >
+                            Unassign
+                          </button>
+                        </li>
+                      </ul>
+                    </div>
                     {selectedConversation.lastMessage?.status === "FAILED" &&
                       selectedConversation.lastMessage?.direction === "OUTBOUND" &&
                       selectedConversation.lastMessage?.text ? (
@@ -3162,7 +3255,7 @@ export function InboxClient({
                       </div>
                     </div>
                   ) : null}
-                  <div className="relative flex flex-wrap items-center gap-2">
+                  <div className="relative flex flex-wrap items-end gap-2">
                     {/* Emoji picker popover */}
                     {showEmojiPicker && (
                       <div
@@ -3356,10 +3449,11 @@ export function InboxClient({
                         </button>
                       )
                     ) : null}
-                    <input
+                    <textarea
                       ref={draftInputRef}
-                      type="text"
-                      className="input input-bordered min-w-0 flex-1 rounded-4xl focus:outline-none focus:[box-shadow:0_0_0_3px_hsl(var(--p)/0.18),0_0_10px_2px_hsl(var(--p)/0.10)]"
+                      rows={1}
+                      title="Enter to send · Shift+Enter for a new line"
+                      className="textarea textarea-bordered min-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-xl py-2.5 leading-snug focus:outline-none focus:[box-shadow:0_0_0_3px_hsl(var(--p)/0.18),0_0_10px_2px_hsl(var(--p)/0.10)]"
                       placeholder={
                         useTemplateSend
                           ? "Template mode: free text is disabled"
@@ -3369,8 +3463,12 @@ export function InboxClient({
                       }
                       value={draft}
                       onChange={(event) => setDraft(event.target.value)}
+                      onFocus={() => {
+                        draftComposerConversationIdRef.current = selectedId;
+                      }}
+                      onBlur={persistDraftToStorageMap}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") {
+                        if (event.key === "Enter" && !event.shiftKey) {
                           event.preventDefault();
                           if (canSend) handleSend();
                         }

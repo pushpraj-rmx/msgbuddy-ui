@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -12,6 +11,7 @@ import {
 import { IntegrationCard } from "@/components/integrations/IntegrationCard";
 import { AccountSecurityClient } from "@/components/settings/AccountSecurityClient";
 import type { LoginHistoryEvent } from "@/lib/api";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 export type Workspace = {
   id: string;
@@ -72,7 +72,7 @@ export function SettingsClient({
   loginHistory: LoginHistoryEvent[];
 }) {
   const router = useRouter();
-  const canManageWorkspace = meRole === "OWNER" || meRole === "ADMIN";
+  const canManageWorkspace = roleHasWorkspacePermission(meRole, "settings.manage");
   const canDeleteWorkspace = meRole === "OWNER";
 
   const initialForm = useMemo(
@@ -158,59 +158,96 @@ export function SettingsClient({
   };
 
   return (
-    <section className="space-y-6">
-      <AccountSecurityClient
-        accountEmail={accountEmail}
-        accountName={accountName}
-        accountAvatarUrl={accountAvatarUrl}
-        hasPassword={hasPassword}
-        loginHistory={loginHistory}
-      />
+    <section className="mx-auto w-full max-w-4xl space-y-8">
+      <div className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+          Your account
+        </p>
+        <AccountSecurityClient
+          accountEmail={accountEmail}
+          accountName={accountName}
+          accountAvatarUrl={accountAvatarUrl}
+          hasPassword={hasPassword}
+          memberCount={members.length}
+          loginHistory={loginHistory}
+          meRole={meRole}
+        />
+      </div>
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-medium">Workspace info</h2>
-          <div className="flex items-center gap-3">
-            {canManageWorkspace ? (
-              <button
-                type="button"
-                className="btn btn-sm btn-outline"
-                onClick={openEdit}
-              >
-                Edit
-              </button>
+      <div className="space-y-3">
+        <p className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
+          Workspace
+        </p>
+        {canManageWorkspace ? (
+          <div className="space-y-4 rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-medium">Workspace info</h2>
+                <p className="mt-0.5 text-sm text-base-content/70">
+                  {members.length} member{members.length === 1 ? "" : "s"}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={openEdit}
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-box border border-base-300">
+              <InfoRow label="Name" value={workspace.name} />
+              <InfoRow label="Slug" value={workspace.slug} />
+              <InfoRow label="Description" value={workspace.description} />
+              <InfoRow label="Status" value={workspace.status} />
+              <InfoRow
+                label="Timezone"
+                value={settings.timezone || workspace.timezone}
+              />
+              <InfoRow label="Locale" value={settings.locale || workspace.locale} />
+            </div>
+
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-base-content/80">
+                WhatsApp
+              </h3>
+              <IntegrationCard
+                name="WhatsApp"
+                description="Connect and monitor your WhatsApp Business phone number."
+                status={
+                  isWhatsAppConnected(cloudApiConfig)
+                    ? "connected"
+                    : "disconnected"
+                }
+                actionLabel={
+                  isWhatsAppConnected(cloudApiConfig) ? "Manage" : "Connect"
+                }
+                href="/settings/integrations/whatsapp"
+              />
+            </div>
+
+            {canDeleteWorkspace ? (
+              <div className="border-t border-base-300 pt-4">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-error btn-outline"
+                  onClick={onDeleteWorkspace}
+                  disabled={dangerBusy}
+                >
+                  {dangerBusy ? "Deleting..." : "Delete workspace"}
+                </button>
+              </div>
             ) : null}
-            <Link href="/settings/team" className="btn btn-sm btn-ghost">
-              Team
-            </Link>
-            <Link
-              href="/settings/integrations"
-              className="btn btn-sm btn-ghost"
-            >
-              Integrations
-            </Link>
           </div>
-        </div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <InfoCard label="Name" value={workspace.name} />
-          <InfoCard label="Slug" value={workspace.slug} />
-          <InfoCard label="Description" value={workspace.description} />
-          <InfoCard label="Status" value={workspace.status} />
-          <InfoCard label="Timezone" value={settings.timezone || workspace.timezone} />
-          <InfoCard label="Locale" value={settings.locale || workspace.locale} />
-        </div>
-        {canDeleteWorkspace ? (
-          <div className="pt-2">
-            <button
-              type="button"
-              className="btn btn-sm btn-error btn-outline"
-              onClick={onDeleteWorkspace}
-              disabled={dangerBusy}
-            >
-              {dangerBusy ? "Deleting..." : "Delete workspace"}
-            </button>
+        ) : (
+          <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/80">
+            You don’t have permission to change workspace settings or integrations. Ask
+            an owner or admin if you need updates.
           </div>
-        ) : null}
+        )}
       </div>
 
       <dialog id="edit_workspace_modal" className="modal">
@@ -226,167 +263,204 @@ export function SettingsClient({
             </div>
           ) : null}
 
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Name</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.name}
-                onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-              />
-            </label>
+          <details
+            open
+            className="group mt-4 rounded-box border border-base-300 bg-base-200/20 p-4"
+          >
+            <summary className="cursor-pointer text-sm font-medium text-base-content">
+              General
+            </summary>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Name</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, name: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Website</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.website}
-                onChange={(e) => setForm((s) => ({ ...s, website: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Website</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.website}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, website: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full md:col-span-2">
-              <div className="label">
-                <span className="label-text">Description</span>
-              </div>
-              <textarea
-                className="textarea textarea-bordered w-full"
-                value={form.description}
-                onChange={(e) => setForm((s) => ({ ...s, description: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full md:col-span-2">
+                <div className="label">
+                  <span className="label-text">Description</span>
+                </div>
+                <textarea
+                  className="textarea textarea-bordered w-full"
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, description: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Timezone</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.timezone}
-                onChange={(e) => setForm((s) => ({ ...s, timezone: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Timezone</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.timezone}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, timezone: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Locale</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.locale}
-                onChange={(e) => setForm((s) => ({ ...s, locale: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Locale</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.locale}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, locale: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Logo URL</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.logoUrl}
-                onChange={(e) => setForm((s) => ({ ...s, logoUrl: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full md:col-span-2">
+                <div className="label">
+                  <span className="label-text">Logo URL</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.logoUrl}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, logoUrl: e.target.value }))
+                  }
+                />
+              </label>
+            </div>
+          </details>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Business name</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.businessName}
-                onChange={(e) => setForm((s) => ({ ...s, businessName: e.target.value }))}
-              />
-            </label>
+          <details className="group mt-3 rounded-box border border-base-300 bg-base-200/20 p-4">
+            <summary className="cursor-pointer text-sm font-medium text-base-content">
+              Business profile
+            </summary>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Business name</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.businessName}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, businessName: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Industry</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.industry}
-                onChange={(e) => setForm((s) => ({ ...s, industry: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Industry</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.industry}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, industry: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Country</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.country}
-                onChange={(e) => setForm((s) => ({ ...s, country: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Country</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.country}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, country: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Phone</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.phone}
-                onChange={(e) => setForm((s) => ({ ...s, phone: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Phone</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.phone}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, phone: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Billing email</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.email}
-                onChange={(e) => setForm((s) => ({ ...s, email: e.target.value }))}
-              />
-            </label>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Billing email</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.email}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, email: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full md:col-span-2">
-              <div className="label">
-                <span className="label-text">Business address</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.businessAddress}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, businessAddress: e.target.value }))
-                }
-              />
-            </label>
+              <label className="form-control w-full md:col-span-2">
+                <div className="label">
+                  <span className="label-text">Business address</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.businessAddress}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, businessAddress: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full md:col-span-2">
-              <div className="label">
-                <span className="label-text">Business about</span>
-              </div>
-              <textarea
-                className="textarea textarea-bordered w-full"
-                value={form.businessAbout}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, businessAbout: e.target.value }))
-                }
-              />
-            </label>
+              <label className="form-control w-full md:col-span-2">
+                <div className="label">
+                  <span className="label-text">Business about</span>
+                </div>
+                <textarea
+                  className="textarea textarea-bordered w-full"
+                  value={form.businessAbout}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, businessAbout: e.target.value }))
+                  }
+                />
+              </label>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text">Vertical</span>
-              </div>
-              <input
-                className="input input-bordered w-full"
-                value={form.businessVertical}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, businessVertical: e.target.value }))
-                }
-              />
-            </label>
-          </div>
+              <label className="form-control w-full">
+                <div className="label">
+                  <span className="label-text">Vertical</span>
+                </div>
+                <input
+                  className="input input-bordered w-full"
+                  value={form.businessVertical}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, businessVertical: e.target.value }))
+                  }
+                />
+              </label>
+            </div>
+          </details>
 
           <div className="modal-action">
             <button type="button" className="btn btn-ghost" onClick={closeEdit}>
@@ -406,33 +480,18 @@ export function SettingsClient({
           <button aria-label="close">close</button>
         </form>
       </dialog>
-
-      <IntegrationCard
-        name="WhatsApp"
-        description="Connect and monitor your WhatsApp Business phone number."
-        status={isWhatsAppConnected(cloudApiConfig) ? "connected" : "disconnected"}
-        actionLabel={isWhatsAppConnected(cloudApiConfig) ? "Manage" : "Connect"}
-        href="/settings/integrations/whatsapp"
-      />
-
-      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
-        <h2 className="text-base font-medium">Team snapshot</h2>
-        <p className="text-sm text-base-content/70">
-          {members.length} member{members.length === 1 ? "" : "s"} in this workspace.
-        </p>
-        <Link href="/settings/team" className="btn btn-sm btn-outline">
-          Manage team
-        </Link>
-      </div>
     </section>
   );
 }
 
-function InfoCard({ label, value }: { label: string; value?: string }) {
+function InfoRow({ label, value }: { label: string; value?: string }) {
+  const display = value?.trim();
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
-      <div className="text-xs text-base-content/60">{label}</div>
-      <div className="text-base font-medium text-base-content">{value || "-"}</div>
+    <div className="flex flex-col gap-0.5 border-b border-base-300 px-4 py-3 last:border-b-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
+      <div className="shrink-0 text-xs text-base-content/60 sm:w-36">{label}</div>
+      <div className="min-w-0 break-words text-sm font-medium text-base-content">
+        {display ? display : "—"}
+      </div>
     </div>
   );
 }

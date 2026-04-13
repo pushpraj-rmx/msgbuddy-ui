@@ -28,7 +28,10 @@ export default async function WhatsAppImportTemplatesPage() {
         </Link>
       </div>
 
-      <WhatsAppMetaTemplateImportClient workspaceId={me.workspace.id} />
+      <WhatsAppMetaTemplateImportClient
+        key={me.workspace.id}
+        workspaceId={me.workspace.id}
+      />
     </PageContainer>
   );
 }

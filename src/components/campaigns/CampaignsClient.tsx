@@ -1,15 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getApiError } from "@/lib/api-error";
-import {
-  analyticsApi,
-  campaignsApi,
-  contactsApi,
-  channelTemplatesApi,
-} from "@/lib/api";
-import type { ChannelTemplateVersion } from "@/lib/types";
+import { analyticsApi, campaignsApi } from "@/lib/api";
 import {
   campaignOutcomeLine,
   campaignStatusTone,
@@ -17,16 +12,8 @@ import {
   formatCampaignListTitle,
   mergeReportWithProgress,
   parseReportMetrics,
-  showCancel,
-  showPause,
-  showResume,
-  showStart,
   statusDotClasses,
 } from "@/lib/campaignUi";
-import {
-  isMediaHeaderType,
-  uploadMediaRowIdAndPrepareWhatsApp,
-} from "@/lib/whatsappTemplateMedia";
 import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { CampaignDetailView } from "./CampaignDetailView";
@@ -40,22 +27,8 @@ export type Campaign = {
   channelTemplateVersionId?: string;
   /** Backend: header media, staticVariables, carouselCardMediaIds */
   templateBindings?: Record<string, unknown> | null;
-};
-
-export type Template = {
-  id: string;
-  name: string;
-  channelTemplates?: Array<{
-    id: string;
-    channel: string;
-    deletedAt?: string | null;
-  }>;
-};
-
-type Contact = {
-  id: string;
-  name?: string;
-  phone: string;
+  scheduledAt?: string | null;
+  timezone?: string;
 };
 
 type CampaignProgress = {
@@ -93,28 +66,10 @@ type CampaignRunJob = {
   createdAt?: string | null;
 };
 
-/** Matches API CampaignAudienceType (SEGMENT needs audienceQuery — use API for now). */
-const AUDIENCE_TYPES = ["ALL", "SPECIFIC", "SEGMENT"] as const;
-
-function formatReportValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  if (typeof value === "number" || typeof value === "boolean") {
-    return String(value);
-  }
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-}
-
 export function CampaignsClient({
   initialCampaigns,
-  templates,
 }: {
   initialCampaigns: Campaign[];
-  templates: Template[];
 }) {
   const searchParams = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
@@ -135,33 +90,6 @@ export function CampaignsClient({
   const [runJobsLoading, setRunJobsLoading] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
 
-  const [step, setStep] = useState(1);
-  const [wizardOpen, setWizardOpen] = useState(false);
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [audienceType, setAudienceType] =
-    useState<(typeof AUDIENCE_TYPES)[number]>("ALL");
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
-  const [scheduledAt, setScheduledAt] = useState("");
-  const [timezone, setTimezone] = useState("UTC");
-  const [channelTemplateVersionId, setChannelTemplateVersionId] = useState("");
-  const [channelWaTemplateId, setChannelWaTemplateId] = useState<string | null>(
-    null
-  );
-  const [versionDetail, setVersionDetail] = useState<ChannelTemplateVersion | null>(
-    null
-  );
-  const [versionDetailLoading, setVersionDetailLoading] = useState(false);
-  const [headerMediaId, setHeaderMediaId] = useState<string | null>(null);
-  const [carouselCardMediaIds, setCarouselCardMediaIds] = useState<string[]>(
-    []
-  );
-  const [staticVariablesText, setStaticVariablesText] = useState("{}");
-  const [bindingUploadBusy, setBindingUploadBusy] = useState(false);
-  const [bindingFieldError, setBindingFieldError] = useState<string | null>(
-    null
-  );
-
   const selectedCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedId) ?? null,
     [campaigns, selectedId]
@@ -179,9 +107,6 @@ export function CampaignsClient({
   const tone = selectedCampaign
     ? campaignStatusTone(selectedCampaign.status)
     : "neutral";
-
-  const canUseSelectedTemplate =
-    !!templateId && channelTemplateVersionId.trim().length > 0;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -204,195 +129,6 @@ export function CampaignsClient({
       setSelectedId(id);
     }
   }, [campaigns, searchParams]);
-
-  const openWizard = async () => {
-    setWizardOpen(true);
-    setStep(1);
-    setSelectedContacts([]);
-    setChannelTemplateVersionId("");
-    setChannelWaTemplateId(null);
-    setVersionDetail(null);
-    setHeaderMediaId(null);
-    setCarouselCardMediaIds([]);
-    setStaticVariablesText("{}");
-    setBindingFieldError(null);
-    if (!contacts.length) {
-      const data = await contactsApi.list({});
-      setContacts(data.contacts ?? []);
-    }
-  };
-
-  useEffect(() => {
-    if (!wizardOpen || !templateId) {
-      setChannelWaTemplateId(null);
-      return;
-    }
-    const tpl = templates.find((t) => t.id === templateId) ?? null;
-    const wa = (tpl?.channelTemplates ?? []).find(
-      (ct) => ct.channel === "WHATSAPP" && !ct.deletedAt
-    );
-    setChannelWaTemplateId(wa?.id ?? null);
-    if (!wa?.id) {
-      setChannelTemplateVersionId("");
-      return;
-    }
-    let cancelled = false;
-    void channelTemplatesApi
-      .state(wa.id)
-      .then((state) => {
-        if (cancelled) return;
-        const v = state.activeVersion ?? state.latestSendableVersion;
-        setChannelTemplateVersionId(v?.id ?? "");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setChannelTemplateVersionId("");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [wizardOpen, templateId, templates]);
-
-  useEffect(() => {
-    if (
-      !wizardOpen ||
-      !channelWaTemplateId ||
-      !channelTemplateVersionId.trim()
-    ) {
-      setVersionDetail(null);
-      return;
-    }
-    let cancelled = false;
-    setVersionDetailLoading(true);
-    void channelTemplatesApi
-      .listVersions(channelWaTemplateId)
-      .then((versions) => {
-        if (cancelled) return;
-        const v = versions.find((x) => x.id === channelTemplateVersionId);
-        setVersionDetail(v ?? null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setVersionDetail(null);
-      })
-      .finally(() => {
-        if (!cancelled) setVersionDetailLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [wizardOpen, channelWaTemplateId, channelTemplateVersionId]);
-
-  useEffect(() => {
-    const cards = versionDetail?.carouselCards;
-    if (versionDetail?.layoutType === "CAROUSEL" && Array.isArray(cards)) {
-      const n = cards.length;
-      setCarouselCardMediaIds((prev) => {
-        if (prev.length === n) return prev;
-        return Array.from({ length: n }, (_, i) => prev[i] ?? "");
-      });
-    } else {
-      setCarouselCardMediaIds([]);
-    }
-  }, [versionDetail]);
-
-  const needsHeaderMedia =
-    versionDetail != null && isMediaHeaderType(versionDetail.headerType);
-  const carouselCardCount =
-    versionDetail?.layoutType === "CAROUSEL" &&
-    Array.isArray(versionDetail.carouselCards)
-      ? versionDetail.carouselCards.length
-      : 0;
-  const bindingsStepReady =
-    !versionDetailLoading &&
-    versionDetail != null &&
-    (!needsHeaderMedia || !!headerMediaId?.trim()) &&
-    (carouselCardCount === 0 ||
-      (carouselCardMediaIds.length >= carouselCardCount &&
-        carouselCardMediaIds
-          .slice(0, carouselCardCount)
-          .every((id) => String(id ?? "").trim().length > 0)));
-
-  const createCampaign = async () => {
-    if (!templateId || !channelTemplateVersionId.trim()) {
-      setError("Pick a message and provide a channelTemplateVersionId.");
-      return;
-    }
-    if (audienceType === "SPECIFIC" && selectedContacts.length === 0) {
-      setError("Select at least one contact, or choose audience “All contacts”.");
-      return;
-    }
-    if (audienceType === "SEGMENT") {
-      setError(
-        "Segment campaigns need an audience query. Create via API or choose “All contacts” / “Selected contacts”."
-      );
-      return;
-    }
-    let staticVariables: Record<string, string> | undefined;
-    const trimmedStatic = staticVariablesText.trim();
-    if (trimmedStatic && trimmedStatic !== "{}") {
-      try {
-        const parsed = JSON.parse(trimmedStatic) as unknown;
-        if (
-          typeof parsed !== "object" ||
-          parsed === null ||
-          Array.isArray(parsed)
-        ) {
-          setError("Static variables must be a JSON object, e.g. {\"code\":\"SAVE\"}.");
-          return;
-        }
-        staticVariables = Object.fromEntries(
-          Object.entries(parsed as Record<string, unknown>).filter(
-            ([, v]) => typeof v === "string"
-          ) as [string, string][]
-        );
-      } catch {
-        setError("Static variables must be valid JSON.");
-        return;
-      }
-    }
-    if (!bindingsStepReady) {
-      setError("Upload required template media (header or carousel cards) before creating.");
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const friendlyName = `Campaign · ${new Date().toLocaleString(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })}`;
-      const templateBindings: Record<string, unknown> = {};
-      if (headerMediaId?.trim()) templateBindings.headerMediaId = headerMediaId.trim();
-      if (carouselCardCount > 0) {
-        templateBindings.carouselCardMediaIds = carouselCardMediaIds
-          .slice(0, carouselCardCount)
-          .map((id) => id.trim());
-      }
-      if (staticVariables && Object.keys(staticVariables).length > 0) {
-        templateBindings.staticVariables = staticVariables;
-      }
-      await campaignsApi.create({
-        name: friendlyName,
-        channel: "WHATSAPP",
-        channelTemplateVersionId: channelTemplateVersionId.trim(),
-        ...(Object.keys(templateBindings).length > 0 && {
-          templateBindings,
-        }),
-        audienceType,
-        contactIds:
-          audienceType === "SPECIFIC" ? selectedContacts : undefined,
-        scheduledAt: scheduledAt || undefined,
-        timezone,
-      });
-      await refresh();
-      setWizardOpen(false);
-    } catch (err: unknown) {
-      setError(getApiError(err) || "Failed to create campaign.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadProgress = useCallback(async () => {
     if (!selectedCampaign) return;
@@ -486,9 +222,28 @@ export function CampaignsClient({
 
   const handleAction = useCallback(
     async (
-      action: "start" | "pause" | "resume" | "cancel" | "duplicate" | "delete"
+      action:
+        | "start"
+        | "pause"
+        | "resume"
+        | "cancel"
+        | "drainQueue"
+        | "duplicate"
+        | "delete"
     ) => {
       if (!selectedCampaign) return;
+      if (action === "cancel") {
+        const ok = window.confirm(
+          "Stop this campaign? Remaining sends will be skipped and the campaign will be marked cancelled."
+        );
+        if (!ok) return;
+      }
+      if (action === "drainQueue") {
+        const ok = window.confirm(
+          "Clear stuck jobs from the send queue? This only removes jobs in Redis and does not update campaign status. Use “Stop campaign” to end the run in the database."
+        );
+        if (!ok) return;
+      }
       setLoading(true);
       setError(null);
       try {
@@ -496,6 +251,12 @@ export function CampaignsClient({
         if (action === "pause") await campaignsApi.pause(selectedCampaign.id);
         if (action === "resume") await campaignsApi.resume(selectedCampaign.id);
         if (action === "cancel") await campaignsApi.cancel(selectedCampaign.id);
+        if (action === "drainQueue") {
+          const r = await campaignsApi.drainQueue(selectedCampaign.id);
+          window.alert(
+            `Removed ${r.removedFromQueue} job(s) from the queue.`
+          );
+        }
         if (action === "duplicate") await campaignsApi.duplicate(selectedCampaign.id);
         if (action === "delete") await campaignsApi.remove(selectedCampaign.id);
         await refresh();
@@ -510,6 +271,26 @@ export function CampaignsClient({
       }
     },
     [selectedCampaign, refresh, loadProgress, fetchReport, loadRuns, loadRunJobs]
+  );
+
+  const handleSaveSchedule = useCallback(
+    async (payload: { scheduledAt: string | null; timezone: string }) => {
+      if (!selectedCampaign) return;
+      setLoading(true);
+      setError(null);
+      try {
+        await campaignsApi.update(selectedCampaign.id, {
+          scheduledAt: payload.scheduledAt,
+          timezone: payload.timezone || "UTC",
+        });
+        await refresh();
+      } catch (err: unknown) {
+        setError(getApiError(err) || "Failed to update schedule.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [selectedCampaign, refresh]
   );
 
   const handleRename = useCallback(async () => {
@@ -597,6 +378,7 @@ export function CampaignsClient({
         progressBarCaption={progressBarCaption}
         loading={loading}
         handleAction={handleAction}
+        onSaveSchedule={handleSaveSchedule}
         handleRename={handleRename}
         loadProgress={loadProgress}
         runs={runs}
@@ -630,6 +412,7 @@ export function CampaignsClient({
     progressBarCaption,
     loading,
     handleAction,
+    handleSaveSchedule,
     handleRename,
     loadProgress,
     runs,
@@ -744,13 +527,9 @@ export function CampaignsClient({
           <p className="text-sm text-base-content/65">No campaigns yet.</p>
         ) : null}
 
-        <button
-          type="button"
-          className="btn btn-primary w-full"
-          onClick={openWizard}
-        >
+        <Link href="/campaigns/new" className="btn btn-primary w-full">
           New campaign
-        </button>
+        </Link>
       </aside>
 
       {/* Main content: campaign detail */}
@@ -763,335 +542,6 @@ export function CampaignsClient({
           </div>
         )}
       </div>
-
-      {wizardOpen && (
-        <dialog open className="modal modal-middle">
-          <div className="modal-box">
-            <h3 className="text-lg font-semibold">Create campaign</h3>
-            <div className="mt-4 space-y-4">
-              {step === 1 && (
-                <div className="space-y-2">
-                  <p className="text-sm text-base-content/60">
-                    Step 1: Choose a message (WhatsApp)
-                  </p>
-                  <select
-                    className="select select-bordered w-full"
-                    value={templateId || ""}
-                    onChange={(event) => setTemplateId(event.target.value || null)}
-                  >
-                    <option value="">Select a message</option>
-                    {templates.map((template) => (
-                      <option key={template.id} value={template.id}>
-                        {template.name}
-                      </option>
-                    ))}
-                  </select>
-                  {templateId && !canUseSelectedTemplate && (
-                    <div role="alert" className="alert alert-warning alert-soft text-sm">
-                      <span>
-                        No approved WhatsApp version available yet.
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-              {step === 2 && (
-                <div className="space-y-3">
-                  <p className="text-sm text-base-content/60">
-                    Step 2: Template media & variables
-                  </p>
-                  {versionDetailLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-base-content/70">
-                      <span className="loading loading-spinner loading-sm" />
-                      Loading template details…
-                    </div>
-                  ) : !versionDetail ? (
-                    <div role="alert" className="alert alert-warning alert-soft text-sm">
-                      <span>
-                        Could not load template version. Go back and re-select a
-                        message.
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      {needsHeaderMedia ? (
-                        <div className="rounded-box border border-base-300 bg-base-100 p-3">
-                          <p className="text-sm font-medium text-base-content">
-                            Header media ({versionDetail.headerType})
-                          </p>
-                          <p className="mt-1 text-xs text-base-content/60">
-                            Upload an image, video, or document. It is sent to
-                            WhatsApp and linked to this campaign for every
-                            recipient.
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2">
-                            <input
-                              type="file"
-                              className="file-input file-input-bordered file-input-sm w-full max-w-xs"
-                              accept={
-                                versionDetail.headerType === "VIDEO"
-                                  ? "video/mp4,video/3gpp"
-                                  : versionDetail.headerType === "DOCUMENT"
-                                    ? "application/pdf,application/*"
-                                    : "image/jpeg,image/png,image/webp,image/gif"
-                              }
-                              disabled={bindingUploadBusy}
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                e.target.value = "";
-                                if (!file) return;
-                                setBindingFieldError(null);
-                                setBindingUploadBusy(true);
-                                try {
-                                  const id =
-                                    await uploadMediaRowIdAndPrepareWhatsApp(
-                                      file
-                                    );
-                                  setHeaderMediaId(id);
-                                } catch (err: unknown) {
-                                  setBindingFieldError(
-                                    getApiError(err) ||
-                                      "Upload failed. Try a smaller file or supported format."
-                                  );
-                                } finally {
-                                  setBindingUploadBusy(false);
-                                }
-                              }}
-                            />
-                            {headerMediaId ? (
-                              <span className="badge badge-success badge-outline">
-                                Ready
-                              </span>
-                            ) : (
-                              <span className="text-xs text-warning">
-                                Required
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-base-content/55">
-                          This template has no media header (text or none only).
-                        </p>
-                      )}
-
-                      {carouselCardCount > 0 ? (
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-base-content">
-                            Carousel cards ({carouselCardCount})
-                          </p>
-                          <p className="text-xs text-base-content/60">
-                            Each card needs header media uploaded for WhatsApp.
-                          </p>
-                          {Array.from(
-                            { length: carouselCardCount },
-                            (_, idx) => (
-                              <div
-                                key={idx}
-                                className="rounded-box border border-base-300 bg-base-100 p-3"
-                              >
-                                <p className="text-xs font-medium text-base-content/80">
-                                  Card {idx + 1}
-                                </p>
-                                <input
-                                  type="file"
-                                  className="file-input file-input-bordered file-input-sm mt-2 w-full max-w-xs"
-                                  accept="image/jpeg,image/png,image/webp,video/mp4,video/3gpp"
-                                  disabled={bindingUploadBusy}
-                                  onChange={async (e) => {
-                                    const file = e.target.files?.[0];
-                                    e.target.value = "";
-                                    if (!file) return;
-                                    setBindingFieldError(null);
-                                    setBindingUploadBusy(true);
-                                    try {
-                                      const id =
-                                        await uploadMediaRowIdAndPrepareWhatsApp(
-                                          file
-                                        );
-                                      setCarouselCardMediaIds((prev) => {
-                                        const next = [...prev];
-                                        next[idx] = id;
-                                        return next;
-                                      });
-                                    } catch (err: unknown) {
-                                      setBindingFieldError(
-                                        getApiError(err) ||
-                                          "Upload failed for this card."
-                                      );
-                                    } finally {
-                                      setBindingUploadBusy(false);
-                                    }
-                                  }}
-                                />
-                                {carouselCardMediaIds[idx] ? (
-                                  <span className="mt-1 inline-block text-xs text-success">
-                                    Uploaded
-                                  </span>
-                                ) : null}
-                              </div>
-                            )
-                          )}
-                        </div>
-                      ) : null}
-
-                      <div className="space-y-1">
-                        <label className="text-sm font-medium text-base-content">
-                          Static variables (optional JSON)
-                        </label>
-                        <textarea
-                          className="textarea textarea-bordered w-full font-mono text-xs"
-                          rows={4}
-                          placeholder='{"promo_code":"SUMMER"}'
-                          value={staticVariablesText}
-                          onChange={(e) => setStaticVariablesText(e.target.value)}
-                        />
-                        <p className="text-xs text-base-content/55">
-                          Keys must match this template&apos;s placeholders (body,
-                          header text, buttons, carousel). The server only applies
-                          keys the template uses; extras are ignored. Same value for
-                          every recipient; contact data overrides when both set.
-                          String values only.
-                        </p>
-                      </div>
-
-                      {bindingFieldError ? (
-                        <div role="alert" className="alert alert-error text-sm">
-                          {bindingFieldError}
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              )}
-              {step === 3 && (
-                <div className="space-y-2">
-                  <p className="text-sm text-base-content/60">
-                    Step 3: Choose an audience
-                  </p>
-                  <select
-                    className="select select-bordered w-full"
-                    value={audienceType}
-                    onChange={(event) =>
-                      setAudienceType(
-                        event.target.value as (typeof AUDIENCE_TYPES)[number]
-                      )
-                    }
-                  >
-                    {AUDIENCE_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {type === "ALL"
-                          ? "All contacts"
-                          : type === "SPECIFIC"
-                            ? "Selected contacts"
-                            : "Segment (API only)"}
-                      </option>
-                    ))}
-                  </select>
-                  {audienceType === "SPECIFIC" && (
-                    <div className="max-h-48 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2">
-                      {contacts.map((contact) => (
-                        <label
-                          key={contact.id}
-                          className="flex items-center gap-2 py-1 text-sm"
-                        >
-                          <input
-                            type="checkbox"
-                            className="checkbox checkbox-sm"
-                            checked={selectedContacts.includes(contact.id)}
-                            onChange={(event) => {
-                              setSelectedContacts((prev) =>
-                                event.target.checked
-                                  ? [...prev, contact.id]
-                                  : prev.filter((id) => id !== contact.id)
-                              );
-                            }}
-                          />
-                          <span>
-                            {contact.name || contact.phone} ({contact.phone})
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  {audienceType === "SEGMENT" ? (
-                    <p className="text-xs text-warning">
-                      Segment audiences require a saved query. Create this
-                      campaign with the API or pick another audience.
-                    </p>
-                  ) : null}
-                </div>
-              )}
-              {step === 4 && (
-                <div className="space-y-2">
-                  <p className="text-sm text-base-content/60">
-                    Step 4: Schedule
-                  </p>
-                  <input
-                    type="datetime-local"
-                    className="input input-bordered w-full"
-                    value={scheduledAt}
-                    onChange={(event) => setScheduledAt(event.target.value)}
-                  />
-                  <input
-                    type="text"
-                    className="input input-bordered w-full"
-                    value={timezone}
-                    onChange={(event) => setTimezone(event.target.value)}
-                    placeholder="Timezone (e.g. America/New_York)"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setWizardOpen(false)}
-              >
-                Cancel
-              </button>
-              {step > 1 && (
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => setStep((prev) => prev - 1)}
-                >
-                  Back
-                </button>
-              )}
-              {step < 4 && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => setStep((prev) => prev + 1)}
-                  disabled={
-                    (step === 1 &&
-                      (!templateId || !canUseSelectedTemplate)) ||
-                    (step === 2 && !bindingsStepReady) ||
-                    (step === 3 &&
-                      audienceType === "SPECIFIC" &&
-                      selectedContacts.length === 0) ||
-                    (step === 3 && audienceType === "SEGMENT")
-                  }
-                >
-                  Next
-                </button>
-              )}
-              {step === 4 && (
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={createCampaign}
-                  disabled={loading}
-                >
-                  Create
-                </button>
-              )}
-            </div>
-          </div>
-        </dialog>
-      )}
     </div>
   );
 }

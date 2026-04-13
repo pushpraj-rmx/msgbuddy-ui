@@ -107,7 +107,10 @@ export function AppLayout({
                 <GlobalRightPanel />
               </div>
             </main>
-            <AppDock platformRole={me.platformRole ?? "NONE"} />
+            <AppDock
+              platformRole={me.platformRole ?? "NONE"}
+              workspaceRole={String(me.role)}
+            />
           </div>
           <div className="drawer-side z-30">
             <label

@@ -33,6 +33,7 @@ export default async function ChannelTemplatePage({
       </div>
 
       <ChannelTemplateDetailClient
+        key={me.workspace.id}
         channelTemplateId={id}
         workspaceId={me.workspace.id}
       />

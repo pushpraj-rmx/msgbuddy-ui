@@ -6,9 +6,22 @@ import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import type { Member } from "@/components/settings/SettingsClient";
 import { TeamClient } from "@/components/settings/TeamClient";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 export default async function SettingsTeamPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
+
+  if (!roleHasWorkspacePermission(me.role, "members.view")) {
+    return (
+      <PageContainer>
+        <PageHeader title="Team" description="Workspace members and roles." />
+        <div role="alert" className="alert alert-warning">
+          <span>You don’t have permission to view the team directory.</span>
+        </div>
+      </PageContainer>
+    );
+  }
+
   const members = await serverFetch<Member[]>(
     endpoints.workspaces.members(me.workspace.id)
   );
@@ -26,6 +39,7 @@ export default async function SettingsTeamPage() {
       ) : null}
 
       <TeamClient
+        key={me.workspace.id}
         workspaceId={me.workspace.id}
         initialMembers={members}
         meRole={me.role}
@@ -34,4 +48,3 @@ export default async function SettingsTeamPage() {
     </PageContainer>
   );
 }
-

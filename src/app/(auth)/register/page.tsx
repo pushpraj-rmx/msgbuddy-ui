@@ -44,7 +44,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [workspace, setWorkspace] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeToLegal, setAgreeToLegal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verificationSentTo, setVerificationSentTo] = useState<string | null>(
@@ -76,8 +76,12 @@ export default function RegisterPage() {
       setError("Please agree to the Terms of Service and Privacy Policy to continue.");
       return;
     }
+    if (password !== confirmPassword) {
+      setError("Passwords do not match. Please check and try again.");
+      return;
+    }
     startTransition(async () => {
-      const result = await registerAction(email, password, workspace);
+      const result = await registerAction(email, password);
       if (!result.success) {
         setError(result.error || "Registration failed. Please try again.");
       } else {
@@ -97,7 +101,8 @@ export default function RegisterPage() {
               </div>
               <h1 className="text-xl font-medium">Create account</h1>
               <p className="text-sm text-base-content/70">
-                Set up your workspace and start collaborating.
+                We&apos;ll create your workspace automatically — you can rename it
+                anytime in settings.
               </p>
             </div>
 
@@ -152,28 +157,34 @@ export default function RegisterPage() {
                 <label className="text-sm text-base-content/70">Password</label>
                 <input
                   type="password"
+                  name="password"
+                  autoComplete="new-password"
                   placeholder="Enter a secure password"
                   className="input input-bordered w-full"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm text-base-content/70">
-                  Workspace name
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Product team"
-                  className="input input-bordered w-full"
-                  value={workspace}
-                  onChange={(e) => setWorkspace(e.target.value)}
+                  minLength={6}
                   required
                 />
                 <p className="text-xs text-base-content/60">
-                  This helps organize projects and members.
+                  At least 6 characters.
                 </p>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm text-base-content/70">
+                  Confirm password
+                </label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  autoComplete="new-password"
+                  placeholder="Re-enter your password"
+                  className="input input-bordered w-full"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  minLength={6}
+                  required
+                />
               </div>
 
               <label className="flex cursor-pointer items-start gap-3 rounded-box bg-base-100 px-4 py-3">

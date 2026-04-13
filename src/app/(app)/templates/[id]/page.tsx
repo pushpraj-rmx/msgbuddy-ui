@@ -25,6 +25,7 @@ export default async function TemplateDetailPage({
         </p>
       </div>
       <TemplateDetailClient
+        key={me.workspace.id}
         templateId={id}
         userRole={me.role}
         workspaceId={me.workspace.id}
