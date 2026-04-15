@@ -2,21 +2,25 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ShieldCheck, Building2, Users, MessageCircle } from "lucide-react";
 import {
+  type WhatsAppConnectionSummary,
   type WorkspaceCloudApiConfigResponse,
   type WorkspaceSettingsPayload,
   type UpdateWorkspaceDto,
   workspaceApi,
 } from "@/lib/api";
-import { IntegrationCard } from "@/components/integrations/IntegrationCard";
 import { AccountSecurityClient } from "@/components/settings/AccountSecurityClient";
+import { TeamClient } from "@/components/settings/TeamClient";
 import type { LoginHistoryEvent } from "@/lib/api";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
+import { canDeleteWorkspace } from "@/lib/workspace-access";
 
 export type Workspace = {
   id: string;
   name: string;
   slug?: string;
+  businessId?: string;
   description?: string;
   logoUrl?: string;
   website?: string;
@@ -53,7 +57,9 @@ export function SettingsClient({
   settings,
   members,
   cloudApiConfig,
+  whatsappConnection,
   meRole,
+  meUserId,
   accountEmail,
   accountName,
   accountAvatarUrl,
@@ -64,7 +70,9 @@ export function SettingsClient({
   settings: WorkspaceSettings;
   members: Member[];
   cloudApiConfig: WorkspaceCloudApiConfigResponse | null;
+  whatsappConnection: WhatsAppConnectionSummary | null;
   meRole: string;
+  meUserId?: string;
   accountEmail: string;
   accountName?: string;
   accountAvatarUrl?: string | null;
@@ -73,7 +81,8 @@ export function SettingsClient({
 }) {
   const router = useRouter();
   const canManageWorkspace = roleHasWorkspacePermission(meRole, "settings.manage");
-  const canDeleteWorkspace = meRole === "OWNER";
+  const canViewMembers = roleHasWorkspacePermission(meRole, "members.view");
+  const canDeleteWorkspaceAction = canDeleteWorkspace(meRole);
 
   const initialForm = useMemo(
     () => ({
@@ -141,7 +150,7 @@ export function SettingsClient({
   };
 
   const onDeleteWorkspace = async () => {
-    if (!canDeleteWorkspace) return;
+    if (!canDeleteWorkspaceAction) return;
     const ok = window.confirm(
       "Delete this workspace? This is a soft-delete, but it will immediately block access."
     );
@@ -158,96 +167,157 @@ export function SettingsClient({
   };
 
   return (
-    <section className="mx-auto w-full max-w-4xl space-y-8">
-      <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-          Your account
-        </p>
-        <AccountSecurityClient
-          accountEmail={accountEmail}
-          accountName={accountName}
-          accountAvatarUrl={accountAvatarUrl}
-          hasPassword={hasPassword}
-          memberCount={members.length}
-          loginHistory={loginHistory}
-          meRole={meRole}
-        />
-      </div>
+    <section className="mx-auto w-full max-w-6xl">
+      <div className="space-y-6">
+          <header className="space-y-1">
+            <h1 className="text-3xl font-bold tracking-tight text-base-content">Workspace Settings</h1>
+            <p className="text-base text-base-content/65">
+              Configure your account, workspace, and integrations.
+            </p>
+          </header>
 
-      <div className="space-y-3">
-        <p className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-          Workspace
-        </p>
-        {canManageWorkspace ? (
-          <div className="space-y-4 rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-medium">Workspace info</h2>
-                <p className="mt-0.5 text-sm text-base-content/70">
-                  {members.length} member{members.length === 1 ? "" : "s"}
-                </p>
+          <section id="account-security" className="space-y-3">
+            <div className="flex items-center gap-2 text-base-content">
+              <ShieldCheck className="h-5 w-5 text-success" />
+              <h2 className="text-2xl font-semibold tracking-tight">Account &amp; Security</h2>
+            </div>
+            <AccountSecurityClient
+              accountEmail={accountEmail}
+              accountName={accountName}
+              accountAvatarUrl={accountAvatarUrl}
+              hasPassword={hasPassword}
+              loginHistory={loginHistory}
+            />
+          </section>
+
+          <section id="workspace-info" className="space-y-3">
+            <div className="flex items-center gap-2 text-base-content">
+              <Building2 className="h-5 w-5 text-success" />
+              <h2 className="text-2xl font-semibold tracking-tight">Workspace Info</h2>
+            </div>
+            {canManageWorkspace ? (
+              <div className="space-y-4 rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <InfoRow label="Workspace name" value={workspace.name} />
+                  <InfoRow label="Workspace slug" value={workspace.slug} />
+                  <InfoRow label="Workspace description" value={workspace.description} fullWidth />
+                  <InfoRow label="Timezone" value={settings.timezone || workspace.timezone} />
+                  <InfoRow label="Locale" value={settings.locale || workspace.locale} />
+                  <InfoRow label="Status" value={workspace.status || "Active subscription"} />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-4">
+                  <p className="text-sm text-base-content/70">
+                    Personal workspace • {members.length} member{members.length === 1 ? "" : "s"}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm px-5"
+                      onClick={openEdit}
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center justify-end gap-2">
+            ) : (
+              <div className="rounded-2xl border border-base-300 bg-base-100 p-4 text-sm text-base-content/80">
+                You do not have permission to change workspace settings.
+              </div>
+            )}
+          </section>
+
+          {canViewMembers ? (
+            <section id="team-members" className="space-y-3">
+              <div className="flex items-center gap-2 text-base-content">
+                <Users className="h-5 w-5 text-success" />
+                <h2 className="text-2xl font-semibold tracking-tight">Team Members</h2>
+              </div>
+              <TeamClient
+                workspaceId={workspace.id}
+                initialMembers={members}
+                meRole={meRole}
+                meUserId={meUserId}
+              />
+            </section>
+          ) : null}
+
+          <section id="whatsapp-integration" className="space-y-3">
+            <div className="flex items-center gap-2 text-base-content">
+              <MessageCircle className="h-5 w-5 text-success" />
+              <h2 className="text-2xl font-semibold tracking-tight">WhatsApp Integration</h2>
+            </div>
+            <div className="rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">WhatsApp Business Cloud API</h3>
+                    <span
+                      className={`badge badge-sm ${
+                        isWhatsAppConnected(cloudApiConfig)
+                          ? "badge-success badge-soft"
+                          : "badge-ghost"
+                      }`}
+                    >
+                      {isWhatsAppConnected(cloudApiConfig) ? "Connected" : "Disconnected"}
+                    </span>
+                  </div>
+                  <p className="text-sm text-base-content/65">
+                    Instance synced. Manage conversations and automation from dashboard.
+                  </p>
+                </div>
+                {canManageWorkspace ? (
+                  <a
+                    href="/settings/integrations/whatsapp"
+                    className="btn btn-sm btn-ghost border border-base-300/80"
+                  >
+                    Configure Webhooks
+                  </a>
+                ) : null}
+              </div>
+              <div className="mt-4 grid rounded-xl border border-base-300 sm:grid-cols-3">
+                <StatCell
+                  label="Number"
+                  value={
+                    whatsappConnection?.displayPhoneNumber ||
+                    whatsappConnection?.phoneNumberId ||
+                    cloudApiConfig?.phoneNumberId ||
+                    workspace.phone ||
+                    "—"
+                  }
+                />
+                <StatCell
+                  label="WABA ID"
+                  value={whatsappConnection?.wabaId || cloudApiConfig?.wabaId || "—"}
+                />
+                <StatCell
+                  label="Business ID"
+                  value={whatsappConnection?.businessId || workspace.businessId || "—"}
+                />
+              </div>
+            </div>
+          </section>
+
+          {canDeleteWorkspaceAction ? (
+            <section className="rounded-2xl border border-error/30 bg-base-100 p-4 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-error">Archive Workspace</h3>
+                  <p className="text-sm text-base-content/70">
+                    Pauses all integrations and automation. Reactivate anytime.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline"
-                  onClick={openEdit}
-                >
-                  Edit
-                </button>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-box border border-base-300">
-              <InfoRow label="Name" value={workspace.name} />
-              <InfoRow label="Slug" value={workspace.slug} />
-              <InfoRow label="Description" value={workspace.description} />
-              <InfoRow label="Status" value={workspace.status} />
-              <InfoRow
-                label="Timezone"
-                value={settings.timezone || workspace.timezone}
-              />
-              <InfoRow label="Locale" value={settings.locale || workspace.locale} />
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-base-content/80">
-                WhatsApp
-              </h3>
-              <IntegrationCard
-                name="WhatsApp"
-                description="Connect and monitor your WhatsApp Business phone number."
-                status={
-                  isWhatsAppConnected(cloudApiConfig)
-                    ? "connected"
-                    : "disconnected"
-                }
-                actionLabel={
-                  isWhatsAppConnected(cloudApiConfig) ? "Manage" : "Connect"
-                }
-                href="/settings/integrations/whatsapp"
-              />
-            </div>
-
-            {canDeleteWorkspace ? (
-              <div className="border-t border-base-300 pt-4">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-error btn-outline"
+                  className="btn btn-sm btn-outline btn-error"
                   onClick={onDeleteWorkspace}
                   disabled={dangerBusy}
                 >
-                  {dangerBusy ? "Deleting..." : "Delete workspace"}
+                  {dangerBusy ? "Archiving..." : "Archive Workspace"}
                 </button>
               </div>
-            ) : null}
-          </div>
-        ) : (
-          <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/80">
-            You don’t have permission to change workspace settings or integrations. Ask
-            an owner or admin if you need updates.
-          </div>
-        )}
+            </section>
+          ) : null}
       </div>
 
       <dialog id="edit_workspace_modal" className="modal">
@@ -484,14 +554,33 @@ export function SettingsClient({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value?: string }) {
+function InfoRow({
+  label,
+  value,
+  fullWidth = false,
+}: {
+  label: string;
+  value?: string;
+  fullWidth?: boolean;
+}) {
   const display = value?.trim();
   return (
-    <div className="flex flex-col gap-0.5 border-b border-base-300 px-4 py-3 last:border-b-0 sm:flex-row sm:items-baseline sm:justify-between sm:gap-6">
-      <div className="shrink-0 text-xs text-base-content/60 sm:w-36">{label}</div>
-      <div className="min-w-0 break-words text-sm font-medium text-base-content">
+    <div className={`rounded-xl border border-base-300 bg-base-200/30 px-3 py-2.5 ${fullWidth ? "sm:col-span-2" : ""}`}>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-base-content/50">{label}</div>
+      <div className="mt-1 min-w-0 break-words text-sm font-medium text-base-content">
         {display ? display : "—"}
       </div>
+    </div>
+  );
+}
+
+function StatCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-b border-base-300 p-3 text-center last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-medium text-base-content">{value}</div>
     </div>
   );
 }

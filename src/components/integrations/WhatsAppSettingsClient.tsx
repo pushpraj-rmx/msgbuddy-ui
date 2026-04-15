@@ -226,7 +226,7 @@ export function WhatsAppSettingsClient({
           </div>
           <Link
             className="btn btn-outline btn-sm"
-            href="/settings/integrations/whatsapp/import-templates"
+            href="/settings/integrations/whatsapp/import-templates?returnTo=%2Fsettings%2Fintegrations%2Fwhatsapp"
           >
             Import from Meta
           </Link>

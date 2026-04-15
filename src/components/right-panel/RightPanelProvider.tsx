@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
+import { LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 
 const DETAILS_PANE_OPEN_KEY = "global-details-pane-open";
 
@@ -58,13 +58,13 @@ export function RightPanelProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const xl = window.matchMedia(XL_MEDIA_QUERY).matches;
-    setIsOpen(xl && readStoredPaneOpen());
+    const lg = window.matchMedia(LG_MEDIA_QUERY).matches;
+    setIsOpen(lg && readStoredPaneOpen());
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const mq = window.matchMedia(XL_MEDIA_QUERY);
+    const mq = window.matchMedia(LG_MEDIA_QUERY);
     const onChange = () => {
       if (!mq.matches) {
         setIsOpen(false);

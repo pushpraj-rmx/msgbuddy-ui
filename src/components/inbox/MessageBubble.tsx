@@ -12,6 +12,7 @@ import {
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getWhatsappDeliveryHint } from "@/lib/whatsappDeliveryErrors";
 import { MessageActionBar } from "@/components/inbox/MessageActionBar";
+import { MediaLightbox } from "@/components/ui/MediaLightbox";
 
 function formatFileSizeForDocument(bytes: number | null | undefined): string | null {
   if (bytes == null || typeof bytes !== "number" || bytes < 0 || !Number.isFinite(bytes)) {
@@ -154,6 +155,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
 
   const [imgBroken, setImgBroken] = useState(false);
   const [videoBroken, setVideoBroken] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const resolvedMediaUrl = useMemo(
     () => resolveMediaUrlForUi(message.mediaUrl ?? undefined),
@@ -174,31 +176,56 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
         );
       }
       if (resolvedMediaUrl && !videoBroken) {
+        const mimeType = message.mediaMimeType?.trim() || "video/mp4";
         return (
-          <div className="flex flex-col gap-2">
-            {isAnimatedGif ? (
-              <video
-                src={resolvedMediaUrl}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className={`max-h-64 max-w-full object-contain ${imgFrame}`}
-                onError={() => setVideoBroken(true)}
-              />
-            ) : (
-              <video
-                src={resolvedMediaUrl}
-                controls
-                playsInline
-                className={`max-h-64 max-w-full object-contain ${imgFrame}`}
-                onError={() => setVideoBroken(true)}
+          <>
+            <div className="flex flex-col gap-2">
+              {isAnimatedGif ? (
+                <video
+                  src={resolvedMediaUrl}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className={`max-h-64 max-w-full object-contain ${imgFrame}`}
+                  onError={() => setVideoBroken(true)}
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={`relative max-h-64 max-w-full overflow-hidden ${imgFrame}`}
+                  onClick={() => setLightboxOpen(true)}
+                  aria-label="Play video"
+                >
+                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                  <video
+                    src={resolvedMediaUrl}
+                    muted
+                    playsInline
+                    className="max-h-64 max-w-full object-contain"
+                    onError={() => setVideoBroken(true)}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white">
+                      <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 translate-x-0.5">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    </div>
+                  </div>
+                </button>
+              )}
+              {message.text?.trim() ? (
+                <p className="whitespace-pre-wrap">{message.text}</p>
+              ) : null}
+            </div>
+            {!isAnimatedGif && (
+              <MediaLightbox
+                open={lightboxOpen}
+                slides={[{ type: "video", sources: [{ src: resolvedMediaUrl, type: mimeType }] }]}
+                onClose={() => setLightboxOpen(false)}
               />
             )}
-            {message.text?.trim() ? (
-              <p className="whitespace-pre-wrap">{message.text}</p>
-            ) : null}
-          </div>
+          </>
         );
       }
       if (resolvedMediaUrl && videoBroken) {
@@ -361,18 +388,26 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
       }
       if (resolvedMediaUrl && !imgBroken) {
         return (
-          <div className="flex flex-col gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={resolvedMediaUrl}
-              alt=""
-              className={`max-h-64 max-w-full object-contain ${imgFrame}`}
-              onError={() => setImgBroken(true)}
+          <>
+            <div className="flex flex-col gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={resolvedMediaUrl}
+                alt=""
+                className={`max-h-64 max-w-full cursor-zoom-in object-contain ${imgFrame}`}
+                onClick={() => setLightboxOpen(true)}
+                onError={() => setImgBroken(true)}
+              />
+              {message.text?.trim() ? (
+                <p className="whitespace-pre-wrap">{message.text}</p>
+              ) : null}
+            </div>
+            <MediaLightbox
+              open={lightboxOpen}
+              slides={[{ type: "image", src: resolvedMediaUrl }]}
+              onClose={() => setLightboxOpen(false)}
             />
-            {message.text?.trim() ? (
-              <p className="whitespace-pre-wrap">{message.text}</p>
-            ) : null}
-          </div>
+          </>
         );
       }
       if (resolvedMediaUrl && imgBroken) {
@@ -456,7 +491,8 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
             position: "absolute",
             top: 0,
             transform: "translateY(-110%)",
-            ...(message.direction === "OUTBOUND" ? { left: 8 } : { right: 8 }),
+            /* Full-width row: outbound bubble is on the right → anchor bar to the right; inbound on the left. */
+            ...(message.direction === "OUTBOUND" ? { right: 8 } : { left: 8 }),
             zIndex: 20,
             opacity: hovered ? 1 : 0,
             pointerEvents: hovered ? "auto" : "none",

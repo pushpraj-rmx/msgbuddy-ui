@@ -264,6 +264,41 @@ export function showDrainQueue(status: string): boolean {
   );
 }
 
+export type CampaignRunSummary = {
+  totalJobs?: number;
+  completedJobs?: number;
+  failedJobs?: number;
+  skippedJobs?: number;
+  successRate?: number;
+};
+
+/** Compact one-line summary for campaign list rows and dashboard cards. */
+export function campaignRunSummaryLine(
+  tone: CampaignStatusTone,
+  run: CampaignRunSummary | undefined,
+): string | null {
+  if (!run || run.totalJobs == null || run.totalJobs <= 0) return null;
+  const total = run.totalJobs.toLocaleString();
+  const done = (run.completedJobs ?? 0).toLocaleString();
+  const pct =
+    run.successRate != null
+      ? ` · ${Math.round(run.successRate)}%`
+      : run.totalJobs > 0 && run.completedJobs != null
+        ? ` · ${Math.min(100, Math.round((run.completedJobs / run.totalJobs) * 100))}%`
+        : "";
+
+  if (tone === "danger") {
+    const failed = run.failedJobs ?? 0;
+    return failed > 0
+      ? `${failed.toLocaleString()} failed of ${total}`
+      : `${done} / ${total}${pct}`;
+  }
+  if (tone === "success" || tone === "running") {
+    return `${done} / ${total} sent${pct}`;
+  }
+  return null;
+}
+
 export type ReportMetrics = {
   totalJobs?: number;
   completed?: number;

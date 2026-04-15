@@ -8,13 +8,24 @@ import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { WhatsAppMetaTemplateImportClient } from "@/components/integrations/WhatsAppMetaTemplateImportClient";
 
-export default async function WhatsAppImportTemplatesPage() {
+export default async function WhatsAppImportTemplatesPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ returnTo?: string }>;
+}) {
   let me: MeResponse;
   try {
     me = await serverFetch<MeResponse>(endpoints.auth.me);
   } catch {
     notFound();
   }
+
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const returnToParam = resolvedSearchParams?.returnTo;
+  const backHref =
+    typeof returnToParam === "string" && returnToParam.startsWith("/")
+      ? returnToParam
+      : "/templates";
 
   return (
     <PageContainer>
@@ -23,7 +34,7 @@ export default async function WhatsAppImportTemplatesPage() {
           title="Import templates from Meta"
           description="Pull existing WhatsApp templates from your connected WABA into MsgBuddy."
         />
-        <Link href="/settings/integrations/whatsapp" className="btn btn-ghost btn-sm">
+        <Link href={backHref} className="btn btn-ghost btn-sm">
           Back
         </Link>
       </div>

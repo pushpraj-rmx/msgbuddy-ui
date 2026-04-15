@@ -47,7 +47,7 @@ export function Sidebar({
                   <Link
                     href={href}
                     onClick={() => closeDrawer(drawerId)}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${isParentActive ? ACTIVE_CLASS : INACTIVE_CLASS
+                    className={`flex items-center gap-3 rounded-box px-3 py-2 text-sm transition-colors ${isParentActive ? ACTIVE_CLASS : INACTIVE_CLASS
                       }`}
                   >
                     <Icon className="h-4.5 w-4.5 shrink-0" />
@@ -72,7 +72,7 @@ export function Sidebar({
                       [href]: !(prev[href] ?? defaultOpen),
                     }))
                   }
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${isParentActive && !isAnyChildActive ? ACTIVE_CLASS : INACTIVE_CLASS
+                  className={`flex w-full items-center gap-3 rounded-box px-3 py-2 text-sm transition-colors ${isParentActive && !isAnyChildActive ? ACTIVE_CLASS : INACTIVE_CLASS
                     }`}
                 >
                   <Icon className="h-4.5 w-4.5 shrink-0" />
@@ -97,7 +97,7 @@ export function Sidebar({
                           <Link
                             href={child.href}
                             onClick={() => closeDrawer(drawerId)}
-                            className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm transition-colors ${childActive ? ACTIVE_CLASS : INACTIVE_CLASS
+                            className={`flex items-center gap-2.5 rounded-box px-2.5 py-1.5 text-sm transition-colors ${childActive ? ACTIVE_CLASS : INACTIVE_CLASS
                               }`}
                           >
                             <child.Icon className="h-4 w-4 shrink-0" />

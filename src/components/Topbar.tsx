@@ -3,12 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import CloseRounded from "@mui/icons-material/CloseRounded";
-import MenuRounded from "@mui/icons-material/MenuRounded";
-import NotificationsRounded from "@mui/icons-material/NotificationsRounded";
-import SearchRounded from "@mui/icons-material/SearchRounded";
-import ViewSidebarRounded from "@mui/icons-material/ViewSidebarRounded";
-import ArticleRounded from "@mui/icons-material/ArticleRounded";
+import { X, Menu, Bell, Search, PanelRight, FileText } from "lucide-react";
 import type { MeResponse } from "@/lib/api";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { logoutAction } from "@/app/actions/auth";
@@ -115,7 +110,7 @@ export function Topbar({
           className="btn btn-ghost btn-square drawer-button lg:hidden"
           aria-label="open menu"
         >
-          <MenuRounded className="h-6 w-6" />
+          <Menu className="h-6 w-6" />
         </label>
         <button
           type="button"
@@ -126,9 +121,9 @@ export function Topbar({
           onClick={onDesktopSidebarToggle}
         >
           {isDesktopSidebarOpen ? (
-            <ViewSidebarRounded className="h-5 w-5" />
+            <PanelRight className="h-5 w-5" />
           ) : (
-            <MenuRounded className="h-5 w-5" />
+            <Menu className="h-5 w-5" />
           )}
         </button>
         <Link
@@ -162,13 +157,13 @@ export function Topbar({
           aria-label="Open global search"
           onClick={() => setMobileSearchOpen(true)}
         >
-          <SearchRounded className="h-5 w-5" />
+          <Search className="h-5 w-5" />
         </button>
         <ThemeToggle />
-        {isRightPanelOpen || rightPanel?.content ? (
+        {rightPanel?.content ? (
           <button
             type="button"
-            className="btn btn-ghost btn-square hidden xl:inline-flex"
+            className="btn btn-ghost btn-square hidden lg:inline-flex"
             aria-label={isRightPanelOpen ? "Close details" : "Open details"}
             title={
               isRightPanelOpen
@@ -179,7 +174,7 @@ export function Topbar({
               isRightPanelOpen ? closeRightPanel() : openRightPanel()
             }
           >
-            <ArticleRounded className="h-5 w-5" />
+            <FileText className="h-5 w-5" />
           </button>
         ) : null}
         <div className="dropdown dropdown-end">
@@ -189,7 +184,7 @@ export function Topbar({
             className="btn btn-ghost btn-square relative"
             aria-label="Notifications"
           >
-            <NotificationsRounded className="h-5 w-5" />
+            <Bell className="h-5 w-5" />
             {unreadCount > 0 ? (
               <span className="badge badge-primary badge-sm absolute -right-1 -top-1 min-w-5">
                 {unreadCount > 99 ? "99+" : unreadCount}
@@ -218,7 +213,7 @@ export function Topbar({
                   className="flex w-full items-center gap-2 rounded-box border border-base-300 bg-base-200 px-3 py-2 text-left text-xs transition-colors hover:bg-base-300"
                   onClick={requestAndSubscribe}
                 >
-                  <NotificationsRounded className="h-4 w-4 shrink-0 text-primary" />
+                  <Bell className="h-4 w-4 shrink-0 text-primary" />
                   <span>
                     <span className="font-medium">Enable push notifications</span>
                     <span className="block text-base-content/60">
@@ -337,7 +332,7 @@ export function Topbar({
                 aria-label="Close search"
                 onClick={() => setMobileSearchOpen(false)}
               >
-                <CloseRounded className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
             <GlobalSearch variant="mobile" />

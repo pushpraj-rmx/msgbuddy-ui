@@ -3,6 +3,7 @@ import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import { ReloadButton } from "@/components/ui/ReloadButton";
+import { unstable_rethrow } from "next/navigation";
 
 export default async function AppGroupLayout({
   children,
@@ -13,6 +14,7 @@ export default async function AppGroupLayout({
   try {
     me = await serverFetch<MeResponse>(endpoints.auth.me);
   } catch (err: unknown) {
+    unstable_rethrow(err);
     const message =
       err instanceof Error ? err.message : "Failed to load current user.";
     return (

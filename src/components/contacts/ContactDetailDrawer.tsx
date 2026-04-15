@@ -69,12 +69,16 @@ export function ContactDetailPanelContent({
   initialContact,
   onEdit,
   onDeleted,
+  canEdit = true,
+  canDelete = true,
 }: {
   contactId: string;
   initialContact?: Contact | null;
   onEdit: (contact: Contact) => void;
   /** Called after a successful soft-delete so the parent can close the panel. */
   onDeleted?: () => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -135,24 +139,28 @@ export function ContactDetailPanelContent({
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-lg font-semibold">{contact.name || "Unnamed"}</h2>
             <div className="flex flex-wrap items-center justify-end gap-2">
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => onEdit(contact)}
-              >
-                Edit contact
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm text-error"
-                onClick={() => {
-                  setDeleteError(null);
-                  setDeleteConfirm(true);
-                }}
-                disabled={deleteMutation.isPending}
-              >
-                Delete
-              </button>
+              {canEdit ? (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  onClick={() => onEdit(contact)}
+                >
+                  Edit contact
+                </button>
+              ) : null}
+              {canDelete ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm text-error"
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteConfirm(true);
+                  }}
+                  disabled={deleteMutation.isPending}
+                >
+                  Delete
+                </button>
+              ) : null}
             </div>
           </div>
           {deleteError ? (
@@ -228,7 +236,7 @@ export function ContactDetailPanelContent({
         </div>
       </div>
 
-      {deleteConfirm ? (
+      {canDelete && deleteConfirm ? (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
             <h3 className="text-lg font-semibold">Delete contact</h3>

@@ -10,11 +10,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import AccountCircleRounded from "@mui/icons-material/AccountCircleRounded";
-import ArrowBackRounded from "@mui/icons-material/ArrowBackRounded";
-import { AddCircle } from "@mui/icons-material";
-import TuneRounded from "@mui/icons-material/TuneRounded";
-import MoreVert from "@mui/icons-material/MoreVert";
+import { CircleUser, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical } from "lucide-react";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -26,7 +22,6 @@ import {
   channelTemplatesApi,
   workspaceApi,
   tagsApi,
-  type ConversationNote,
   type WorkspaceMemberResponseDto,
   type ConversationSendPolicyDto,
   type WhatsAppOutboundMediaType,
@@ -34,7 +29,6 @@ import {
 import type { Tag } from "@/lib/types";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { MessageBubble } from "@/components/inbox/MessageBubble";
-import { InternalMessagesPanel } from "@/components/inbox/InternalMessagesPanel";
 import { InternalNotesPanel } from "@/components/inbox/InternalNotesPanel";
 import { DateSeparator, formatDateLabel, getDateKey } from "@/components/inbox/DateSeparator";
 import { MediaGallery } from "@/components/inbox/MediaGallery";
@@ -51,6 +45,7 @@ import {
 } from "@/lib/whatsappTemplateMedia";
 import { extractApiErrorMessage } from "@/lib/messageApiErrors";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 import {
   isContactBulkUpdated,
   isContactUpdated,
@@ -61,7 +56,7 @@ import {
   isMessageStatusUpdated,
   parseWorkspaceSseEvent,
 } from "@/lib/sseEvents";
-import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
+import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
@@ -90,6 +85,12 @@ export type Conversation = {
     email?: string;
     avatarUrl?: string | null;
   };
+  mode?: "solo" | "collaborative" | "queue";
+  assignedUser?: {
+    id?: string;
+    name?: string | null;
+    email?: string;
+  } | null;
 };
 
 function lastMessagePreview(lastMessage?: Conversation["lastMessage"]): string {
@@ -193,20 +194,33 @@ export function InboxClient({
   initialConversations,
   workspaceId,
   currentUserId,
+  meRole = "",
   mode = "inbox",
 }: {
   initialConversations: Conversation[];
   workspaceId: string;
   currentUserId: string;
+  meRole?: string;
   mode?: "inbox" | "contactsQueue";
 }) {
   const draftsStorageKey = `inbox-drafts:${workspaceId}:${currentUserId}:${mode}`;
+  const canSendMessages = roleHasWorkspacePermission(meRole, "messages.send");
+  const canManageConversations = roleHasWorkspacePermission(meRole, "conversations.assign");
+  const canClaimConversation = roleHasWorkspacePermission(meRole, "conversations.claim");
+  const canReleaseConversation = roleHasWorkspacePermission(meRole, "conversations.release");
   const {
     setContent: setRightPanelContent,
     clearContent: clearRightPanelContent,
     open: openRightPanel,
   } = useRightPanel();
   const [status, setStatus] = useState<Conversation["status"]>("OPEN");
+  const [sidebarView, setSidebarView] = useState<"conversations" | "starred" | "scheduled">("conversations");
+  const [starredMessages, setStarredMessages] = useState<InboxMessage[]>([]);
+  const [starredCursor, setStarredCursor] = useState<string | null>(null);
+  const [starredLoading, setStarredLoading] = useState(false);
+  const [scheduledMessages, setScheduledMessages] = useState<InboxMessage[]>([]);
+  const [scheduledCursor, setScheduledCursor] = useState<string | null>(null);
+  const [scheduledLoading, setScheduledLoading] = useState(false);
   const [queueFilter, setQueueFilter] = useState<
     "all" | "awaiting" | "unread" | "snoozed"
   >("all");
@@ -223,9 +237,12 @@ export function InboxClient({
   const [cursor, setCursor] = useState<string | null>(
     initialConversations.length ? initialConversations.at(-1)?.id ?? null : null
   );
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialConversations[0]?.id ?? null
-  );
+  const searchParams = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    const urlConversationId = searchParams.get("conversationId");
+    if (urlConversationId) return urlConversationId;
+    return initialConversations[0]?.id ?? null;
+  });
 
   const [messages, setMessages] = useState<InboxMessage[]>([]);
   const [messageLoading, setMessageLoading] = useState(false);
@@ -304,11 +321,6 @@ export function InboxClient({
     string | null
   >(null);
   const [conversationActionBusy, setConversationActionBusy] = useState(false);
-  const [conversationNotes, setConversationNotes] = useState<ConversationNote[]>(
-    []
-  );
-  const [notesLoading, setNotesLoading] = useState(false);
-  const [noteDraft, setNoteDraft] = useState("");
   const [members, setMembers] = useState<WorkspaceMemberResponseDto[]>([]);
   const [assigneeUserId, setAssigneeUserId] = useState("");
   const [messageSearchQuery, setMessageSearchQuery] = useState("");
@@ -331,9 +343,8 @@ export function InboxClient({
       : readInboxDraftsFromStorage(draftsStorageKey)
   );
 
-  const searchParams = useSearchParams();
-  const isLgUp = useMediaQuery("(min-width: 1024px)");
-  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
+  //  const isLgUp = useMediaQuery("(min-width: 1024px)");
+  const isLgUp = useMediaQuery(LG_MEDIA_QUERY);
   const [mobilePane, setMobilePane] = useState<"list" | "thread">("list");
   const handledHandoffKeyRef = useRef<string | null>(null);
   const preserveStartContactSelectionRef = useRef(false);
@@ -357,8 +368,56 @@ export function InboxClient({
     () => conversations.find((c) => c.id === selectedId) ?? null,
     [conversations, selectedId]
   );
-  const selectedViewers = selectedId ? viewersByConversation[selectedId] ?? [] : [];
-  const otherViewers = selectedViewers.filter((id) => id !== currentUserId);
+  const selectedViewers = useMemo(
+    () => (selectedId ? viewersByConversation[selectedId] ?? [] : []),
+    [selectedId, viewersByConversation]
+  );
+  const resolveUserLabel = useCallback(
+    (userId: string | null | undefined) => {
+      if (!userId) return null;
+      if (userId === currentUserId) return "You";
+      const member = members.find((m) => m.user?.id === userId);
+      return member?.user?.name || member?.user?.email || userId;
+    },
+    [members, currentUserId]
+  );
+  const otherViewers = useMemo(
+    () =>
+      selectedViewers
+        .filter((id) => id !== currentUserId)
+        .map((id) => resolveUserLabel(id) || id),
+    [selectedViewers, currentUserId, resolveUserLabel]
+  );
+
+  const isAgentRole = !canManageConversations && canSendMessages;
+
+  const canSendInThisConversation = useMemo(() => {
+    if (!canSendMessages) return false;
+    if (!selectedConversation) return true;
+    if (canManageConversations) return true;
+    const convMode = selectedConversation.mode ?? "solo";
+    if (convMode === "collaborative" || convMode === "queue") return true;
+    const assignedTo = selectedConversation.assignedUserId;
+    return !assignedTo || assignedTo === currentUserId;
+  }, [canSendMessages, canManageConversations, selectedConversation, currentUserId]);
+
+  const showTakeOverNotice = useMemo(() => {
+    if (!isAgentRole) return false;
+    if (!selectedConversation) return false;
+    const convMode = selectedConversation.mode ?? "solo";
+    if (convMode === "collaborative" || convMode === "queue") return false;
+    const assignedTo = selectedConversation.assignedUserId;
+    return !!assignedTo && assignedTo !== currentUserId;
+  }, [isAgentRole, selectedConversation, currentUserId]);
+
+  const assigneeName = useMemo(() => {
+    if (!selectedConversation?.assignedUserId) return null;
+    const embedded = selectedConversation.assignedUser;
+    if (embedded?.name) return embedded.name;
+    if (embedded?.email) return embedded.email;
+    const member = members.find((m) => m.user?.id === selectedConversation.assignedUserId);
+    return member?.user?.name || member?.user?.email || null;
+  }, [selectedConversation?.assignedUserId, selectedConversation?.assignedUser, members]);
   const activeContactId =
     selectedConversation?.contactId ?? startContact?.id ?? null;
   const activeChannel =
@@ -391,6 +450,9 @@ export function InboxClient({
     }
     return undefined;
   }, [policyLoading, sendPolicy]);
+
+  /** Outside the 24h WhatsApp window — only template sends; UI swaps the composer for template pickers. */
+  const templateOnlyMode = sendPolicy?.templateRequired === true;
 
   /** Reload drafts when storage key changes (e.g. workspace switch). Initial load uses useState lazy init. */
   useEffect(() => {
@@ -918,7 +980,11 @@ export function InboxClient({
       };
       const extraFilters = {
         ...(channelFilter && { channel: channelFilter }),
-        ...(assigneeFilter && { assignedUserId: assigneeFilter }),
+        ...(assigneeFilter === "__unassigned__"
+          ? { unassignedOnly: true }
+          : assigneeFilter
+            ? { assignedUserId: assigneeFilter }
+            : {}),
         ...(tagFilter.length > 0 && { tagIds: tagFilter.join(",") }),
         ...(listSearch.trim() && { search: listSearch.trim() }),
       };
@@ -941,7 +1007,17 @@ export function InboxClient({
           };
 
       const data = (await conversationsApi.list(params)) as Conversation[];
-      setConversations((prev) => (append ? [...prev, ...data] : data));
+      setConversations((prev) => {
+        if (append) return [...prev, ...data];
+        // Preserve the handoff conversation (added by applyHandoff) if it's
+        // currently selected but not present in the fresh page of results.
+        const currentSelectedId = selectedIdRef.current;
+        if (currentSelectedId && !data.some((c) => c.id === currentSelectedId)) {
+          const kept = prev.find((c) => c.id === currentSelectedId);
+          if (kept) return [kept, ...data];
+        }
+        return data;
+      });
       setCursor(data.length ? data.at(-1)?.id ?? null : null);
       if (!append && data.length) {
         setSelectedId((current) => {
@@ -959,6 +1035,46 @@ export function InboxClient({
       setListLoading(false);
     }
   }, [mode, queueFilter, status, channelFilter, assigneeFilter, tagFilter, listSearch]);
+
+  const fetchStarredMessages = useCallback(async (nextCursor?: string | null, append = false) => {
+    setStarredLoading(true);
+    try {
+      const data = await conversationsApi.listStarred(nextCursor ?? undefined, LIMIT);
+      setStarredMessages((prev) => (append ? [...prev, ...data.messages] : data.messages));
+      setStarredCursor(data.nextCursor);
+    } catch {
+      // silent — starred is a secondary view
+    } finally {
+      setStarredLoading(false);
+    }
+  }, []);
+
+  const fetchScheduledMessages = useCallback(async (nextCursor?: string | null, append = false) => {
+    setScheduledLoading(true);
+    try {
+      const data = await conversationsApi.listScheduled(nextCursor ?? undefined, LIMIT);
+      setScheduledMessages((prev) => (append ? [...prev, ...data.messages] : data.messages));
+      setScheduledCursor(data.nextCursor);
+    } catch {
+      // silent
+    } finally {
+      setScheduledLoading(false);
+    }
+  }, []);
+
+  const handleCancelScheduled = useCallback(async (messageId: string) => {
+    try {
+      await conversationsApi.cancelScheduledMessage(messageId);
+      setScheduledMessages((prev) => prev.filter((m) => m.id !== messageId));
+    } catch {
+      // silent
+    }
+  }, []);
+
+  useEffect(() => {
+    if (sidebarView === "starred") void fetchStarredMessages();
+    if (sidebarView === "scheduled") void fetchScheduledMessages();
+  }, [sidebarView, fetchStarredMessages, fetchScheduledMessages]);
 
   const fetchMessages = useCallback(
     async (conversationId: string, options?: { silent?: boolean }) => {
@@ -1008,18 +1124,6 @@ export function InboxClient({
     },
     []
   );
-
-  const loadNotes = useCallback(async (conversationId: string) => {
-    setNotesLoading(true);
-    try {
-      const rows = await conversationsApi.listNotes(conversationId);
-      setConversationNotes(rows ?? []);
-    } catch {
-      setConversationNotes([]);
-    } finally {
-      setNotesLoading(false);
-    }
-  }, []);
 
   const loadPinnedMessages = useCallback(async (conversationId: string) => {
     try {
@@ -1102,6 +1206,7 @@ export function InboxClient({
     const applyHandoff = async () => {
       if (!isLgUp) setMobilePane("thread");
       setStatus("OPEN");
+      setSidebarView("conversations");
       try {
         if (handoffConversationId) {
           const conversation = (await conversationsApi.getById(
@@ -1169,17 +1274,29 @@ export function InboxClient({
       setMessages([]);
       setPinnedMessages([]);
       void fetchMessages(selectedId);
-      void loadNotes(selectedId);
       void loadPinnedMessages(selectedId);
+      // If selectedId is set (e.g. from URL param) but the conversation object
+      // isn’t in the list yet, eagerly fetch and upsert it so the thread panel
+      // renders the header, contact info, and reply box.
+      const alreadyInList = conversations.some((c) => c.id === selectedId);
+      if (!alreadyInList) {
+        void conversationsApi.getById(selectedId).then((conv) => {
+          const conversation = conv as Conversation;
+          setConversations((prev) => {
+            if (prev.some((c) => c.id === conversation.id)) return prev;
+            return [conversation, ...prev];
+          });
+        }).catch(() => { /* conversation may have been deleted */ });
+      }
       window.setTimeout(() => {
         draftInputRef.current?.focus({ preventScroll: true });
       }, 0);
     } else {
       setMessages([]);
-      setConversationNotes([]);
       setPinnedMessages([]);
     }
-  }, [fetchMessages, loadNotes, loadPinnedMessages, selectedId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchMessages, loadPinnedMessages, selectedId]);
 
   useEffect(() => {
     fetchConversations(status, null, false);
@@ -1300,6 +1417,10 @@ export function InboxClient({
 
         if (isConversationUpdated(ev.type)) {
           fetchConversations(status, null, false);
+          const updatedId = typeof ev.data?.conversationId === "string" ? ev.data.conversationId : "";
+          if (updatedId && updatedId === selectedIdRef.current) {
+            void refreshConversationById(updatedId);
+          }
           return;
         }
 
@@ -1517,21 +1638,26 @@ export function InboxClient({
         | "archive"
         | "read"
         | "assign"
-        | "unassign",
-      payload?: { userId?: string }
+        | "unassign"
+        | "claim"
+        | "release",
+      payload?: { userId?: string; conversationId?: string }
     ) => {
-      if (!selectedId || conversationActionBusy) return;
+      const targetId = payload?.conversationId ?? selectedId;
+      if (!targetId || conversationActionBusy) return;
       setConversationActionBusy(true);
       try {
-        if (operation === "open") await conversationsApi.open(selectedId);
-        if (operation === "close") await conversationsApi.close(selectedId);
-        if (operation === "archive") await conversationsApi.archive(selectedId);
-        if (operation === "read") await conversationsApi.read(selectedId);
+        if (operation === "open") await conversationsApi.open(targetId);
+        if (operation === "close") await conversationsApi.close(targetId);
+        if (operation === "archive") await conversationsApi.archive(targetId);
+        if (operation === "read") await conversationsApi.read(targetId);
         if (operation === "assign" && payload?.userId) {
-          await conversationsApi.assign(selectedId, payload.userId);
+          await conversationsApi.assign(targetId, payload.userId);
         }
-        if (operation === "unassign") await conversationsApi.unassign(selectedId);
-        await refreshConversationById(selectedId);
+        if (operation === "unassign") await conversationsApi.unassign(targetId);
+        if (operation === "claim") await conversationsApi.claim(targetId);
+        if (operation === "release") await conversationsApi.release(targetId);
+        await refreshConversationById(targetId);
         await fetchConversations(status, null, false);
       } catch (error: unknown) {
         setMessageError(
@@ -1579,36 +1705,6 @@ export function InboxClient({
     selectedConversation,
     status,
   ]);
-
-  const createConversationNote = useCallback(async () => {
-    if (!selectedId || !noteDraft.trim()) return;
-    setConversationActionBusy(true);
-    try {
-      await conversationsApi.createNote(selectedId, noteDraft.trim());
-      setNoteDraft("");
-      await loadNotes(selectedId);
-    } catch (error: unknown) {
-      setMessageError(extractApiErrorMessage(error) || "Failed to create note.");
-    } finally {
-      setConversationActionBusy(false);
-    }
-  }, [loadNotes, noteDraft, selectedId]);
-
-  const deleteConversationNote = useCallback(
-    async (noteId: string) => {
-      if (!selectedId) return;
-      setConversationActionBusy(true);
-      try {
-        await conversationsApi.deleteNote(selectedId, noteId);
-        await loadNotes(selectedId);
-      } catch (error: unknown) {
-        setMessageError(extractApiErrorMessage(error) || "Failed to delete note.");
-      } finally {
-        setConversationActionBusy(false);
-      }
-    },
-    [loadNotes, selectedId]
-  );
 
   const runMessageSearch = useCallback(async () => {
     if (!selectedId || !messageSearchQuery.trim()) return;
@@ -1803,6 +1899,15 @@ export function InboxClient({
           .getSendPolicy(activeContactId)
           .then(setSendPolicy)
           .catch(() => { });
+      }
+      // Assignment conflict: another agent claimed the conversation between
+      // the user loading this thread and hitting send. Pull fresh state so the
+      // composer immediately reflects the new assignee.
+      const status = (
+        error as { response?: { status?: number } }
+      ).response?.status;
+      if (status === 403 && selectedId) {
+        void refreshConversationById(selectedId);
       }
       setMessageError(
         extractApiErrorMessage(error) || "Failed to send message."
@@ -2111,55 +2216,7 @@ export function InboxClient({
               ) : null}
             </div>
 
-            <div className="rounded-none bg-base-100 p-3 space-y-2">
-              <h3 className="text-sm font-medium">Conversation notes</h3>
-              <div className="flex items-center gap-2">
-                <input
-                  className="input input-bordered input-sm w-full"
-                  placeholder="Add internal note"
-                  value={noteDraft}
-                  onChange={(e) => setNoteDraft(e.target.value)}
-                />
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  onClick={createConversationNote}
-                  disabled={conversationActionBusy || !noteDraft.trim()}
-                >
-                  Add
-                </button>
-              </div>
-              {notesLoading ? (
-                <span className="loading loading-spinner loading-sm" />
-              ) : conversationNotes.length ? (
-                <ul className="space-y-2">
-                  {conversationNotes.map((note) => (
-                    <li
-                      key={note.id}
-                      className="rounded-none p-2"
-                    >
-                      <p className="text-xs">{note.content}</p>
-                      <div className="mt-1 flex items-center justify-between text-xs text-base-content/60">
-                        <span>{note.authorUserId || "unknown"}</span>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs"
-                          onClick={() => deleteConversationNote(note.id)}
-                          disabled={conversationActionBusy}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-xs text-base-content/60">No notes yet.</p>
-              )}
-            </div>
-
             <InternalNotesPanel conversationId={selectedConversation.id} />
-            <InternalMessagesPanel conversationId={selectedConversation.id} />
             <div className="rounded-none bg-base-100 p-3 space-y-2">
               <h3 className="text-sm font-medium">Shared Media</h3>
               <MediaGallery conversationId={selectedConversation.id} />
@@ -2171,15 +2228,10 @@ export function InboxClient({
     [
       contactDetailsEl,
       conversationActionBusy,
-      conversationNotes,
-      createConversationNote,
-      deleteConversationNote,
       fetchMessages,
       messageSearchBusy,
       messageSearchQuery,
       messageSearchResult,
-      noteDraft,
-      notesLoading,
       runMessageSearch,
       selectedConversation,
       selectedId,
@@ -2199,9 +2251,9 @@ export function InboxClient({
   const detailSelectionKey =
     selectedConversation?.id ?? startContact?.id ?? null;
   useEffect(() => {
-    if (!detailSelectionKey || !isXlUp) return;
+    if (!detailSelectionKey || !isLgUp) return;
     openRightPanel();
-  }, [detailSelectionKey, openRightPanel, isXlUp]);
+  }, [detailSelectionKey, openRightPanel, isLgUp]);
 
   useEffect(() => {
     return () => clearRightPanelContent("inbox");
@@ -2231,13 +2283,33 @@ export function InboxClient({
                   }}
                 >
                   <span className="material-symbols-outlined">
-                    <AddCircle className="" />
+                    <PlusCircle className="" />
                   </span>
 
                 </button>
               </div>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              {/* Sidebar view tabs: Conversations | Starred | Scheduled */}
+              <div className="flex shrink-0 border-b border-base-300">
+                {(["conversations", "starred", "scheduled"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setSidebarView(v)}
+                    className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                      sidebarView === v
+                        ? "border-b-2 border-primary text-primary"
+                        : "text-base-content/60 hover:text-base-content"
+                    }`}
+                  >
+                    {v === "conversations" ? "Conversations" : v === "starred" ? "Starred" : "Scheduled"}
+                  </button>
+                ))}
+              </div>
+
+              {sidebarView === "conversations" ? (
+              <>
               <div className="shrink-0 space-y-2 border-b border-base-300 pb-2">
                 {/* Search */}
                 <div className="px-2 pt-2">
@@ -2320,6 +2392,17 @@ export function InboxClient({
                       >
                         Mine
                       </button>
+                      {/* Unassigned queue */}
+                      <button
+                        type="button"
+                        onClick={() => setAssigneeFilter(assigneeFilter === "__unassigned__" ? null : "__unassigned__")}
+                        className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${assigneeFilter === "__unassigned__"
+                          ? "border-primary bg-primary text-primary-content"
+                          : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
+                          }`}
+                      >
+                        Unassigned
+                      </button>
                     </div>
                     {/* Right fade to signal more chips */}
                     <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-base-100 to-transparent" />
@@ -2332,7 +2415,7 @@ export function InboxClient({
                     aria-label="Filter by tags"
                     className={`relative shrink-0 px-2 py-1 ${showTagPanel ? "text-primary" : "text-base-content/50 hover:text-base-content"}`}
                   >
-                    <TuneRounded fontSize="small" />
+                    <SlidersHorizontal className="h-4 w-4" />
                     {activeTagCount > 0 && (
                       <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[9px] text-primary-content">
                         {activeTagCount}
@@ -2435,7 +2518,7 @@ export function InboxClient({
                             setSelectedId(conversation.id);
                             if (!isLgUp) setMobilePane("thread");
                           }}
-                          className={`group flex min-h-14 w-full items-center gap-4 rounded-xl px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isActive
+                          className={`group flex min-h-14 w-full items-center gap-4 rounded-box px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${isActive
                             ? "bg-primary/12"
                             : isAwaitingReply
                               ? "bg-base-100 hover:bg-base-300/40"
@@ -2488,6 +2571,88 @@ export function InboxClient({
                   Load more
                 </button>
               </div>
+              </>
+              ) : sidebarView === "starred" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-2">
+                {starredLoading && !starredMessages.length ? (
+                  <div className="flex justify-center py-8"><span className="loading loading-spinner" /></div>
+                ) : !starredMessages.length ? (
+                  <EmptyState title="No starred messages" description="Star a message in any conversation to save it here." />
+                ) : (
+                  <>
+                    <ul className="space-y-2">
+                      {starredMessages.map((msg) => (
+                        <li key={msg.id} className="rounded-box border border-base-300 bg-base-100 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-base-content/70">
+                                {(msg as Record<string, unknown>).contactName as string || (msg as Record<string, unknown>).contactPhone as string || "Message"}
+                              </p>
+                              <p className="mt-0.5 text-sm text-base-content">{msg.text || `[${msg.type}]`}</p>
+                              <p className="mt-1 text-[10px] text-base-content/40">
+                                {msg.starredAt ? new Date(msg.starredAt).toLocaleString() : ""}
+                              </p>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm mt-2 w-full"
+                      onClick={() => fetchStarredMessages(starredCursor, true)}
+                      disabled={!starredCursor || starredLoading}
+                    >
+                      Load more
+                    </button>
+                  </>
+                )}
+              </div>
+              ) : (
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain p-2">
+                {scheduledLoading && !scheduledMessages.length ? (
+                  <div className="flex justify-center py-8"><span className="loading loading-spinner" /></div>
+                ) : !scheduledMessages.length ? (
+                  <EmptyState title="No scheduled messages" description="Schedule a message to send later." />
+                ) : (
+                  <>
+                    <ul className="space-y-2">
+                      {scheduledMessages.map((msg) => (
+                        <li key={msg.id} className="rounded-box border border-base-300 bg-base-100 p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-xs font-medium text-base-content/70">
+                                {(msg as Record<string, unknown>).contactName as string || (msg as Record<string, unknown>).contactPhone as string || "Message"}
+                              </p>
+                              <p className="mt-0.5 text-sm text-base-content">{msg.text || `[${msg.type}]`}</p>
+                              <p className="mt-1 text-[10px] text-base-content/40">
+                                Scheduled: {msg.sendAt ? new Date(msg.sendAt).toLocaleString() : "—"}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs text-error"
+                              onClick={() => handleCancelScheduled(msg.id)}
+                              title="Cancel scheduled message"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm mt-2 w-full"
+                      onClick={() => fetchScheduledMessages(scheduledCursor, true)}
+                      disabled={!scheduledCursor || scheduledLoading}
+                    >
+                      Load more
+                    </button>
+                  </>
+                )}
+              </div>
+              )}
             </div>
           </div>
 
@@ -2504,7 +2669,7 @@ export function InboxClient({
                     aria-label="Back to conversations"
                     onClick={() => setMobilePane("list")}
                   >
-                    <ArrowBackRounded className="h-5 w-5" />
+                    <ArrowLeft className="h-5 w-5" />
                   </button>
                 ) : null}
                 <h2 className="truncate text-sm font-medium text-base-content/80">
@@ -2517,6 +2682,12 @@ export function InboxClient({
                       "New chat"
                       : "Select a conversation"}
                 </h2>
+                {selectedConversation?.assignedUserId && assigneeName ? (
+                  <span className="hidden shrink-0 items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-xs text-base-content/70 sm:flex">
+                    <CircleUser className="h-3.5 w-3.5 shrink-0" />
+                    {assigneeName}
+                  </span>
+                ) : null}
               </div>
               <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-end gap-2">
                 {selectedConversation ? (
@@ -2526,6 +2697,29 @@ export function InboxClient({
                         {otherViewers.slice(0, 2).join(", ")} is viewing this
                       </span>
                     ) : null}
+                    {/* Claim / Release: available to agents and above based on assignment state. */}
+                    {canClaimConversation && !selectedConversation.assignedUserId ? (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-xs shrink-0"
+                        onClick={() => void runConversationAction("claim")}
+                        disabled={conversationActionBusy}
+                      >
+                        Claim
+                      </button>
+                    ) : null}
+                    {canReleaseConversation &&
+                    selectedConversation.assignedUserId === currentUserId ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs shrink-0 border border-base-300"
+                        onClick={() => void runConversationAction("release")}
+                        disabled={conversationActionBusy}
+                      >
+                        Release
+                      </button>
+                    ) : null}
+                    {canManageConversations && (
                     <select
                       className="select select-bordered select-xs w-40"
                       value={assigneeUserId}
@@ -2543,6 +2737,8 @@ export function InboxClient({
                         </option>
                       ))}
                     </select>
+                    )}
+                    {canManageConversations && (
                     <div className="dropdown dropdown-end">
                       <button
                         type="button"
@@ -2552,7 +2748,7 @@ export function InboxClient({
                         aria-haspopup="menu"
                         disabled={conversationActionBusy}
                       >
-                        <MoreVert className="h-5 w-5" />
+                        <MoreVertical className="h-5 w-5" />
                       </button>
                       <ul
                         tabIndex={0}
@@ -2606,7 +2802,7 @@ export function InboxClient({
                               disabled={conversationActionBusy}
                             >
                               {selectedConversation.snoozedUntil &&
-                              new Date(selectedConversation.snoozedUntil).getTime() > Date.now()
+                                new Date(selectedConversation.snoozedUntil).getTime() > Date.now()
                                 ? "Unsnooze"
                                 : "Snooze 1h"}
                             </button>
@@ -2654,6 +2850,7 @@ export function InboxClient({
                         </li>
                       </ul>
                     </div>
+                    )}
                     {selectedConversation.lastMessage?.status === "FAILED" &&
                       selectedConversation.lastMessage?.direction === "OUTBOUND" &&
                       selectedConversation.lastMessage?.text ? (
@@ -2675,7 +2872,7 @@ export function InboxClient({
                     aria-label="Contact details"
                     onClick={() => contactDialogRef.current?.showModal()}
                   >
-                    <AccountCircleRounded className="h-6 w-6" />
+                    <CircleUser className="h-6 w-6" />
                   </button>
                 ) : null}
                 {messageLoading && <span className="loading loading-spinner" />}
@@ -2790,6 +2987,30 @@ export function InboxClient({
                   <div aria-hidden className="h-px w-full shrink-0" />
                 </div>
 
+                {!canSendMessages ? (
+                  <div className="mt-3 shrink-0 border-t border-base-300 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+                    <p className="text-center text-xs text-base-content/50">
+                      You have read-only access to this inbox.
+                    </p>
+                  </div>
+                ) : showTakeOverNotice ? (
+                  <div className="mt-3 shrink-0 border-t border-base-300 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
+                    <div className="flex flex-col items-center gap-2 text-center">
+                      <p className="text-sm text-base-content/60">
+                        {assigneeName ? `Assigned to ${assigneeName}` : "This conversation is assigned to someone else."}
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={conversationActionBusy}
+                        onClick={() => void runConversationAction("assign", { userId: currentUserId })}
+                      >
+                        {conversationActionBusy ? <span className="loading loading-spinner loading-xs" /> : null}
+                        Take over
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                 <div className="mt-3 shrink-0 space-y-2 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
                   <input
                     ref={fileInputRef}
@@ -2820,298 +3041,330 @@ export function InboxClient({
                           {policyError}
                         </div>
                       ) : null}
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs text-base-content/65">
-                          Send mode
-                        </span>
-                        <div className="join">
-                          <div
-                            className={
-                              freeChatPolicyTip
-                                ? "tooltip tooltip-top join-item"
-                                : "join-item"
-                            }
-                            {...(freeChatPolicyTip
-                              ? { "data-tip": freeChatPolicyTip }
-                              : {})}
-                          >
+                      {templateOnlyMode ? (
+                        <div
+                          className={
+                            freeChatPolicyTip
+                              ? "tooltip tooltip-top inline-flex max-w-full items-center gap-2"
+                              : "inline-flex max-w-full items-center gap-2"
+                          }
+                          {...(freeChatPolicyTip ? { "data-tip": freeChatPolicyTip } : {})}
+                        >
+                          <span className="badge badge-warning badge-outline badge-sm shrink-0">
+                            Templates only
+                          </span>
+                          <span className="truncate text-[10px] text-base-content/55">
+                            Outside 24h window
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex min-h-7 items-center justify-between gap-2">
+                          <span className="text-[10px] uppercase tracking-wide text-base-content/50">
+                            Mode
+                          </span>
+                          <div className="join join-horizontal">
+                            <div
+                              className={
+                                freeChatPolicyTip
+                                  ? "tooltip tooltip-top join-item"
+                                  : "join-item"
+                              }
+                              {...(freeChatPolicyTip
+                                ? { "data-tip": freeChatPolicyTip }
+                                : {})}
+                            >
+                              <button
+                                type="button"
+                                className={`btn btn-xs join-item ${!useTemplateSend ? "btn-primary" : "btn-ghost"
+                                  }`}
+                                disabled={sendPolicy?.templateRequired === true}
+                                onClick={() => setUseTemplateSend(false)}
+                                aria-label={
+                                  sendPolicy?.templateRequired
+                                    ? "Free chat unavailable: outside the customer-care window. Use a template."
+                                    : sendPolicy
+                                      ? "Free chat: inside the customer-care window."
+                                      : "Free chat"
+                                }
+                              >
+                                Free chat
+                              </button>
+                            </div>
                             <button
                               type="button"
-                              className={`btn btn-xs w-full ${!useTemplateSend ? "btn-primary" : "btn-ghost"
+                              className={`btn btn-xs join-item ${useTemplateSend ? "btn-primary" : "btn-ghost"
                                 }`}
-                              disabled={sendPolicy?.templateRequired === true}
-                              onClick={() => setUseTemplateSend(false)}
-                              aria-label={
-                                sendPolicy?.templateRequired
-                                  ? "Free chat unavailable: outside the customer-care window. Use a template."
-                                  : sendPolicy
-                                    ? "Free chat: inside the customer-care window."
-                                    : "Free chat"
-                              }
+                              onClick={() => setUseTemplateSend(true)}
                             >
-                              Free chat
+                              Template
                             </button>
                           </div>
-                          <button
-                            type="button"
-                            className={`btn btn-xs join-item ${useTemplateSend ? "btn-primary" : "btn-ghost"
-                              }`}
-                            onClick={() => setUseTemplateSend(true)}
-                          >
-                            Template
-                          </button>
                         </div>
-                      </div>
+                      )}
                       {useTemplateSend ? (
-                        <div className="space-y-2 rounded-none bg-base-100 p-3">
+                        <div
+                          className={`space-y-2 ${!templateOnlyMode ? "rounded-none bg-base-100 p-3" : ""}`}
+                        >
                           {templatesError ? (
                             <div role="alert" className="alert alert-warning alert-soft py-2 text-sm">
                               {templatesError}
                             </div>
                           ) : null}
-                          <label className="floating-label">
-                            <select
-                              className="select select-bordered w-full"
-                              value={selectedTemplateId}
-                              onChange={(event) => setSelectedTemplateId(event.target.value)}
-                              disabled={templatesLoading}
-                            >
-                              <option value="">Select template</option>
-                              {templateOptions.map((template) => (
-                                <option key={template.id} value={template.id}>
-                                  {template.name}
-                                </option>
-                              ))}
-                            </select>
-                            <span>Template</span>
-                          </label>
-                          <label className="floating-label">
-                            <input
-                              type="text"
-                              className="input input-bordered w-full"
-                              value={
-                                templateVersionLoading
-                                  ? "Loading latest approved version..."
-                                  : selectedTemplateVersion != null
-                                    ? String(selectedTemplateVersion.version)
-                                    : ""
-                              }
-                              readOnly
-                              placeholder="Approved version"
-                            />
-                            <span>Version</span>
-                          </label>
-                          {selectedTemplateId && selectedTemplateVersion?.id ? (
+                          {!templateOnlyMode ? (
                             <>
-                              {inboxTemplateVersionDetailLoading ? (
-                                <div className="flex items-center gap-2 text-sm text-base-content/70">
-                                  <span className="loading loading-spinner loading-sm" />
-                                  Loading template details…
-                                </div>
-                              ) : !inboxTemplateVersionDetail ? (
-                                <div
-                                  role="alert"
-                                  className="alert alert-warning alert-soft py-2 text-sm"
+                              <label className="floating-label">
+                                <select
+                                  className="select select-bordered w-full"
+                                  value={selectedTemplateId}
+                                  onChange={(event) => setSelectedTemplateId(event.target.value)}
+                                  disabled={templatesLoading}
                                 >
-                                  Could not load template details. Try re-selecting the
-                                  template.
-                                </div>
-                              ) : (
-                                <>
-                                  {needsTemplateHeaderMedia &&
-                                    inboxTemplateVersionDetail.headerType ? (
-                                    <div className="rounded-none bg-base-200/40 p-3">
-                                      <p className="text-sm font-medium text-base-content">
-                                        Header media (
-                                        {inboxTemplateVersionDetail.headerType})
-                                      </p>
-                                      <p className="mt-1 text-xs text-base-content/60">
-                                        WhatsApp requires media for this template
-                                        header. Upload a file; it is prepared for this
-                                        send only.
-                                      </p>
-                                      <div className="mt-2 flex flex-wrap items-center gap-2">
-                                        <input
-                                          type="file"
-                                          className="file-input file-input-bordered file-input-sm w-full max-w-xs"
-                                          accept={
-                                            inboxTemplateVersionDetail.headerType ===
-                                              "VIDEO"
-                                              ? "video/mp4,video/3gpp"
-                                              : inboxTemplateVersionDetail.headerType ===
-                                                "DOCUMENT"
-                                                ? "application/pdf,application/*"
-                                                : "image/jpeg,image/png,image/webp,image/gif"
-                                          }
-                                          disabled={templateBindingUploadBusy}
-                                          onChange={async (e) => {
-                                            const file = e.target.files?.[0];
-                                            e.target.value = "";
-                                            if (!file) return;
-                                            setTemplateBindingError(null);
-                                            setTemplateBindingUploadBusy(true);
-                                            try {
-                                              const id =
-                                                await uploadWhatsAppAttachmentIdAndPrepareWhatsApp(
-                                                  file
-                                                );
-                                              setTemplateHeaderMediaId(id);
-                                            } catch (err: unknown) {
-                                              setTemplateBindingError(
-                                                extractApiErrorMessage(err) ||
-                                                "Upload failed. Try a smaller file or supported format."
-                                              );
-                                            } finally {
-                                              setTemplateBindingUploadBusy(false);
-                                            }
-                                          }}
-                                        />
-                                        {templateHeaderMediaId ? (
-                                          <span className="badge badge-success badge-outline">
-                                            Ready
-                                          </span>
-                                        ) : (
-                                          <span className="text-xs text-warning">
-                                            Required
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <p className="text-xs text-base-content/55">
-                                      This template has no media header (text or none
-                                      only).
-                                    </p>
-                                  )}
-
-                                  {templateCarouselCardCount > 0 ? (
-                                    <div className="space-y-2">
-                                      <p className="text-sm font-medium text-base-content">
-                                        Carousel cards ({templateCarouselCardCount})
-                                      </p>
-                                      <p className="text-xs text-base-content/60">
-                                        Each card needs header media for WhatsApp.
-                                      </p>
-                                      {Array.from(
-                                        { length: templateCarouselCardCount },
-                                        (_, idx) => {
-                                          const card = (
-                                            inboxTemplateVersionDetail
-                                              .carouselCards as unknown[]
-                                          )?.[idx];
-                                          return (
-                                            <div
-                                              key={idx}
-                                              className="rounded-none bg-base-100 p-3"
-                                            >
-                                              <p className="text-xs font-medium text-base-content/80">
-                                                Card {idx + 1}
-                                              </p>
-                                              <input
-                                                type="file"
-                                                className="file-input file-input-bordered file-input-sm mt-2 w-full max-w-xs"
-                                                accept={carouselCardFileAccept(card)}
-                                                disabled={templateBindingUploadBusy}
-                                                onChange={async (e) => {
-                                                  const file = e.target.files?.[0];
-                                                  e.target.value = "";
-                                                  if (!file) return;
-                                                  setTemplateBindingError(null);
-                                                  setTemplateBindingUploadBusy(true);
-                                                  try {
-                                                    const id =
-                                                      await uploadWhatsAppAttachmentIdAndPrepareWhatsApp(
-                                                        file
-                                                      );
-                                                    setTemplateCarouselMediaIds(
-                                                      (prev) => {
-                                                        const next = [...prev];
-                                                        next[idx] = id;
-                                                        return next;
-                                                      }
-                                                    );
-                                                  } catch (err: unknown) {
-                                                    setTemplateBindingError(
-                                                      extractApiErrorMessage(err) ||
-                                                      "Upload failed for this card."
-                                                    );
-                                                  } finally {
-                                                    setTemplateBindingUploadBusy(
-                                                      false
-                                                    );
-                                                  }
-                                                }}
-                                              />
-                                              {templateCarouselMediaIds[idx] ? (
-                                                <span className="mt-1 inline-block text-xs text-success">
-                                                  Uploaded
-                                                </span>
-                                              ) : null}
-                                            </div>
-                                          );
-                                        }
-                                      )}
-                                    </div>
-                                  ) : null}
-
-                                  {templateBindingError ? (
-                                    <div
-                                      role="alert"
-                                      className="alert alert-error text-sm py-2"
-                                    >
-                                      {templateBindingError}
-                                    </div>
-                                  ) : null}
-                                </>
-                              )}
+                                  <option value="">Select template</option>
+                                  {templateOptions.map((template) => (
+                                    <option key={template.id} value={template.id}>
+                                      {template.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span>Template</span>
+                              </label>
+                              <label className="floating-label">
+                                <input
+                                  type="text"
+                                  className="input input-bordered w-full"
+                                  value={
+                                    templateVersionLoading
+                                      ? "Loading latest approved version..."
+                                      : selectedTemplateVersion != null
+                                        ? String(selectedTemplateVersion.version)
+                                        : ""
+                                  }
+                                  readOnly
+                                  placeholder="Approved version"
+                                />
+                                <span>Version</span>
+                              </label>
                             </>
                           ) : null}
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs text-base-content/65">
-                                Template variables
-                              </p>
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-xs"
-                                onClick={addTemplateVariableRow}
-                              >
-                                Add variable
-                              </button>
-                            </div>
-                            {templateVariables.map((row) => (
-                              <div key={row.id} className="flex items-center gap-2">
-                                <input
-                                  type="text"
-                                  className="input input-bordered input-sm w-1/2"
-                                  placeholder="key"
-                                  value={row.key}
-                                  onChange={(event) =>
-                                    updateTemplateVariableRow(row.id, {
-                                      key: event.target.value,
-                                    })
-                                  }
-                                />
-                                <input
-                                  type="text"
-                                  className="input input-bordered input-sm w-1/2"
-                                  placeholder="value"
-                                  value={row.value}
-                                  onChange={(event) =>
-                                    updateTemplateVariableRow(row.id, {
-                                      value: event.target.value,
-                                    })
-                                  }
-                                />
+                          <div
+                            className={
+                              templateOnlyMode
+                                ? "max-h-36 space-y-2 overflow-y-auto rounded-box border border-base-300/60 bg-base-200/25 p-2"
+                                : "space-y-2"
+                            }
+                          >
+                            {selectedTemplateId && selectedTemplateVersion?.id ? (
+                              <>
+                                {inboxTemplateVersionDetailLoading ? (
+                                  <div className="flex items-center gap-2 text-sm text-base-content/70">
+                                    <span className="loading loading-spinner loading-sm" />
+                                    Loading template details…
+                                  </div>
+                                ) : !inboxTemplateVersionDetail ? (
+                                  <div
+                                    role="alert"
+                                    className="alert alert-warning alert-soft py-2 text-sm"
+                                  >
+                                    Could not load template details. Try re-selecting the
+                                    template.
+                                  </div>
+                                ) : (
+                                  <>
+                                    {needsTemplateHeaderMedia &&
+                                      inboxTemplateVersionDetail.headerType ? (
+                                      <div className="rounded-none bg-base-200/40 p-3">
+                                        <p className="text-sm font-medium text-base-content">
+                                          Header media (
+                                          {inboxTemplateVersionDetail.headerType})
+                                        </p>
+                                        <p className="mt-1 text-xs text-base-content/60">
+                                          WhatsApp requires media for this template
+                                          header. Upload a file; it is prepared for this
+                                          send only.
+                                        </p>
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                          <input
+                                            type="file"
+                                            className="file-input file-input-bordered file-input-sm w-full max-w-xs"
+                                            accept={
+                                              inboxTemplateVersionDetail.headerType ===
+                                                "VIDEO"
+                                                ? "video/mp4,video/3gpp"
+                                                : inboxTemplateVersionDetail.headerType ===
+                                                  "DOCUMENT"
+                                                  ? "application/pdf,application/*"
+                                                  : "image/jpeg,image/png,image/webp,image/gif"
+                                            }
+                                            disabled={templateBindingUploadBusy}
+                                            onChange={async (e) => {
+                                              const file = e.target.files?.[0];
+                                              e.target.value = "";
+                                              if (!file) return;
+                                              setTemplateBindingError(null);
+                                              setTemplateBindingUploadBusy(true);
+                                              try {
+                                                const id =
+                                                  await uploadWhatsAppAttachmentIdAndPrepareWhatsApp(
+                                                    file
+                                                  );
+                                                setTemplateHeaderMediaId(id);
+                                              } catch (err: unknown) {
+                                                setTemplateBindingError(
+                                                  extractApiErrorMessage(err) ||
+                                                  "Upload failed. Try a smaller file or supported format."
+                                                );
+                                              } finally {
+                                                setTemplateBindingUploadBusy(false);
+                                              }
+                                            }}
+                                          />
+                                          {templateHeaderMediaId ? (
+                                            <span className="badge badge-success badge-outline">
+                                              Ready
+                                            </span>
+                                          ) : (
+                                            <span className="text-xs text-warning">
+                                              Required
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <p className="text-xs text-base-content/55">
+                                        This template has no media header (text or none
+                                        only).
+                                      </p>
+                                    )}
+
+                                    {templateCarouselCardCount > 0 ? (
+                                      <div className="space-y-2">
+                                        <p className="text-sm font-medium text-base-content">
+                                          Carousel cards ({templateCarouselCardCount})
+                                        </p>
+                                        <p className="text-xs text-base-content/60">
+                                          Each card needs header media for WhatsApp.
+                                        </p>
+                                        {Array.from(
+                                          { length: templateCarouselCardCount },
+                                          (_, idx) => {
+                                            const card = (
+                                              inboxTemplateVersionDetail
+                                                .carouselCards as unknown[]
+                                            )?.[idx];
+                                            return (
+                                              <div
+                                                key={idx}
+                                                className="rounded-none bg-base-100 p-3"
+                                              >
+                                                <p className="text-xs font-medium text-base-content/80">
+                                                  Card {idx + 1}
+                                                </p>
+                                                <input
+                                                  type="file"
+                                                  className="file-input file-input-bordered file-input-sm mt-2 w-full max-w-xs"
+                                                  accept={carouselCardFileAccept(card)}
+                                                  disabled={templateBindingUploadBusy}
+                                                  onChange={async (e) => {
+                                                    const file = e.target.files?.[0];
+                                                    e.target.value = "";
+                                                    if (!file) return;
+                                                    setTemplateBindingError(null);
+                                                    setTemplateBindingUploadBusy(true);
+                                                    try {
+                                                      const id =
+                                                        await uploadWhatsAppAttachmentIdAndPrepareWhatsApp(
+                                                          file
+                                                        );
+                                                      setTemplateCarouselMediaIds(
+                                                        (prev) => {
+                                                          const next = [...prev];
+                                                          next[idx] = id;
+                                                          return next;
+                                                        }
+                                                      );
+                                                    } catch (err: unknown) {
+                                                      setTemplateBindingError(
+                                                        extractApiErrorMessage(err) ||
+                                                        "Upload failed for this card."
+                                                      );
+                                                    } finally {
+                                                      setTemplateBindingUploadBusy(
+                                                        false
+                                                      );
+                                                    }
+                                                  }}
+                                                />
+                                                {templateCarouselMediaIds[idx] ? (
+                                                  <span className="mt-1 inline-block text-xs text-success">
+                                                    Uploaded
+                                                  </span>
+                                                ) : null}
+                                              </div>
+                                            );
+                                          }
+                                        )}
+                                      </div>
+                                    ) : null}
+
+                                    {templateBindingError ? (
+                                      <div
+                                        role="alert"
+                                        className="alert alert-error text-sm py-2"
+                                      >
+                                        {templateBindingError}
+                                      </div>
+                                    ) : null}
+                                  </>
+                                )}
+                              </>
+                            ) : null}
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs text-base-content/65">
+                                  Template variables
+                                </p>
                                 <button
                                   type="button"
                                   className="btn btn-ghost btn-xs"
-                                  onClick={() => removeTemplateVariableRow(row.id)}
+                                  onClick={addTemplateVariableRow}
                                 >
-                                  Remove
+                                  Add variable
                                 </button>
                               </div>
-                            ))}
+                              {templateVariables.map((row) => (
+                                <div key={row.id} className="flex items-center gap-2">
+                                  <input
+                                    type="text"
+                                    className="input input-bordered input-sm w-1/2"
+                                    placeholder="key"
+                                    value={row.key}
+                                    onChange={(event) =>
+                                      updateTemplateVariableRow(row.id, {
+                                        key: event.target.value,
+                                      })
+                                    }
+                                  />
+                                  <input
+                                    type="text"
+                                    className="input input-bordered input-sm w-1/2"
+                                    placeholder="value"
+                                    value={row.value}
+                                    onChange={(event) =>
+                                      updateTemplateVariableRow(row.id, {
+                                        value: event.target.value,
+                                      })
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost btn-xs"
+                                    onClick={() => removeTemplateVariableRow(row.id)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       ) : null}
@@ -3271,7 +3524,7 @@ export function InboxClient({
                         />
                       </div>
                     )}
-                    {showWhatsAppMediaTools ? (
+                    {showWhatsAppMediaTools && !useTemplateSend ? (
                       <button
                         type="button"
                         className="btn btn-ghost btn-square shrink-0"
@@ -3279,7 +3532,6 @@ export function InboxClient({
                         disabled={
                           !activeContactId ||
                           mediaUpload.uploading ||
-                          useTemplateSend ||
                           !!pendingMediaId
                         }
                         onClick={() => fileInputRef.current?.click()}
@@ -3301,7 +3553,7 @@ export function InboxClient({
                           <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
                         </svg>
                       </button>
-                    ) : activeContactId ? (
+                    ) : activeContactId && !useTemplateSend ? (
                       <span
                         className="tooltip tooltip-top shrink-0 text-xs text-base-content/50"
                         data-tip="Media attachments are only available on WhatsApp for now."
@@ -3330,7 +3582,7 @@ export function InboxClient({
                       </span>
                     ) : null}
                     {/* Camera capture — WhatsApp only */}
-                    {showWhatsAppMediaTools ? (
+                    {showWhatsAppMediaTools && !useTemplateSend ? (
                       <button
                         type="button"
                         className="btn btn-ghost btn-square shrink-0"
@@ -3338,7 +3590,6 @@ export function InboxClient({
                         disabled={
                           !activeContactId ||
                           mediaUpload.uploading ||
-                          useTemplateSend ||
                           !!pendingMediaId ||
                           voiceRecorder.recording
                         }
@@ -3449,38 +3700,70 @@ export function InboxClient({
                         </button>
                       )
                     ) : null}
-                    <textarea
-                      ref={draftInputRef}
-                      rows={1}
-                      title="Enter to send · Shift+Enter for a new line"
-                      className="textarea textarea-bordered min-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-xl py-2.5 leading-snug focus:outline-none focus:[box-shadow:0_0_0_3px_hsl(var(--p)/0.18),0_0_10px_2px_hsl(var(--p)/0.10)]"
-                      placeholder={
-                        useTemplateSend
-                          ? "Template mode: free text is disabled"
-                          : pendingMediaId
-                            ? "Add a caption (optional)…"
-                            : "Type a message…"
-                      }
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      onFocus={() => {
-                        draftComposerConversationIdRef.current = selectedId;
-                      }}
-                      onBlur={persistDraftToStorageMap}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          if (canSend) handleSend();
+                    {templateOnlyMode &&
+                      useTemplateSend &&
+                      activeContactId &&
+                      activeChannel === "WHATSAPP" ? (
+                      <div className="flex min-h-10 min-w-0 flex-1 items-center gap-2">
+                        <select
+                          className="select select-bordered select-sm h-10 min-h-10 min-w-0 flex-1 rounded-box focus:outline-none focus:[box-shadow:0_0_0_3px_hsl(var(--p)/0.18),0_0_10px_2px_hsl(var(--p)/0.10)]"
+                          value={selectedTemplateId}
+                          onChange={(event) => setSelectedTemplateId(event.target.value)}
+                          disabled={templatesLoading}
+                          aria-label="Template"
+                        >
+                          <option value="">Select template</option>
+                          {templateOptions.map((template) => (
+                            <option key={template.id} value={template.id}>
+                              {template.name}
+                            </option>
+                          ))}
+                        </select>
+                        <span
+                          className="shrink-0 tabular-nums text-[10px] text-base-content/50"
+                          title="Approved template version"
+                        >
+                          {templateVersionLoading
+                            ? "…"
+                            : selectedTemplateVersion != null
+                              ? `v${selectedTemplateVersion.version}`
+                              : "—"}
+                        </span>
+                      </div>
+                    ) : (
+                      <textarea
+                        ref={draftInputRef}
+                        rows={1}
+                        title="Enter to send · Shift+Enter for a new line"
+                        className="textarea textarea-bordered min-h-10 min-w-0 flex-1 resize-none overflow-y-auto rounded-box py-2.5 leading-snug focus:outline-none focus:[box-shadow:0_0_0_3px_hsl(var(--p)/0.18),0_0_10px_2px_hsl(var(--p)/0.10)]"
+                        placeholder={
+                          useTemplateSend
+                            ? "Template mode: free text is disabled"
+                            : pendingMediaId
+                              ? "Add a caption (optional)…"
+                              : "Type a message…"
                         }
-                      }}
-                      disabled={
-                        !activeContactId ||
-                        sending ||
-                        mediaUpload.uploading ||
-                        useTemplateSend ||
-                        voiceRecorder.recording
-                      }
-                    />
+                        value={draft}
+                        onChange={(event) => setDraft(event.target.value)}
+                        onFocus={() => {
+                          draftComposerConversationIdRef.current = selectedId;
+                        }}
+                        onBlur={persistDraftToStorageMap}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            if (canSend) handleSend();
+                          }
+                        }}
+                        disabled={
+                          !activeContactId ||
+                          sending ||
+                          mediaUpload.uploading ||
+                          useTemplateSend ||
+                          voiceRecorder.recording
+                        }
+                      />
+                    )}
                     <div className="flex items-center gap-1 shrink-0">
                       {/* Schedule datetime picker — hidden until user clicks clock icon */}
                       {scheduleAt && (
@@ -3524,6 +3807,7 @@ export function InboxClient({
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           </div>

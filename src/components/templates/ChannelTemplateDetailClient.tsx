@@ -65,8 +65,8 @@ function statusBadge(status: TemplateVersionStatus) {
 
 const WA_STEPS: { key: TemplateVersionStatus | string; label: string }[] = [
   { key: "DRAFT", label: "Draft" },
-  { key: "PENDING", label: "Submit" },
-  { key: "APPROVED", label: "Approve" },
+  { key: "PENDING", label: "Pending review" },
+  { key: "APPROVED", label: "Approved locally" },
   { key: "PROVIDER_PENDING", label: "Meta review" },
   { key: "PROVIDER_APPROVED", label: "Live" },
 ];
@@ -260,7 +260,7 @@ function VersionCompareModal({
   const [older, newer] = [a, b].sort((x, y) => x.version - y.version);
 
   const col = (v: ChannelTemplateVersion, label: string) => (
-    <div className="rounded-lg border border-base-300 bg-base-100 p-3 min-w-0">
+    <div className="rounded-box border border-base-300 bg-base-100 p-3 min-w-0">
       <div className="text-sm font-semibold mb-2">{label}</div>
       <dl className="space-y-2 text-sm">
         <div>
@@ -498,7 +498,7 @@ export function ChannelTemplateDetailClient({
       }
       return "Send this approved version to Meta for WhatsApp review. Requires templates.sync permission.";
     }
-    return "Submit and approve this version locally first (Submit → Approve), then send it to Meta.";
+    return "Submit & approve this version locally first, then send it to Meta.";
   }, [version, state?.channel]);
 
   const onCreate = useCallback(() => {
@@ -542,10 +542,17 @@ export function ChannelTemplateDetailClient({
     activateMutation.mutate({ id: channelTemplateId, version: version.version });
   }, [activateMutation, channelTemplateId, version]);
 
-  const onSubmit = useCallback(() => {
+  const onSubmitAndApprove = useCallback(() => {
     if (!version) return;
-    submitMutation.mutate({ id: channelTemplateId, version: version.version });
-  }, [submitMutation, channelTemplateId, version]);
+    submitMutation.mutate(
+      { id: channelTemplateId, version: version.version },
+      {
+        onSuccess: () => {
+          approveMutation.mutate({ id: channelTemplateId, version: version.version });
+        },
+      }
+    );
+  }, [submitMutation, approveMutation, channelTemplateId, version]);
 
   const onApprove = useCallback(() => {
     if (!version) return;
@@ -824,7 +831,7 @@ export function ChannelTemplateDetailClient({
         ) : (
           <>
             {pickedForCompare.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-base-300 bg-base-100 px-3 py-2">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-2">
                 <span className="text-sm">
                   {pickedForCompare.length === 2
                     ? `Ready: v${pickedForCompare[0]} & v${pickedForCompare[1]}`
@@ -982,10 +989,14 @@ export function ChannelTemplateDetailClient({
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   className="btn btn-outline btn-sm"
-                  onClick={onSubmit}
-                  disabled={anyMutationPending || version.status !== "DRAFT" || version.isLocked}
+                  onClick={onSubmitAndApprove}
+                  disabled={
+                    anyMutationPending ||
+                    version.status !== "DRAFT" ||
+                    version.isLocked
+                  }
                 >
-                  Submit
+                  Submit & approve
                 </button>
                 <button
                   className="btn btn-outline btn-sm"

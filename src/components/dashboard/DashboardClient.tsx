@@ -9,10 +9,13 @@ import {
   usageApi,
 } from "@/lib/api";
 import {
+  campaignRunSummaryLine,
   campaignStatusTone,
   normalizeStatus,
   statusBadgeClasses,
+  type CampaignRunSummary,
 } from "@/lib/campaignUi";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 type DeliveryStats = {
   total?: number;
@@ -55,6 +58,8 @@ type CampaignRow = {
   name: string;
   status: string;
   channel?: string;
+  updatedAt?: string;
+  runs?: CampaignRunSummary[];
 };
 
 function fmtDateInput(d: Date): string {
@@ -272,12 +277,9 @@ function LineGraph({ points }: { points: TimeSeriesPoint[] }) {
   );
 }
 
-function getErr(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message ?? "Failed to load dashboard.";
-}
 
-export function DashboardClient() {
+export function DashboardClient({ meRole }: { meRole: string }) {
+  const isViewer = !roleHasWorkspacePermission(meRole, "contacts.create");
   const range = useMemo(() => {
     const end = new Date();
     const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
@@ -285,57 +287,59 @@ export function DashboardClient() {
   }, []);
 
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [limits, setLimits] = useState<Record<string, unknown> | null>(null);
   const [convStats, setConvStats] = useState<Record<string, unknown> | null>(null);
   const [inFlightCampaigns, setInFlightCampaigns] = useState<CampaignRow[]>([]);
+  const [recentCampaigns, setRecentCampaigns] = useState<CampaignRow[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      setError(null);
-      try {
-        const [sum, lim, cs, campRes] = await Promise.all([
-          analyticsApi.summary({ start: range.start, end: range.end }),
-          usageApi.limits().catch(() => null),
-          conversationsApi.stats().catch(() => null),
-          campaignsApi.list().catch(() => []),
-        ]);
-        if (cancelled) return;
+      const [sum, lim, cs, campRes] = await Promise.all([
+        analyticsApi.summary({ start: range.start, end: range.end }).catch(() => null),
+        isViewer ? Promise.resolve(null) : usageApi.limits().catch(() => null),
+        isViewer ? Promise.resolve(null) : conversationsApi.stats().catch(() => null),
+        isViewer ? Promise.resolve([]) : campaignsApi.list().catch(() => []),
+      ]);
+      if (cancelled) return;
 
-        setSummary((sum ?? null) as AnalyticsSummary | null);
-        setLimits((lim ?? null) as Record<string, unknown> | null);
-        setConvStats(
-          cs && typeof cs === "object" && !Array.isArray(cs)
-            ? (cs as Record<string, unknown>)
-            : null
-        );
+      setSummary((sum ?? null) as AnalyticsSummary | null);
+      setLimits((lim ?? null) as Record<string, unknown> | null);
+      setConvStats(
+        cs && typeof cs === "object" && !Array.isArray(cs)
+          ? (cs as Record<string, unknown>)
+          : null
+      );
 
-        const raw = Array.isArray(campRes) ? campRes : [];
-        const rows: CampaignRow[] = raw
-          .filter((c: unknown) => {
-            if (!c || typeof c !== "object") return false;
-            const r = c as CampaignRow;
-            return r.id && r.name && isCampaignInFlight(r.status);
-          })
-          .map((c: unknown) => {
-            const r = c as CampaignRow;
-            return { id: r.id, name: r.name, status: r.status, channel: r.channel };
-          })
-          .slice(0, 5);
-        setInFlightCampaigns(rows);
-      } catch (err: unknown) {
-        if (!cancelled) setError(getErr(err));
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      const raw = Array.isArray(campRes) ? campRes : [];
+      const allRows: CampaignRow[] = raw
+        .filter((c: unknown) => c && typeof c === "object" && (c as CampaignRow).id)
+        .map((c: unknown) => {
+          const r = c as CampaignRow;
+          return { id: r.id, name: r.name, status: r.status, channel: r.channel, updatedAt: r.updatedAt, runs: r.runs };
+        });
+
+      const rows = allRows
+        .filter((r) => isCampaignInFlight(r.status))
+        .slice(0, 5);
+      setInFlightCampaigns(rows);
+
+      const recent = [...allRows]
+        .sort((a, b) => {
+          const ta = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+          const tb = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+          return tb - ta;
+        })
+        .slice(0, 3);
+      setRecentCampaigns(recent);
+      if (!cancelled) setLoading(false);
     })();
     return () => {
       cancelled = true;
     };
-  }, [range.start, range.end]);
+  }, [isViewer, range.start, range.end]);
 
   const delivery = summary?.delivery;
   const timeSeries = summary?.timeSeries ?? [];
@@ -361,14 +365,6 @@ export function DashboardClient() {
     );
   }
 
-  if (error) {
-    return (
-      <div role="alert" className="alert alert-error">
-        <span>{error}</span>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -378,9 +374,11 @@ export function DashboardClient() {
             {range.start} → {range.end} · Outcomes from your workspace analytics
           </p>
         </div>
-        <Link href="/analytics" className="btn btn-outline btn-sm">
-          Full analytics
-        </Link>
+        {!isViewer ? (
+          <Link href="/analytics" className="btn btn-outline btn-sm">
+            Full analytics
+          </Link>
+        ) : null}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -425,139 +423,186 @@ export function DashboardClient() {
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-box border border-base-300 bg-base-100">
-          <div className="gap-3 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-base font-semibold">Needs attention</h3>
-              <Link href="/inbox" className="btn btn-primary btn-sm">
-                Open inbox
-              </Link>
-            </div>
-            <p className="text-sm text-base-content/70">
-              {openCount != null ? (
-                <>
-                  <span className="font-semibold text-base-content">{openCount}</span> open
-                  conversation{openCount === 1 ? "" : "s"}
-                </>
-              ) : (
-                "Conversation stats unavailable."
-              )}
-            </p>
-            <div className="divider my-0" />
-            <div>
-              <div className="mb-2 text-xs font-medium uppercase tracking-wide text-base-content/50">
-                In-flight campaigns
-              </div>
-              {inFlightCampaigns.length === 0 ? (
-                <p className="text-sm text-base-content/60">No active or paused campaigns.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {inFlightCampaigns.map((c) => (
-                    <li
-                      key={c.id}
-                      className="flex flex-wrap items-center gap-2 text-sm"
-                    >
-                      <span className="truncate font-medium">{c.name}</span>
-                      <span
-                        className={`badge badge-sm ${statusBadgeClasses(
-                          campaignStatusTone(c.status)
-                        )}`}
-                      >
-                        {normalizeStatus(c.status)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Link href="/campaigns" className="btn btn-ghost btn-sm mt-2 px-0">
-                All campaigns →
-              </Link>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-box border border-base-300 bg-base-100">
-          <div className="gap-3 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="text-base font-semibold">Usage & limits</h3>
-              <Link href="/usage" className="btn btn-ghost btn-sm">
-                Details
-              </Link>
-            </div>
-            {usageRows.length === 0 ? (
-              <p className="text-sm text-base-content/60">
-                Limits will appear here when your plan exposes quotas.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {usageRows.map((row) => (
-                  <div key={row.title} className="space-y-1">
-                    <div className="flex justify-between text-xs text-base-content/70">
-                      <span>{row.title}</span>
-                      <span className="tabular-nums">
-                        {row.current} / {row.max}
-                      </span>
-                    </div>
-                    <progress
-                      className="progress progress-primary w-full"
-                      value={Math.min(100, Math.round((row.current / row.max) * 100))}
-                      max={100}
-                    />
+      {!isViewer ? (
+        <>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-box border border-base-300 bg-base-100">
+              <div className="gap-3 p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-base font-semibold">Needs attention</h3>
+                  <Link href="/inbox" className="btn btn-primary btn-sm">
+                    Open inbox
+                  </Link>
+                </div>
+                <p className="text-sm text-base-content/70">
+                  {openCount != null ? (
+                    <>
+                      <span className="font-semibold text-base-content">{openCount}</span> open
+                      conversation{openCount === 1 ? "" : "s"}
+                    </>
+                  ) : (
+                    "Conversation stats unavailable."
+                  )}
+                </p>
+                <div className="divider my-0" />
+                <div>
+                  <div className="mb-2 text-xs font-medium uppercase tracking-wide text-base-content/50">
+                    In-flight campaigns
                   </div>
-                ))}
+                  {inFlightCampaigns.length === 0 ? (
+                    <p className="text-sm text-base-content/60">No active or paused campaigns.</p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {inFlightCampaigns.map((c) => (
+                        <li
+                          key={c.id}
+                          className="flex flex-wrap items-center gap-2 text-sm"
+                        >
+                          <span className="truncate font-medium">{c.name}</span>
+                          <span
+                            className={`badge badge-sm ${statusBadgeClasses(
+                              campaignStatusTone(c.status)
+                            )}`}
+                          >
+                            {normalizeStatus(c.status)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Link href="/campaigns" className="btn btn-ghost btn-sm mt-2 px-0">
+                    All campaigns →
+                  </Link>
+                </div>
               </div>
-            )}
-          </div>
-        </div>
-      </div>
+            </div>
 
-      {topCampaigns.length > 0 ? (
-        <div>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-semibold">Top campaigns (period)</h3>
-            <Link href="/campaigns" className="btn btn-ghost btn-xs">
-              Campaigns
+            <div className="rounded-box border border-base-300 bg-base-100">
+              <div className="gap-3 p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-base font-semibold">Usage & limits</h3>
+                  <Link href="/usage" className="btn btn-ghost btn-sm">
+                    Details
+                  </Link>
+                </div>
+                {usageRows.length === 0 ? (
+                  <p className="text-sm text-base-content/60">
+                    Limits will appear here when your plan exposes quotas.
+                  </p>
+                ) : (
+                  <div className="space-y-4">
+                    {usageRows.map((row) => (
+                      <div key={row.title} className="space-y-1">
+                        <div className="flex justify-between text-xs text-base-content/70">
+                          <span>{row.title}</span>
+                          <span className="tabular-nums">
+                            {row.current} / {row.max}
+                          </span>
+                        </div>
+                        <progress
+                          className="progress progress-primary w-full"
+                          value={Math.min(100, Math.round((row.current / row.max) * 100))}
+                          max={100}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {recentCampaigns.length > 0 ? (
+            <div className="rounded-box border border-base-300 bg-base-100">
+              <div className="p-4 sm:p-5">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-base font-semibold">Recent campaigns</h3>
+                  <Link href="/campaigns" className="btn btn-ghost btn-xs">
+                    All campaigns
+                  </Link>
+                </div>
+                <ul className="space-y-3">
+                  {recentCampaigns.map((c) => {
+                    const rTone = campaignStatusTone(c.status);
+                    const latestRun = c.runs?.[0];
+                    const line = campaignRunSummaryLine(rTone, latestRun);
+                    return (
+                      <li key={c.id}>
+                        <Link
+                          href={`/campaigns?id=${c.id}`}
+                          className="group flex items-center justify-between gap-3 rounded-btn px-2 py-1.5 -mx-2 transition hover:bg-base-200"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="text-sm font-medium truncate block group-hover:text-primary transition-colors">
+                              {c.name}
+                            </span>
+                            <span className="text-xs text-base-content/60">
+                              {c.channel ?? "\u2014"}
+                              {line ? ` \u00b7 ${line}` : ""}
+                            </span>
+                          </div>
+                          <span
+                            className={`badge badge-sm shrink-0 ${statusBadgeClasses(rTone)}`}
+                          >
+                            {normalizeStatus(c.status)}
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </div>
+          ) : null}
+
+          {topCampaigns.length > 0 ? (
+            <div>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-base font-semibold">Top campaigns (period)</h3>
+                <Link href="/campaigns" className="btn btn-ghost btn-xs">
+                  Campaigns
+                </Link>
+              </div>
+              <div className="overflow-x-auto rounded-box border border-base-300">
+                <table className="table table-sm">
+                  <thead>
+                    <tr className="border-base-300">
+                      <th>Campaign</th>
+                      <th>Channel</th>
+                      <th className="text-right">Success</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topCampaigns.map((c) => (
+                      <tr key={c.campaignId ?? c.campaignName} className="border-base-300">
+                        <td className="font-medium">{c.campaignName ?? c.campaignId ?? "—"}</td>
+                        <td className="text-base-content/70">{c.channel ?? "—"}</td>
+                        <td className="text-right tabular-nums">
+                          {c.totals?.successRate != null
+                            ? formatPct(c.totals.successRate)
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Link href="/people/contacts" className="btn btn-sm btn-ghost">
+              People
+            </Link>
+            <Link href="/templates" className="btn btn-sm btn-ghost">
+              Templates
+            </Link>
+            <Link href="/settings/integrations" className="btn btn-sm btn-ghost">
+              Integrations
             </Link>
           </div>
-          <div className="overflow-x-auto rounded-box border border-base-300">
-            <table className="table table-sm">
-              <thead>
-                <tr className="border-base-300">
-                  <th>Campaign</th>
-                  <th>Channel</th>
-                  <th className="text-right">Success</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topCampaigns.map((c) => (
-                  <tr key={c.campaignId ?? c.campaignName} className="border-base-300">
-                    <td className="font-medium">{c.campaignName ?? c.campaignId ?? "—"}</td>
-                    <td className="text-base-content/70">{c.channel ?? "—"}</td>
-                    <td className="text-right tabular-nums">
-                      {c.totals?.successRate != null
-                        ? formatPct(c.totals.successRate)
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        </>
       ) : null}
-
-      <div className="flex flex-wrap gap-2">
-        <Link href="/people/contacts" className="btn btn-sm btn-ghost">
-          People
-        </Link>
-        <Link href="/templates" className="btn btn-sm btn-ghost">
-          Templates
-        </Link>
-        <Link href="/settings/integrations" className="btn btn-sm btn-ghost">
-          Integrations
-        </Link>
-      </div>
     </div>
   );
 }

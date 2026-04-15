@@ -116,7 +116,7 @@ export function RichTextEditor({
       {!readOnly && editor && <Toolbar editor={editor} />}
       <EditorContent
         editor={editor}
-        className="prose prose-sm max-w-none p-3 focus:outline-none min-h-[100px]"
+        className="prose prose-sm dark:prose-invert max-w-none p-3 focus:outline-none min-h-[100px]"
       />
     </div>
   );

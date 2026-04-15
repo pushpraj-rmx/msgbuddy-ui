@@ -1,30 +1,33 @@
 import type { ComponentType } from "react";
-import type { SvgIconProps } from "@mui/material/SvgIcon";
-import ArticleRounded from "@mui/icons-material/ArticleRounded";
-import BarChartRounded from "@mui/icons-material/BarChartRounded";
-import ForumRounded from "@mui/icons-material/ForumRounded";
-import GridViewRounded from "@mui/icons-material/GridViewRounded";
-import GroupsRounded from "@mui/icons-material/GroupsRounded";
-import HomeRounded from "@mui/icons-material/HomeRounded";
-import LabelRounded from "@mui/icons-material/LabelRounded";
-import LayersRounded from "@mui/icons-material/LayersRounded";
-import BugReportRounded from "@mui/icons-material/BugReportRounded";
-import NotificationsRounded from "@mui/icons-material/NotificationsRounded";
-import PersonRounded from "@mui/icons-material/PersonRounded";
-import PhotoRounded from "@mui/icons-material/PhotoRounded";
-import RocketLaunchRounded from "@mui/icons-material/RocketLaunchRounded";
-import SettingsRounded from "@mui/icons-material/SettingsRounded";
-import TerminalRounded from "@mui/icons-material/TerminalRounded";
+import type { LucideProps } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  Bug,
+  CreditCard,
+  FileText,
+  Home,
+  Image,
+  Layers,
+  MessageSquare,
+  Rocket,
+  Settings,
+  Tag,
+  Terminal,
+  LayoutGrid,
+  Users,
+  User,
+} from "lucide-react";
 import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
 import {
   canAccessAnalyticsNav,
+  canAccessBillingPage,
   canAccessCampaigns,
   canAccessUsagePage,
   canViewTemplates,
 } from "@/lib/workspace-access";
 
-/** MUI Material Icons, rounded variant (`SvgIcon`) used in nav / dock / sidebar. */
-type NavIcon = ComponentType<SvgIconProps>;
+type NavIcon = ComponentType<LucideProps>;
 
 export type AppNavItem = {
   href: string;
@@ -39,35 +42,41 @@ export function getAppNav(
   workspaceRole?: string,
 ): AppNavItem[] {
   const items: AppNavItem[] = [
-    { href: "/dashboard", label: "Dashboard", Icon: HomeRounded, showInDock: true },
-    { href: "/inbox", label: "Inbox", Icon: ForumRounded, showInDock: true },
+    { href: "/dashboard", label: "Dashboard", Icon: Home, showInDock: true },
+    { href: "/inbox", label: "Inbox", Icon: MessageSquare, showInDock: true },
     {
       href: "/people/contacts",
       label: "People",
-      Icon: GroupsRounded,
+      Icon: Users,
       showInDock: true,
       children: [
-        { href: "/people/contacts", label: "Contacts", Icon: PersonRounded },
-        { href: "/people/tags", label: "Tags", Icon: LabelRounded },
-        { href: "/people/segments", label: "Segments", Icon: GridViewRounded },
+        { href: "/people/contacts", label: "Contacts", Icon: User },
+        { href: "/people/tags", label: "Tags", Icon: Tag },
+        { href: "/people/segments", label: "Segments", Icon: LayoutGrid },
       ],
     },
-    { href: "/campaigns", label: "Campaigns", Icon: RocketLaunchRounded },
-    { href: "/templates", label: "Templates", Icon: ArticleRounded },
-    { href: "/media", label: "Media", Icon: PhotoRounded },
-    { href: "/analytics", label: "Analytics", Icon: BarChartRounded },
-    { href: "/notifications", label: "Notifications", Icon: NotificationsRounded },
-    { href: "/feedback", label: "Feedback", Icon: BugReportRounded },
-    { href: "/usage", label: "Usage", Icon: LayersRounded },
-    { href: "/settings", label: "Settings", Icon: SettingsRounded, showInDock: true },
+    { href: "/campaigns", label: "Campaigns", Icon: Rocket },
+    { href: "/templates", label: "Templates", Icon: FileText },
+    { href: "/media", label: "Media", Icon: Image },
+    { href: "/analytics", label: "Analytics", Icon: BarChart3 },
+    { href: "/notifications", label: "Notifications", Icon: Bell },
+    { href: "/feedback", label: "Feedback", Icon: Bug },
+    { href: "/usage", label: "Usage", Icon: Layers },
+    { href: "/billing", label: "Billing", Icon: CreditCard },
+    {
+      href: "/settings",
+      label: "Settings",
+      Icon: Settings,
+      showInDock: true,
+    },
   ];
 
   if (canAccessPlatform(platformRole)) {
-    items.push({ href: "/platform", label: "Platform", Icon: TerminalRounded });
-    items.push({ href: "/ops", label: "Ops", Icon: TerminalRounded });
+    items.push({ href: "/platform", label: "Platform", Icon: Terminal });
+    items.push({ href: "/ops", label: "Ops", Icon: Terminal });
   }
   if (isSuperAdmin(platformRole)) {
-    items.push({ href: "/onboarding", label: "Onboarding", Icon: TerminalRounded });
+    items.push({ href: "/onboarding", label: "Onboarding", Icon: Terminal });
   }
 
   const wr = workspaceRole;
@@ -77,6 +86,7 @@ export function getAppNav(
       if (item.href === "/templates" && !canViewTemplates(wr)) return false;
       if (item.href === "/analytics" && !canAccessAnalyticsNav(wr)) return false;
       if (item.href === "/usage" && !canAccessUsagePage(wr)) return false;
+      if (item.href === "/billing" && !canAccessBillingPage(wr)) return false;
       return true;
     });
   }
@@ -109,6 +119,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/onboarding")) return "Onboarding";
   if (pathname.startsWith("/notifications")) return "Notifications";
   if (pathname.startsWith("/feedback")) return "Feedback";
+  if (pathname.startsWith("/billing")) return "Billing";
   if (pathname.startsWith("/usage")) return "Usage";
   return "MsgBuddy";
 }

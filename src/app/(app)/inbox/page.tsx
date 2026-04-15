@@ -12,7 +12,7 @@ export default async function InboxPage() {
   );
 
   return (
-    <PageContainer className="flex min-h-0 flex-1 flex-col overflow-hidden !space-y-0">
+    <PageContainer className="flex min-h-0 flex-1 flex-col overflow-hidden !gap-0">
       <PageHeader
         title="Inbox"
         description="Manage conversations and reply in real-time."
@@ -22,6 +22,7 @@ export default async function InboxPage() {
         initialConversations={initialConversations}
         workspaceId={me.workspace.id}
         currentUserId={me.user.id}
+        meRole={String(me.role)}
       />
     </PageContainer>
   );

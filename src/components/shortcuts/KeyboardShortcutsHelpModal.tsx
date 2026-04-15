@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import CloseRounded from "@mui/icons-material/CloseRounded";
+import { X } from "lucide-react";
 import { KEYBOARD_SHORTCUTS_CATALOG } from "@/lib/shortcuts";
 
 export function KeyboardShortcutsHelpModal({
@@ -48,7 +48,7 @@ export function KeyboardShortcutsHelpModal({
               className="btn btn-ghost btn-sm btn-square"
               aria-label="Close"
             >
-              <CloseRounded className="h-5 w-5" />
+              <X className="h-5 w-5" />
             </button>
           </form>
         </div>

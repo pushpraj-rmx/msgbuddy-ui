@@ -9,6 +9,7 @@ import {
 import { useState } from "react";
 import { contactsApi, tagsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { ContactFormModal } from "./ContactFormModal";
 import { CustomFieldsSection } from "./CustomFieldsSection";
@@ -21,13 +22,17 @@ const TAGS_QUERY_KEY = ["tags"] as const;
 export function ContactDetailClient({
   initialContact,
   currentUserId,
+  meRole,
 }: {
   initialContact: Contact;
   currentUserId?: string;
+  meRole: string;
 }) {
   const [activeTab, setActiveTab] = useState<"details" | "tags" | "notes" | "activity">("details");
   const [editing, setEditing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const canEditContact = roleHasWorkspacePermission(meRole, "contacts.create");
+  const canDeleteContact = roleHasWorkspacePermission(meRole, "contacts.delete");
 
   const queryClient = useQueryClient();
   const { data: contact = initialContact, refetch } = useQuery({
@@ -130,6 +135,7 @@ export function ContactDetailClient({
                 type="checkbox"
                 className="toggle toggle-warning toggle-sm"
                 checked={contact.isBlocked}
+                disabled={!canEditContact}
                 onChange={(e) =>
                   consentMutation.mutate({
                     isBlocked: e.target.checked,
@@ -144,6 +150,7 @@ export function ContactDetailClient({
                 type="checkbox"
                 className="toggle toggle-error toggle-sm"
                 checked={contact.isOptedOut}
+                disabled={!canEditContact}
                 onChange={(e) =>
                   consentMutation.mutate({
                     isBlocked: contact.isBlocked,
@@ -152,20 +159,24 @@ export function ContactDetailClient({
                 }
               />
             </label>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setEditing(true)}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm text-error"
-              onClick={() => setDeleteConfirm(true)}
-            >
-              Delete
-            </button>
+            {canEditContact ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setEditing(true)}
+              >
+                Edit
+              </button>
+            ) : null}
+            {canDeleteContact ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm text-error"
+                onClick={() => setDeleteConfirm(true)}
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -221,12 +232,24 @@ export function ContactDetailClient({
             <h2 className="text-sm font-semibold text-base-content/70 mb-2">
               Tags
             </h2>
-            <TagsPicker
-              tags={tags}
-              allTags={allTags}
-              onAssign={(tagIds) => assignTagsMutation.mutate(tagIds)}
-              onRemove={(tagIds) => removeTagsMutation.mutate(tagIds)}
-            />
+            {canEditContact ? (
+              <TagsPicker
+                tags={tags}
+                allTags={allTags}
+                onAssign={(tagIds) => assignTagsMutation.mutate(tagIds)}
+                onRemove={(tagIds) => removeTagsMutation.mutate(tagIds)}
+              />
+            ) : tags.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag) => (
+                  <span key={tag.id} className="badge badge-outline">
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-base-content/60">No tags assigned.</p>
+            )}
           </div>
         )}
         {activeTab === "notes" && (
@@ -268,7 +291,7 @@ export function ContactDetailClient({
         />
       )}
 
-      {deleteConfirm && (
+      {canDeleteContact && deleteConfirm && (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
             <h3 className="text-lg font-semibold">Delete contact</h3>

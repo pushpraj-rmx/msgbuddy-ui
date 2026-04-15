@@ -1,21 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  Box,
-  CircularProgress,
-  Dialog,
-  DialogContent,
-  Divider,
-  IconButton,
-  ImageList,
-  ImageListItem,
-  Tooltip,
-  Typography,
-} from "@mui/material";
-import CloseIcon from "@mui/icons-material/Close";
-import AudioFileIcon from "@mui/icons-material/AudioFile";
-import DescriptionIcon from "@mui/icons-material/Description";
+import { X, FileAudio, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { conversationsApi } from "../../lib/api";
 import type { MediaItem } from "../../lib/messaging";
@@ -46,56 +32,40 @@ function MediaThumbnail({
 
   if (isVisual) {
     return (
-      <Box
+      <button
+        type="button"
         onClick={onClick}
-        sx={{
-          width: "100%",
-          aspectRatio: "1",
-          cursor: "pointer",
-          overflow: "hidden",
-          borderRadius: 1,
-          bgcolor: "action.hover",
-          "&:hover img": { opacity: 0.85 },
-        }}
+        className="aspect-square w-full cursor-pointer overflow-hidden rounded-lg bg-base-200 hover:opacity-85"
       >
-        <Box
-          component="img"
+        <img
           src={item.mediaUrl ?? ""}
           alt=""
-          sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          className="h-full w-full object-cover"
         />
-      </Box>
+      </button>
     );
   }
 
   // Audio or document — show icon row
   const isAudio = mime.startsWith("audio/");
   return (
-    <Box
+    <button
+      type="button"
       onClick={onClick}
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-        p: 1,
-        borderRadius: 1,
-        bgcolor: "action.hover",
-        cursor: "pointer",
-        "&:hover": { bgcolor: "action.selected" },
-      }}
+      className="flex items-center gap-2 rounded-lg bg-base-200 p-2 text-left hover:bg-base-300"
     >
       {isAudio ? (
-        <AudioFileIcon color="primary" />
+        <FileAudio className="h-5 w-5 shrink-0 text-primary" />
       ) : (
-        <DescriptionIcon color="action" />
+        <FileText className="h-5 w-5 shrink-0 text-base-content/60" />
       )}
-      <Typography variant="caption" noWrap sx={{ flex: 1 }}>
+      <span className="flex-1 truncate text-xs text-base-content/70">
         {isAudio ? "Audio" : "Document"}
         {item.mediaSize
           ? ` · ${(item.mediaSize / 1024).toFixed(0)} KB`
           : ""}
-      </Typography>
-    </Box>
+      </span>
+    </button>
   );
 }
 
@@ -110,9 +80,9 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
 
   if (isLoading) {
     return (
-      <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-        <CircularProgress size={24} />
-      </Box>
+      <div className="flex justify-center py-4">
+        <span className="loading loading-spinner loading-sm" />
+      </div>
     );
   }
 
@@ -120,47 +90,37 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
 
   if (items.length === 0) {
     return (
-      <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: "center" }}>
+      <p className="p-2 text-center text-sm text-base-content/60">
         No shared media yet.
-      </Typography>
+      </p>
     );
-  }
-
-  // Group by month
-  const groups = new Map<string, MediaItem[]>();
-  for (const item of items) {
-    const key = getMonthKey(item.createdAt);
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(item);
   }
 
   const visualItems = items.filter((i) => isImageOrVideo(i.mediaMimeType));
   const otherItems = items.filter((i) => !isImageOrVideo(i.mediaMimeType));
 
   return (
-    <Box sx={{ px: 1, pb: 2 }}>
+    <div className="px-1 pb-2">
       {visualItems.length > 0 && (
         <>
-          <Typography variant="caption" color="text.secondary" sx={{ px: 1, display: "block", mb: 0.5 }}>
+          <span className="mb-1 block px-1 text-xs text-base-content/60">
             Photos &amp; Videos
-          </Typography>
-          <ImageList cols={3} gap={4} sx={{ mt: 0 }}>
+          </span>
+          <div className="grid grid-cols-3 gap-1">
             {visualItems.map((item) => (
-              <ImageListItem key={item.id}>
-                <MediaThumbnail item={item} onClick={() => setLightbox(item)} />
-              </ImageListItem>
+              <MediaThumbnail key={item.id} item={item} onClick={() => setLightbox(item)} />
             ))}
-          </ImageList>
+          </div>
         </>
       )}
 
       {otherItems.length > 0 && (
         <>
-          {visualItems.length > 0 && <Divider sx={{ my: 1 }} />}
-          <Typography variant="caption" color="text.secondary" sx={{ px: 1, display: "block", mb: 0.5 }}>
+          {visualItems.length > 0 && <div className="divider my-1" />}
+          <span className="mb-1 block px-1 text-xs text-base-content/60">
             Documents &amp; Audio
-          </Typography>
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+          </span>
+          <div className="flex flex-col gap-1">
             {otherItems.map((item) => (
               <MediaThumbnail
                 key={item.id}
@@ -170,44 +130,42 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
                 }}
               />
             ))}
-          </Box>
+          </div>
         </>
       )}
 
       {/* Lightbox */}
-      <Dialog
-        open={!!lightbox}
-        onClose={() => setLightbox(null)}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{ sx: { bgcolor: "grey.900" } }}
-      >
-        <DialogContent sx={{ p: 0, position: "relative" }}>
-          <Tooltip title="Close">
-            <IconButton
-              onClick={() => setLightbox(null)}
-              sx={{ position: "absolute", top: 8, right: 8, zIndex: 1, color: "common.white" }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </Tooltip>
-          {lightbox?.mediaMimeType?.startsWith("video/") ? (
-            <Box
-              component="video"
-              src={lightbox.mediaUrl ?? ""}
-              controls
-              sx={{ width: "100%", maxHeight: "80vh", display: "block" }}
-            />
-          ) : (
-            <Box
-              component="img"
-              src={lightbox?.mediaUrl ?? ""}
-              alt=""
-              sx={{ width: "100%", maxHeight: "80vh", objectFit: "contain", display: "block" }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-    </Box>
+      <dialog className={`modal ${lightbox ? "modal-open" : ""}`}>
+        <div className="modal-box max-w-3xl bg-neutral p-0">
+          <div className="relative">
+            <div className="tooltip tooltip-left absolute right-2 top-2 z-10" data-tip="Close">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-circle text-white"
+                onClick={() => setLightbox(null)}
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            {lightbox?.mediaMimeType?.startsWith("video/") ? (
+              <video
+                src={lightbox.mediaUrl ?? ""}
+                controls
+                className="block max-h-[80vh] w-full"
+              />
+            ) : (
+              <img
+                src={lightbox?.mediaUrl ?? ""}
+                alt=""
+                className="block max-h-[80vh] w-full object-contain"
+              />
+            )}
+          </div>
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button type="button" onClick={() => setLightbox(null)}>close</button>
+        </form>
+      </dialog>
+    </div>
   );
 }

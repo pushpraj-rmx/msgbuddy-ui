@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-/** Matches Tailwind `xl` (1280px). */
-export const XL_MEDIA_QUERY = "(min-width: 1280px)" as const;
+/** Matches Tailwind `lg` (1024px). Used for the details pane and related layout. */
+export const LG_MEDIA_QUERY = "(min-width: 1024px)" as const;
 
 /**
  * Subscribes to `matchMedia`. Initial state is `false` until mount so SSR and

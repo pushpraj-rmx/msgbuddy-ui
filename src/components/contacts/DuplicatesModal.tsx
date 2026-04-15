@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { contactsApi } from "@/lib/api";
+import { getApiError } from "@/lib/api-error";
 import type { Contact, DuplicateGroup } from "@/lib/types";
 
 export function DuplicatesModal({
@@ -14,6 +15,7 @@ export function DuplicatesModal({
 }) {
   const [mergeGroup, setMergeGroup] = useState<DuplicateGroup | null>(null);
   const [primaryId, setPrimaryId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data, isFetching, refetch } = useQuery({
     queryKey: ["contacts", "duplicates"],
@@ -28,8 +30,10 @@ export function DuplicatesModal({
       onMerged();
       setMergeGroup(null);
       setPrimaryId(null);
+      setError(null);
       refetch();
     },
+    onError: (err) => setError(getApiError(err)),
   });
 
   const mergeAllMutation = useMutation({
@@ -42,8 +46,10 @@ export function DuplicatesModal({
       onMerged();
       setMergeGroup(null);
       setPrimaryId(null);
+      setError(null);
       refetch();
     },
+    onError: (err) => setError(getApiError(err)),
   });
 
   const groups = data?.duplicateGroups ?? [];
@@ -101,6 +107,63 @@ export function DuplicatesModal({
                 </label>
               ))}
             </div>
+            {primaryId && (() => {
+              const primary = mergeGroup.contacts.find((c) => c.id === primaryId);
+              const duplicate = mergeGroup.contacts.find((c) => c.id !== primaryId);
+              if (!primary || !duplicate) return null;
+              const fields: { label: string; key: keyof Contact }[] = [
+                { label: "Name", key: "name" },
+                { label: "Phone", key: "phone" },
+                { label: "Email", key: "email" },
+                { label: "Phone label", key: "phoneLabel" },
+                { label: "Email label", key: "emailLabel" },
+                { label: "Designation", key: "designation" },
+              ];
+              const diffFields = fields.filter(
+                (f) => (primary[f.key] ?? "") !== (duplicate[f.key] ?? "")
+              );
+              if (diffFields.length === 0) return null;
+              return (
+                <div className="rounded-box border border-base-300 bg-base-200 p-3">
+                  <p className="text-xs font-medium text-base-content/70 mb-2">
+                    Merge preview — fields that differ:
+                  </p>
+                  <table className="table table-xs w-full">
+                    <thead>
+                      <tr>
+                        <th>Field</th>
+                        <th>Keep (primary)</th>
+                        <th>Lose (duplicate)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {diffFields.map((f) => (
+                        <tr key={f.key}>
+                          <td className="text-xs font-medium">{f.label}</td>
+                          <td className="text-xs">{String(primary[f.key] ?? "—")}</td>
+                          <td className="text-xs text-base-content/40 line-through">
+                            {String(duplicate[f.key] ?? "—")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+            {error && (
+              <div role="alert" className="alert alert-error alert-dash text-sm">
+                <span>{error}</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setError(null)}
+                  aria-label="Dismiss"
+                >
+                  ×
+                </button>
+              </div>
+            )}
             <div className="modal-action mt-4">
               <button
                 type="button"
@@ -108,6 +171,7 @@ export function DuplicatesModal({
                 onClick={() => {
                   setMergeGroup(null);
                   setPrimaryId(null);
+                  setError(null);
                 }}
                 disabled={mergeMutation.isPending || mergeAllMutation.isPending}
               >

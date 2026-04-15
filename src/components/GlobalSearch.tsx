@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import SearchRounded from "@mui/icons-material/SearchRounded";
+import { Search } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { contactsApi, conversationsApi } from "@/lib/api";
 import { SHORTCUT_EVENTS } from "@/lib/shortcuts";
@@ -98,7 +98,7 @@ export function GlobalSearch({
   return (
     <div ref={containerRef} className="relative w-full max-w-xl">
       <label className="input input-bordered flex h-12 w-full items-center gap-2 rounded-full border-base-300 bg-base-200/60 text-sm transition-colors focus-within:border-primary/40 focus-within:bg-base-100 ">
-        <SearchRounded className="h-4 w-4 shrink-0 text-base-content/40" />
+        <Search className="h-4 w-4 shrink-0 text-base-content/40" />
         <input
           ref={inputRef}
           id={inputId}

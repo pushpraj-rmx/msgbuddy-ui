@@ -10,7 +10,11 @@ import { SegmentPreviewModal } from "./SegmentPreviewModal";
 
 const SEGMENTS_QUERY_KEY = ["segments"] as const;
 
-export function SegmentsPageClient() {
+export function SegmentsPageClient({
+  canManageSegments,
+}: {
+  canManageSegments: boolean;
+}) {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSegment, setEditingSegment] = useState<Segment | null>(null);
@@ -80,30 +84,36 @@ export function SegmentsPageClient() {
             Saved filters to quickly view a subset of contacts on the Contacts page.
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => {
-            setEditingSegment(null);
-            setModalOpen(true);
-          }}
-        >
-          + New segment
-        </button>
+        {canManageSegments ? (
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              setEditingSegment(null);
+              setModalOpen(true);
+            }}
+          >
+            + New segment
+          </button>
+        ) : null}
       </div>
 
       {segments.length === 0 && !modalOpen && (
         <div className="rounded-box border border-base-300 bg-base-200 p-8 text-center">
           <p className="text-sm text-base-content/70">
-            No segments yet. Create a segment to filter contacts by tags, email, blocked/opted-out, or last message date.
+            {canManageSegments
+              ? "No segments yet. Create a segment to filter contacts by tags, email, blocked/opted-out, or last message date."
+              : "No segments available yet."}
           </p>
-          <button
-            type="button"
-            className="btn btn-primary mt-4"
-            onClick={() => setModalOpen(true)}
-          >
-            Create your first segment
-          </button>
+          {canManageSegments ? (
+            <button
+              type="button"
+              className="btn btn-primary mt-4"
+              onClick={() => setModalOpen(true)}
+            >
+              Create your first segment
+            </button>
+          ) : null}
         </div>
       )}
 
@@ -115,7 +125,7 @@ export function SegmentsPageClient() {
                 <th>Name</th>
                 <th>Description</th>
                 <th>Contacts</th>
-                <th className="w-0">Actions</th>
+                <th className="w-0">{canManageSegments ? "Actions" : ""}</th>
               </tr>
             </thead>
             <tbody>
@@ -149,26 +159,30 @@ export function SegmentsPageClient() {
                       >
                         Preview
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => {
-                          setEditingSegment(seg);
-                          setModalOpen(true);
-                        }}
-                        aria-label={`Edit ${seg.name}`}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm text-error"
-                        onClick={() => handleDelete(seg)}
-                        aria-label={`Delete ${seg.name}`}
-                        disabled={deleteMutation.isPending}
-                      >
-                        Delete
-                      </button>
+                      {canManageSegments ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            setEditingSegment(seg);
+                            setModalOpen(true);
+                          }}
+                          aria-label={`Edit ${seg.name}`}
+                        >
+                          Edit
+                        </button>
+                      ) : null}
+                      {canManageSegments ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm text-error"
+                          onClick={() => handleDelete(seg)}
+                          aria-label={`Delete ${seg.name}`}
+                          disabled={deleteMutation.isPending}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -178,7 +192,7 @@ export function SegmentsPageClient() {
         </div>
       )}
 
-      {(modalOpen || editingSegment) && (
+      {canManageSegments && (modalOpen || editingSegment) && (
         <SegmentFormModal
           segment={editingSegment}
           onClose={() => {

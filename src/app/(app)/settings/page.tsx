@@ -9,6 +9,7 @@ import type {
 import type {
   LoginHistoryEvent,
   MeResponse,
+  WhatsAppConnectionSummary,
   WorkspaceCloudApiConfigResponse,
 } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
@@ -27,6 +28,14 @@ async function getCloudApiSafe(
   }
 }
 
+async function getWhatsAppConnectionSafe(): Promise<WhatsAppConnectionSummary | null> {
+  try {
+    return await serverFetch<WhatsAppConnectionSummary>(endpoints.whatsapp.connection);
+  } catch {
+    return null;
+  }
+}
+
 export default async function SettingsPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
   const canSettings = roleHasWorkspacePermission(me.role, "settings.manage");
@@ -36,7 +45,7 @@ export default async function SettingsPage() {
     endpoints.workspaces.byId(me.workspace.id)
   );
 
-  const [settings, members, cloudApiConfig, loginHistory] = await Promise.all([
+  const [settings, members, cloudApiConfig, whatsappConnection, loginHistory] = await Promise.all([
     canSettings
       ? serverFetch<WorkspaceSettings>(
           endpoints.workspaces.settings(me.workspace.id)
@@ -49,6 +58,7 @@ export default async function SettingsPage() {
       ? serverFetch<Member[]>(endpoints.workspaces.members(me.workspace.id))
       : Promise.resolve<Member[]>([]),
     canSettings ? getCloudApiSafe(me.workspace.id) : Promise.resolve(null),
+    canSettings ? getWhatsAppConnectionSafe() : Promise.resolve(null),
     serverFetch<LoginHistoryEvent[]>(`${endpoints.auth.loginHistory}?limit=50`).catch(
       () => [] as LoginHistoryEvent[]
     ),
@@ -65,7 +75,9 @@ export default async function SettingsPage() {
         settings={settings}
         members={members}
         cloudApiConfig={cloudApiConfig}
+        whatsappConnection={whatsappConnection}
         meRole={me.role}
+        meUserId={me.user.id}
         accountEmail={me.user.email}
         accountName={me.user.name}
         accountAvatarUrl={me.user.avatarUrl}

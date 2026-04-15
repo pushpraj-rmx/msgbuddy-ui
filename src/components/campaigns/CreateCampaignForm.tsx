@@ -79,6 +79,8 @@ export function CreateCampaignForm({
   const [bindingFieldError, setBindingFieldError] = useState<string | null>(
     null
   );
+  const [chunkSize, setChunkSize] = useState<string>("");
+  const [throttlePerMin, setThrottlePerMin] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -242,6 +244,16 @@ export function CreateCampaignForm({
       setError("Upload required template media (header or carousel cards) before creating.");
       return;
     }
+    const parsedChunkSize = chunkSize.trim() ? Number(chunkSize) : undefined;
+    const parsedThrottlePerMin = throttlePerMin.trim() ? Number(throttlePerMin) : undefined;
+    if (parsedChunkSize !== undefined && (isNaN(parsedChunkSize) || parsedChunkSize < 10)) {
+      setError("Chunk size must be at least 10.");
+      return;
+    }
+    if (parsedThrottlePerMin !== undefined && (isNaN(parsedThrottlePerMin) || parsedThrottlePerMin < 1)) {
+      setError("Throttle (messages/min) must be at least 1.");
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -276,6 +288,8 @@ export function CreateCampaignForm({
         contactIds:
           audienceType === "SPECIFIC" ? selectedContacts : undefined,
         ...(audienceQuery != null ? { audienceQuery } : {}),
+        ...(parsedChunkSize !== undefined ? { chunkSize: parsedChunkSize } : {}),
+        ...(parsedThrottlePerMin !== undefined ? { throttlePerMin: parsedThrottlePerMin } : {}),
       })) as { id: string };
       router.push(`/campaigns?id=${encodeURIComponent(created.id)}`);
       router.refresh();
@@ -353,7 +367,7 @@ export function CreateCampaignForm({
               {templates.length === 0 && (
                 <p className="text-sm text-base-content/60">
                   Only templates with a live WhatsApp-approved version appear
-                  here. Submit and approve a version under Templates, then try
+                  here. Submit & approve a version under Templates, then try
                   again.
                 </p>
               )}
@@ -652,6 +666,40 @@ export function CreateCampaignForm({
                   )}
                 </div>
               ) : null}
+            </div>
+          )}
+
+          {/* Advanced delivery settings (visible on step 3) */}
+          {step === 3 && (
+            <div className="mt-4 space-y-3 rounded-box border border-base-300 bg-base-200/30 p-4">
+              <p className="text-sm font-medium text-base-content/70">Advanced delivery settings (optional)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <label className="form-control">
+                  <span className="label-text text-xs">Chunk size (min 10)</span>
+                  <input
+                    type="number"
+                    className="input input-bordered input-sm"
+                    placeholder="100"
+                    min={10}
+                    value={chunkSize}
+                    onChange={(e) => setChunkSize(e.target.value)}
+                  />
+                </label>
+                <label className="form-control">
+                  <span className="label-text text-xs">Throttle (msgs/min, min 1)</span>
+                  <input
+                    type="number"
+                    className="input input-bordered input-sm"
+                    placeholder="60"
+                    min={1}
+                    value={throttlePerMin}
+                    onChange={(e) => setThrottlePerMin(e.target.value)}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-base-content/50">
+                Leave blank to use defaults (chunk: 100, throttle: 60/min).
+              </p>
             </div>
           )}
           </div>

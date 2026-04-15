@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter, Manrope } from "next/font/google";
 import "./globals.css";
-import { MuiThemeProvider } from "@/providers/MuiThemeProvider";
+
 import { QueryProvider } from "@/providers/QueryProvider";
 import { getAppOrigin } from "@/lib/site";
 
@@ -53,7 +53,7 @@ export default function RootLayout({
         className={`${inter.variable} ${manrope.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <QueryProvider>
-          <MuiThemeProvider>{children}</MuiThemeProvider>
+          {children}
         </QueryProvider>
       </body>
     </html>

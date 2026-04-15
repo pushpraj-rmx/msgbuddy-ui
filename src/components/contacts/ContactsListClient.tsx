@@ -8,12 +8,13 @@ import {
 } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import VisibilityRounded from "@mui/icons-material/VisibilityRounded";
+import { Eye } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
+import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { contactsApi, type ContactsListSort, tagsApi } from "@/lib/api";
-import { getApiError } from "@/lib/api-error";
+import { getApiError, getApiErrorStatus, getApiErrorData } from "@/lib/api-error";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 import {
   isContactBulkUpdated,
   isContactUpdated,
@@ -105,16 +106,18 @@ export function ContactsListClient({
   initialNextCursor,
   initialTotalCount,
   selectedSegmentId,
+  meRole,
 }: {
   workspaceId: string;
   initialContacts: Contact[];
   initialNextCursor?: string;
   initialTotalCount?: number;
   selectedSegmentId?: string | null;
+  meRole: string;
 }) {
   const { setContent: setRightPanelContent, clearContent: clearRightPanelContent } =
     useRightPanel();
-  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
+  const isLgUp = useMediaQuery(LG_MEDIA_QUERY);
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState("");
   const [displayPageIndex, setDisplayPageIndex] = useState(0);
@@ -139,10 +142,22 @@ export function ContactsListClient({
   const [bulkTagSelectedId, setBulkTagSelectedId] = useState<string | null>(
     null
   );
+  const [conflictContact, setConflictContact] = useState<{
+    id: string;
+    phone: string;
+    name?: string | null;
+    email?: string | null;
+  } | null>(null);
   const [bulkSseNotice, setBulkSseNotice] = useState<{
     imported: number;
     failed: number;
   } | null>(null);
+  const canCreateContacts = roleHasWorkspacePermission(meRole, "contacts.create");
+  const canImportContacts = roleHasWorkspacePermission(meRole, "contacts.import");
+  const canExportContacts = roleHasWorkspacePermission(meRole, "contacts.export");
+  const canManageTags = roleHasWorkspacePermission(meRole, "contacts.create");
+  const canFindDuplicates = roleHasWorkspacePermission(meRole, "contacts.create");
+  const canDeleteContacts = roleHasWorkspacePermission(meRole, "contacts.delete");
 
   const debouncedSearch = useDebouncedValue(searchInput, 300);
   const segmentId = selectedSegmentId ?? null;
@@ -256,11 +271,13 @@ export function ContactsListClient({
     setRightPanelContent({
       source: "contacts",
       title: "Contact",
-      openAfter: isXlUp,
+      openAfter: isLgUp,
       content: (
         <ContactDetailPanelContent
           contactId={selectedContactId}
           initialContact={selectedContactRow as Contact}
+          canEdit={canCreateContacts}
+          canDelete={canDeleteContacts}
           onEdit={(contact) => {
             setEditing(contact);
             setSelectedContactId(null);
@@ -278,7 +295,7 @@ export function ContactsListClient({
     selectedContactId,
     selectedContactRow,
     setRightPanelContent,
-    isXlUp,
+    isLgUp,
   ]);
 
   useEffect(() => {
@@ -286,21 +303,28 @@ export function ContactsListClient({
   }, [clearRightPanelContent]);
 
   const createMutation = useMutation({
-    mutationFn: (payload: {
-      phone: string;
-      phoneLabel?: string;
-      name?: string;
-      designation?: string;
-      email?: string;
-      emailLabel?: string;
-    }) => contactsApi.create(payload),
+    mutationFn: (payload: Parameters<typeof contactsApi.create>[0]) =>
+      contactsApi.create(payload),
     onSuccess: () => {
       invalidateContacts();
       invalidateSegmentPreview();
       setCreating(false);
       setError(null);
+      setConflictContact(null);
     },
-    onError: (err) => setError(getApiError(err)),
+    onError: (err) => {
+      const status = getApiErrorStatus(err);
+      const data = getApiErrorData(err) as {
+        existingContact?: { id: string; phone: string; name?: string | null; email?: string | null };
+      } | undefined;
+      if (status === 409 && data?.existingContact) {
+        setConflictContact(data.existingContact);
+        setError(null);
+      } else {
+        setConflictContact(null);
+        setError(getApiError(err));
+      }
+    },
   });
 
   const updateMutation = useMutation({
@@ -483,6 +507,7 @@ export function ContactsListClient({
     phone?: string;
     phoneLabel?: string;
     name?: string;
+    designation?: string;
     email?: string;
     emailLabel?: string;
   }) => {
@@ -492,6 +517,7 @@ export function ContactsListClient({
       phone,
       phoneLabel: payload.phoneLabel,
       name: payload.name,
+      designation: payload.designation,
       email: payload.email,
       emailLabel: payload.emailLabel,
     });
@@ -501,6 +527,7 @@ export function ContactsListClient({
     id: string,
     payload: {
       name?: string;
+      designation?: string;
       email?: string;
       phoneLabel?: string;
       emailLabel?: string;
@@ -711,34 +738,40 @@ export function ContactsListClient({
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setImporting(true)}
-          >
-            Import
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={handleExport}
-            disabled={exporting}
-          >
-            {exporting ? (
-              <span className="loading loading-spinner loading-sm" />
-            ) : (
-              selectedContactIds.size > 0
-                ? `Export selected (${selectedContactIds.size})`
-                : "Export"
-            )}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setDuplicatesOpen(true)}
-          >
-            Find duplicates
-          </button>
+          {canImportContacts ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setImporting(true)}
+            >
+              Import
+            </button>
+          ) : null}
+          {canExportContacts ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={handleExport}
+              disabled={exporting}
+            >
+              {exporting ? (
+                <span className="loading loading-spinner loading-sm" />
+              ) : selectedContactIds.size > 0 ? (
+                `Export selected (${selectedContactIds.size})`
+              ) : (
+                "Export"
+              )}
+            </button>
+          ) : null}
+          {canFindDuplicates ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setDuplicatesOpen(true)}
+            >
+              Find duplicates
+            </button>
+          ) : null}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -761,29 +794,32 @@ export function ContactsListClient({
               >
                 Add tag to {selectedContactIds.size} selected
               </button>
-              <button
-                type="button"
-                className="btn btn-outline btn-sm text-error border-error/40 hover:border-error"
-                onClick={() => setBulkDeleteOpen(true)}
-                disabled={bulkDeleteMutation.isPending}
-              >
-                Delete selected ({selectedContactIds.size})
-              </button>
+              {canDeleteContacts ? (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm text-error border-error/40 hover:border-error"
+                  onClick={() => setBulkDeleteOpen(true)}
+                  disabled={bulkDeleteMutation.isPending}
+                >
+                  Delete selected ({selectedContactIds.size})
+                </button>
+              ) : null}
             </>
           )}
-          <Link
-            href="/people/tags"
-            className="btn btn-ghost btn-sm"
-          >
-            Manage tags
-          </Link>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => setCreating(true)}
-          >
-            Add Person
-          </button>
+          {canManageTags ? (
+            <Link href="/people/tags" className="btn btn-ghost btn-sm">
+              Manage tags
+            </Link>
+          ) : null}
+          {canCreateContacts ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setCreating(true)}
+            >
+              Add Person
+            </button>
+          ) : null}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
           <select
@@ -843,6 +879,56 @@ export function ContactsListClient({
         </div>
       )}
 
+      {conflictContact && (
+        <div role="alert" className="alert alert-warning alert-dash">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <span>
+            A contact with this phone already exists
+            {conflictContact.name ? `: ${conflictContact.name}` : ""}
+            {" "}({conflictContact.phone})
+          </span>
+          <div className="flex gap-1">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setCreating(false);
+                setConflictContact(null);
+                setSelectedContactId(conflictContact.id);
+                const found = allLoadedContacts.find(
+                  (c) => c.id === conflictContact.id
+                );
+                if (found) setSelectedContactRow(found);
+              }}
+            >
+              View contact
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setConflictContact(null)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {!loadingList && sorted.length === 0 && (
         <div className="rounded-box border border-base-300 bg-base-200 p-8 text-center">
           <p className="text-sm text-base-content/70">
@@ -852,15 +938,17 @@ export function ContactsListClient({
                 ? "No contacts in this segment. Try another list or add contacts."
                 : "No contacts yet. Add your first contact to get started."}
           </p>
-          <div className="mt-4 flex justify-center">
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setCreating(true)}
-            >
-              Add your first contact
-            </button>
-          </div>
+          {canCreateContacts ? (
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setCreating(true)}
+              >
+                Add your first contact
+              </button>
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -1078,7 +1166,7 @@ export function ContactsListClient({
                           aria-label="Quick view"
                           title="Quick view"
                         >
-                          <VisibilityRounded className="h-4 w-4" />
+                          <Eye className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
@@ -1103,6 +1191,13 @@ export function ContactsListClient({
           title="Create contact"
           onClose={() => setCreating(false)}
           onSave={handleCreate}
+          onViewExisting={(contactId) => {
+            setCreating(false);
+            setConflictContact(null);
+            setSelectedContactId(contactId);
+            const found = allLoadedContacts.find((c) => c.id === contactId);
+            if (found) setSelectedContactRow(found);
+          }}
         />
       )}
 
@@ -1235,7 +1330,7 @@ export function ContactsListClient({
         </dialog>
       )}
 
-      {bulkDeleteOpen && (
+      {canDeleteContacts && bulkDeleteOpen && (
         <dialog open className="modal modal-middle">
           <div className="modal-box">
             <h3 className="text-lg font-semibold">Delete selected contacts</h3>

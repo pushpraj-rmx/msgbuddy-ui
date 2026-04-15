@@ -1,10 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import GroupsRounded from "@mui/icons-material/GroupsRounded";
-import IntegrationInstructionsRounded from "@mui/icons-material/IntegrationInstructionsRounded";
-import LockRounded from "@mui/icons-material/LockRounded";
-import SettingsRounded from "@mui/icons-material/SettingsRounded";
+import { Users, Puzzle, Lock, Settings } from "lucide-react";
 
 export function SettingsGearMenu({
   memberCount,
@@ -22,11 +19,10 @@ export function SettingsGearMenu({
       <button
         type="button"
         tabIndex={0}
-        className="btn btn-ghost btn-sm btn-square"
         aria-label="Settings menu"
         aria-haspopup="menu"
       >
-        <SettingsRounded className="h-5 w-5 text-base-content/80" fontSize="inherit" />
+        <Settings className="text-base-content/80" fontSize="inherit" />
       </button>
       <ul
         tabIndex={0}
@@ -36,11 +32,11 @@ export function SettingsGearMenu({
         {showTeamLink ? (
           <li role="none">
             <Link
-              href="/settings/team"
+              href="/settings#team-members"
               className="gap-3"
               role="menuitem"
             >
-              <GroupsRounded className="h-4 w-4 shrink-0 opacity-70" fontSize="inherit" />
+              <Users className="h-4 w-4 shrink-0 opacity-70" fontSize="inherit" />
               <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
                 <span>Team</span>
                 <span className="text-xs font-normal text-base-content/50">
@@ -57,17 +53,16 @@ export function SettingsGearMenu({
               className="gap-3"
               role="menuitem"
             >
-              <IntegrationInstructionsRounded
+              <Puzzle
                 className="h-4 w-4 shrink-0 opacity-70"
-                fontSize="inherit"
-              />
+                             />
               Integrations
             </Link>
           </li>
         ) : null}
         <li role="none">
           <Link href="/settings/password" className="gap-3" role="menuitem">
-            <LockRounded className="h-4 w-4 shrink-0 opacity-70" fontSize="inherit" />
+            <Lock className="h-4 w-4 shrink-0 opacity-70" fontSize="inherit" />
             {hasPassword ? "Change password" : "Set password"}
           </Link>
         </li>

@@ -58,8 +58,8 @@ export const endpoints = {
     unsnooze: (id: string) => `${P}/conversations/${id}/unsnooze`,
     assign: (id: string) => `${P}/conversations/${id}/assign`,
     unassign: (id: string) => `${P}/conversations/${id}/unassign`,
-    notes: (id: string) => `${P}/conversations/${id}/notes`,
-    noteById: (id: string, noteId: string) => `${P}/conversations/${id}/notes/${noteId}`,
+    claim: (id: string) => `${P}/conversations/${id}/claim`,
+    release: (id: string) => `${P}/conversations/${id}/release`,
   },
   messages: {
     listByConversation: (conversationId: string) =>
@@ -99,6 +99,7 @@ export const endpoints = {
     byId: (id: string) => `${P}/contacts/${id}`,
     consent: (id: string) => `${P}/contacts/${id}/consent`,
     delete: (id: string) => `${P}/contacts/${id}`,
+    checkPhone: `${P}/contacts/check-phone`,
     duplicates: `${P}/contacts/duplicates`,
     merge: `${P}/contacts/merge`,
     tags: (id: string) => `${P}/contacts/${id}/tags`,
@@ -174,6 +175,7 @@ export const endpoints = {
     progress: (id: string) => `${P}/campaigns/${id}/progress`,
     runs: (id: string) => `${P}/campaigns/${id}/runs`,
     runJobs: (id: string, runId: string) => `${P}/campaigns/${id}/runs/${runId}/jobs`,
+    contacts: (id: string) => `${P}/campaigns/${id}/contacts`,
   },
   media: {
     public: `${P}/media/public`,
@@ -203,6 +205,8 @@ export const endpoints = {
     timeseries: `${P}/analytics/timeseries`,
     campaigns: `${P}/analytics/campaigns`,
     campaignById: (id: string) => `${P}/analytics/campaigns/${id}`,
+    campaignDetailed: (id: string) => `${P}/analytics/campaigns/${id}/detailed`,
+    campaignExport: (id: string) => `${P}/analytics/campaigns/${id}/export`,
     conversations: `${P}/analytics/conversations`,
     contacts: `${P}/analytics/contacts`,
     agents: `${P}/analytics/agents`,
@@ -224,9 +228,6 @@ export const endpoints = {
     notes: `${P}/internal/notes`,
     noteById: (id: string) => `${P}/internal/notes/${id}`,
     toggleNotePin: (id: string) => `${P}/internal/notes/${id}/toggle-pin`,
-    messages: `${P}/internal/messages`,
-    messagesByConversation: (conversationId: string) =>
-      `${P}/internal/messages/${conversationId}`,
   },
   notifications: {
     list: `${P}/notifications`,
@@ -279,6 +280,13 @@ export const endpoints = {
   onboarding: {
     wabaOwned: `${P}/onboarding/waba/owned`,
     wabaClient: `${P}/onboarding/waba/client`,
+  },
+  billing: {
+    current: (workspaceId: string) =>
+      `${P}/workspaces/${workspaceId}/billing/current`,
+    subscribe: `${P}/billing/subscribe`,
+    cancel: `${P}/billing/cancel`,
+    subscription: `${P}/billing/subscription`,
   },
   feedback: {
     list: `${P}/feedback`,

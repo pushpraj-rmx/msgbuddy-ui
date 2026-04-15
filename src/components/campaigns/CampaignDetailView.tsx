@@ -16,6 +16,7 @@ import {
   statusBadgeClasses,
   statusHeroClasses,
 } from "@/lib/campaignUi";
+import { CampaignReport } from "./CampaignReport";
 
 export type Campaign = {
   id: string;
@@ -72,7 +73,7 @@ function isoToDatetimeLocalValue(iso: string | null | undefined): string {
 }
 
 function formatReportValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "\u2014";
   if (typeof value === "number" || typeof value === "boolean") {
     return String(value);
   }
@@ -82,6 +83,171 @@ function formatReportValue(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+function formatLabel(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/^./, (s) => s.toUpperCase());
+}
+
+function isRunsArray(v: unknown): v is Record<string, unknown>[] {
+  if (!Array.isArray(v) || v.length === 0) return false;
+  const first = v[0];
+  return (
+    first &&
+    typeof first === "object" &&
+    ("runId" in first || "runNumber" in first || "totalJobs" in first)
+  );
+}
+
+function RunsTable({ runs }: { runs: Record<string, unknown>[] }) {
+  return (
+    <div className="overflow-x-auto rounded-box border border-base-300">
+      <table className="table table-xs">
+        <thead>
+          <tr className="border-base-300">
+            <th>Run</th>
+            <th>Status</th>
+            <th className="text-right">Total</th>
+            <th className="text-right">Done</th>
+            <th className="text-right">Failed</th>
+            <th className="text-right">Skipped</th>
+            <th className="text-right">Rate</th>
+            <th className="text-right">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {runs.map((run, i) => {
+            const status = String(run.status ?? "\u2014");
+            const statusTone =
+              status === "COMPLETED"
+                ? "badge-success"
+                : status === "FAILED"
+                  ? "badge-error"
+                  : status === "RUNNING"
+                    ? "badge-info"
+                    : "badge-neutral";
+            const dur =
+              typeof run.durationMinutes === "number"
+                ? run.durationMinutes < 1
+                  ? "<1m"
+                  : `${Math.round(run.durationMinutes)}m`
+                : "\u2014";
+            const rate =
+              typeof run.successRate === "number"
+                ? `${Math.round(run.successRate)}%`
+                : "\u2014";
+            return (
+              <tr key={String(run.runId ?? i)} className="border-base-300">
+                <td className="font-medium">
+                  #{String(run.runNumber ?? i + 1)}
+                </td>
+                <td>
+                  <span className={`badge badge-xs ${statusTone}`}>
+                    {status}
+                  </span>
+                </td>
+                <td className="text-right tabular-nums">
+                  {typeof run.totalJobs === "number"
+                    ? run.totalJobs.toLocaleString()
+                    : "\u2014"}
+                </td>
+                <td className="text-right tabular-nums">
+                  {typeof run.completedJobs === "number"
+                    ? run.completedJobs.toLocaleString()
+                    : "\u2014"}
+                </td>
+                <td className="text-right tabular-nums">
+                  {typeof run.failedJobs === "number"
+                    ? run.failedJobs.toLocaleString()
+                    : "\u2014"}
+                </td>
+                <td className="text-right tabular-nums">
+                  {typeof run.skippedJobs === "number"
+                    ? run.skippedJobs.toLocaleString()
+                    : "\u2014"}
+                </td>
+                <td className="text-right tabular-nums">{rate}</td>
+                <td className="text-right tabular-nums">{dur}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TechnicalDetails({
+  extras,
+}: {
+  extras: Record<string, unknown>;
+}) {
+  const runs = extras.runs;
+  const scalarEntries: [string, unknown][] = [];
+  const objectEntries: [string, unknown][] = [];
+
+  for (const [key, val] of Object.entries(extras)) {
+    if (key === "runs") continue;
+    if (
+      val === null ||
+      val === undefined ||
+      (typeof val === "string" && val.trim() === "")
+    )
+      continue;
+    if (typeof val === "object" && !Array.isArray(val)) {
+      objectEntries.push([key, val]);
+    } else if (Array.isArray(val)) {
+      objectEntries.push([key, val]);
+    } else {
+      scalarEntries.push([key, val]);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {scalarEntries.length > 0 ? (
+        <div className="overflow-x-auto rounded-box border border-base-300">
+          <table className="table table-xs">
+            <tbody>
+              {scalarEntries.map(([key, val]) => (
+                <tr key={key} className="border-base-300">
+                  <td className="w-40 text-xs font-medium text-base-content/60">
+                    {formatLabel(key)}
+                  </td>
+                  <td className="text-sm tabular-nums">
+                    {formatReportValue(val)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {isRunsArray(runs) ? (
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+            Per-run breakdown
+          </p>
+          <RunsTable runs={runs} />
+        </div>
+      ) : null}
+
+      {objectEntries.map(([key, val]) => (
+        <div key={key}>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/50">
+            {formatLabel(key)}
+          </p>
+          <pre className="max-h-48 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 font-mono text-xs leading-relaxed text-base-content/80">
+            {formatReportValue(val)}
+          </pre>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function MetricCard({
@@ -196,6 +362,7 @@ export function CampaignDetailView({
   const canEditSchedule =
     statusNorm === "DRAFT" || statusNorm === "SCHEDULED";
 
+  const [activeTab, setActiveTab] = useState<"overview" | "report">("overview");
   const [planAt, setPlanAt] = useState(() =>
     isoToDatetimeLocalValue(selectedCampaign.scheduledAt)
   );
@@ -213,8 +380,31 @@ export function CampaignDetailView({
   ]);
 
   return (
+          <div className="flex flex-col gap-6">
+            {/* Tabs */}
+            <div role="tablist" className="tabs tabs-bordered">
+              <button
+                type="button"
+                role="tab"
+                className={`tab ${activeTab === "overview" ? "tab-active" : ""}`}
+                onClick={() => setActiveTab("overview")}
+              >
+                Overview
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`tab ${activeTab === "report" ? "tab-active" : ""}`}
+                onClick={() => setActiveTab("report")}
+              >
+                Report
+              </button>
+            </div>
 
-          <>
+            {activeTab === "report" ? (
+              <CampaignReport campaignId={selectedCampaign.id} />
+            ) : (
+            <>
             {/* Header + status hero */}
             <section className="flex flex-col gap-8">
               <header className="space-y-3">
@@ -742,7 +932,7 @@ export function CampaignDetailView({
 
                   {Object.keys(reportMetrics.extras).length > 0 ? (
                     <div className="rounded-box border border-base-300 bg-base-100 p-4">
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm"
@@ -759,20 +949,21 @@ export function CampaignDetailView({
                             );
                           }}
                         >
-                          Copy
+                          Copy JSON
                         </button>
                       </div>
                       {showRawReport ? (
-                        <pre className="mt-3 max-h-64 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 font-mono text-xs leading-relaxed text-base-content/80">
-                          {formatReportValue(reportMetrics.extras)}
-                        </pre>
+                        <div className="mt-3">
+                          <TechnicalDetails extras={reportMetrics.extras} />
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
               </>
             </section>
           </>
-
+            )}
+          </div>
   );
 }
 

@@ -1,7 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { contactsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
 import { AvatarCropUpload } from "@/components/ui/AvatarCropUpload";
 
@@ -22,11 +25,13 @@ export function ContactFormModal({
   contact,
   onClose,
   onSave,
+  onViewExisting,
 }: {
   title: string;
   contact?: Contact;
   onClose: () => void;
   onSave: (payload: ContactFormPayload) => void;
+  onViewExisting?: (contactId: string) => void;
 }) {
   const isLg = useMediaQuery("(min-width: 1024px)");
   const [phone, setPhone] = useState(contact?.phone ?? "");
@@ -40,6 +45,14 @@ export function ContactFormModal({
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(
     contact?.avatarUrl ?? undefined
   );
+
+  const debouncedPhone = useDebouncedValue(phone, 500);
+  const phoneCheck = useQuery({
+    queryKey: ["contacts", "check-phone", debouncedPhone],
+    queryFn: () => contactsApi.checkPhone(debouncedPhone.trim()),
+    enabled: !contact && debouncedPhone.trim().length >= 7,
+    staleTime: 30_000,
+  });
 
   const handleSave = () => {
     onSave({
@@ -87,6 +100,27 @@ export function ContactFormModal({
               onChange={(e) => setPhone(e.target.value)}
               required
             />
+            {phoneCheck.data?.exists && phoneCheck.data.contact && (
+              <div className="alert alert-warning text-sm py-2 mt-1">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                  A contact with this phone already exists
+                  {phoneCheck.data.contact.name ? `: ${phoneCheck.data.contact.name}` : ""}
+                  {" "}({phoneCheck.data.contact.phone})
+                </span>
+                {onViewExisting && (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => onViewExisting(phoneCheck.data.contact!.id)}
+                  >
+                    View
+                  </button>
+                )}
+              </div>
+            )}
             <label className="label">
               <span className="label-text">Phone label (optional)</span>
             </label>

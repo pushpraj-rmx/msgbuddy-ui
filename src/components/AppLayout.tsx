@@ -8,6 +8,7 @@ import { GlobalRightPanel } from "./right-panel/GlobalRightPanel";
 import { RightPanelProvider } from "./right-panel/RightPanelProvider";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { TrialBanner } from "./billing/TrialBanner";
 import type { MeResponse } from "@/lib/api";
 import { conversationsApi } from "@/lib/api";
 
@@ -72,6 +73,7 @@ export function AppLayout({
       <SessionRefresh />
       <AppShortcuts />
       <div className="flex h-[100dvh] flex-col overflow-hidden">
+        <TrialBanner workspace={me.workspace} />
         <Topbar
           drawerId={DRAWER_ID}
           me={me}
@@ -101,7 +103,7 @@ export function AppLayout({
             <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
               <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
                 {/* Main + details pane: split row so content shrinks when details is open (no overlay). */}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-[var(--layout-gutter-x)]">
                   {children}
                 </div>
                 <GlobalRightPanel />

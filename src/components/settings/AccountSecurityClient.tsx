@@ -1,14 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Eye } from "lucide-react";
 import { logoutAllAction } from "@/app/actions/auth";
 import type { LoginHistoryEvent } from "@/lib/api";
 import { meApi } from "@/lib/api";
 import { AvatarCropUpload } from "@/components/ui/AvatarCropUpload";
-import { SettingsGearMenu } from "@/components/settings/SettingsGearMenu";
-import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 function formatLoginAction(action: string): string {
   const map: Record<string, string> = {
@@ -28,17 +26,13 @@ export function AccountSecurityClient({
   accountName,
   accountAvatarUrl,
   hasPassword,
-  memberCount,
   loginHistory,
-  meRole,
 }: {
   accountEmail: string;
   accountName?: string;
   accountAvatarUrl?: string | null;
   hasPassword: boolean;
-  memberCount: number;
   loginHistory: LoginHistoryEvent[];
-  meRole: string;
 }) {
   const router = useRouter();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(accountAvatarUrl ?? null);
@@ -47,9 +41,7 @@ export function AccountSecurityClient({
   const [nameSaved, setNameSaved] = useState(false);
   const [nameSaving, setNameSaving] = useState(false);
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
-
-  const showTeamLink = roleHasWorkspacePermission(meRole, "members.view");
-  const showIntegrationsLink = roleHasWorkspacePermission(meRole, "settings.manage");
+  const [showSessions, setShowSessions] = useState(false);
 
   const onAvatarUploaded = async (url: string) => {
     setAvatarUrl(url);
@@ -91,98 +83,95 @@ export function AccountSecurityClient({
   };
 
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
-      <div className="mb-6">
-        <h2 className="text-base font-medium">Account &amp; security</h2>
-        <p className="mt-1 text-sm text-base-content/70">
-          Signed in as <span className="font-medium">{accountEmail}</span>
-        </p>
-      </div>
-
-      <div className="divide-y divide-base-300">
-      {/* Profile photo + name */}
-      <div className="space-y-4 pb-6">
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="text-sm font-medium">Profile</h3>
-          <SettingsGearMenu
-            memberCount={memberCount}
-            hasPassword={hasPassword}
-            showTeamLink={showTeamLink}
-            showIntegrationsLink={showIntegrationsLink}
-          />
-        </div>
-        <AvatarCropUpload
-          currentUrl={avatarUrl}
-          initials={displayName ? displayName.slice(0, 2).toUpperCase() : accountEmail.slice(0, 2).toUpperCase()}
-          onUploaded={onAvatarUploaded}
-        />
-        <form onSubmit={onSaveName} className="flex items-end gap-2 max-w-md">
-          <label className="form-control flex-1">
-            <span className="label-text text-sm">Display name</span>
-            <input
-              type="text"
-              className="input input-bordered w-full"
-              placeholder="Your name"
-              value={displayName}
-              onChange={(e) => { setDisplayName(e.target.value); setNameSaved(false); }}
+    <div className="rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-5">
+      <div className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-[4.75rem_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
+          <div>
+            <AvatarCropUpload
+              currentUrl={avatarUrl}
+              initials={displayName ? displayName.slice(0, 2).toUpperCase() : accountEmail.slice(0, 2).toUpperCase()}
+              onUploaded={onAvatarUploaded}
             />
-          </label>
-          <button type="submit" className="btn btn-primary btn-sm mb-0.5" disabled={nameSaving}>
-            {nameSaving ? <span className="loading loading-spinner loading-xs" /> : "Save"}
-          </button>
-        </form>
-        {nameError && <p className="text-xs text-error">{nameError}</p>}
-        {nameSaved && <p className="text-xs text-success">Name saved.</p>}
+          </div>
+
+          <form onSubmit={onSaveName} className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/55">
+              Display Name
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                className="input input-sm input-bordered w-full bg-base-200/50"
+                placeholder="Your name"
+                value={displayName}
+                onChange={(e) => {
+                  setDisplayName(e.target.value);
+                  setNameSaved(false);
+                }}
+              />
+              <button type="submit" className="btn btn-sm btn-primary" disabled={nameSaving}>
+                {nameSaving ? <span className="loading loading-spinner loading-xs" /> : "Save"}
+              </button>
+            </div>
+          </form>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/55">
+              Email Address
+            </label>
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-base-300 bg-base-200/50 px-3 py-2 text-sm">
+              <span className="truncate">{accountEmail}</span>
+              <span className="badge badge-success badge-sm badge-soft">Verified</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-3">
+          <div>
+            <p className="text-sm font-medium text-base-content">Active Sessions</p>
+            <p className="text-xs text-base-content/60">
+              {Math.max(1, Math.min(loginHistory.length, 6))} devices currently logged in
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost border border-base-300/70"
+              onClick={() => setShowSessions((v) => !v)}
+            >
+              <Eye className="h-4 w-4" />
+              Manage Sessions
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost text-error hover:bg-error/10"
+              disabled={logoutAllBusy}
+              onClick={onLogoutAll}
+            >
+              {logoutAllBusy ? "Signing out..." : "Sign out everywhere"}
+            </button>
+          </div>
+        </div>
+
+        {nameError ? <p className="text-xs text-error">{nameError}</p> : null}
+        {nameSaved ? <p className="text-xs text-success">Name saved.</p> : null}
         {!hasPassword ? (
-          <p className="text-sm text-base-content/70">
-            You sign in with Google.{" "}
-            <Link href="/settings/password" className="link link-primary">
-              Set a password
-            </Link>{" "}
-            if you want to sign in with email and password too.
+          <p className="text-xs text-base-content/65">
+            Password login is not set for this account yet.
           </p>
         ) : null}
-      </div>
 
-      <div className="space-y-2 pt-6 pb-6">
-        <h3 className="text-sm font-medium">Sessions</h3>
-        <p className="text-sm text-base-content/70 max-w-xl">
-          Sign out everywhere revokes access on all devices and browsers.
-        </p>
-        <button
-          type="button"
-          className="btn btn-outline btn-sm btn-error"
-          disabled={logoutAllBusy}
-          onClick={onLogoutAll}
-        >
-          {logoutAllBusy ? (
-            <>
-              <span className="loading loading-spinner loading-xs" />
-              Signing out…
-            </>
-          ) : (
-            "Sign out everywhere"
-          )}
-        </button>
-      </div>
-
-      <div className="pt-6">
-        <details className="group rounded-box border border-base-300 bg-base-200/20">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-base-content">
-            Recent sign-in activity
-            {loginHistory.length > 0 ? (
-              <span className="ml-2 font-normal text-base-content/60">
-                ({loginHistory.length})
-              </span>
-            ) : null}
-          </summary>
-          <div className="border-t border-base-300 px-4 pb-4 pt-3">
+        {showSessions ? (
+          <div className="rounded-xl border border-base-300 bg-base-200/25 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/55">
+              Recent sign-in activity
+            </p>
             {loginHistory.length === 0 ? (
               <p className="text-sm text-base-content/60">No events yet.</p>
             ) : (
-              <div className="max-h-60 overflow-y-auto overflow-x-auto rounded-box border border-base-300 bg-base-100">
+              <div className="max-h-56 overflow-auto rounded-lg border border-base-300 bg-base-100">
                 <table className="table table-sm">
-                  <thead className="sticky top-0 z-[1] bg-base-200/95 backdrop-blur-sm">
+                  <thead className="bg-base-200/80">
                     <tr>
                       <th>When</th>
                       <th>Event</th>
@@ -197,9 +186,7 @@ export function AccountSecurityClient({
                             timeStyle: "short",
                           })}
                         </td>
-                        <td className="text-sm">
-                          {formatLoginAction(row.action)}
-                        </td>
+                        <td className="text-sm">{formatLoginAction(row.action)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -207,8 +194,7 @@ export function AccountSecurityClient({
               </div>
             )}
           </div>
-        </details>
-      </div>
+        ) : null}
       </div>
     </div>
   );

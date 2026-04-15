@@ -15,6 +15,12 @@ export const SseWireType = {
   channelTemplateCategoryPending: "channel_template.category.pending",
   whatsappAccountRestriction: "whatsapp.account.restriction",
   notificationCreated: "notification.created",
+  campaignRunStarted: "campaign.run.started",
+  campaignRunPaused: "campaign.run.paused",
+  campaignRunResumed: "campaign.run.resumed",
+  campaignRunCancelled: "campaign.run.cancelled",
+  campaignRunCompleted: "campaign.run.completed",
+  campaignRunProgress: "campaign.run.progress",
 } as const;
 
 /** Parse `EventSource` `event.data` JSON — supports flat `{ type, data? }` and nested `{ data: { type, data } }`. */
@@ -166,4 +172,28 @@ export function isNotificationCreated(type: string): boolean {
   return (
     type === SseWireType.notificationCreated || type === "NOTIFICATION_CREATED"
   );
+}
+
+export function isCampaignRunStarted(type: string): boolean {
+  return type === SseWireType.campaignRunStarted;
+}
+
+export function isCampaignRunPaused(type: string): boolean {
+  return type === SseWireType.campaignRunPaused;
+}
+
+export function isCampaignRunResumed(type: string): boolean {
+  return type === SseWireType.campaignRunResumed;
+}
+
+export function isCampaignRunCancelled(type: string): boolean {
+  return type === SseWireType.campaignRunCancelled;
+}
+
+export function isCampaignRunCompleted(type: string): boolean {
+  return type === SseWireType.campaignRunCompleted;
+}
+
+export function isCampaignRunProgress(type: string): boolean {
+  return type === SseWireType.campaignRunProgress;
 }

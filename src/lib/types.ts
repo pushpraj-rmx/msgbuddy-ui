@@ -131,8 +131,15 @@ export type DuplicatesResponse = {
 
 export type ImportResult = {
   imported: number;
+  created: number;
+  updated: number;
   failed: number;
   errors: Array<{ row: number; message: string }>;
+};
+
+export type PhoneCheckResult = {
+  exists: boolean;
+  contact?: { id: string; phone: string; name?: string | null; email?: string | null };
 };
 
 // Template module (aligned with backend API)
@@ -356,6 +363,8 @@ export type NotificationType =
   | "CONTACT_IMPORT_DONE"
   | "TEMPLATE_CATEGORY_CHANGE"
   | "WHATSAPP_RESTRICTION"
+  | "PLAN_CHANGED"
+  | "TRIAL_EXPIRING"
   | "SYSTEM";
 
 export type NotificationSeverity = "INFO" | "WARNING" | "ERROR";

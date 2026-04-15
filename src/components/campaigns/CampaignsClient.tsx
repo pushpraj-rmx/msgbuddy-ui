@@ -7,6 +7,7 @@ import { getApiError } from "@/lib/api-error";
 import { analyticsApi, campaignsApi } from "@/lib/api";
 import {
   campaignOutcomeLine,
+  campaignRunSummaryLine,
   campaignStatusTone,
   completionPercent,
   formatCampaignListTitle,
@@ -14,8 +15,17 @@ import {
   parseReportMetrics,
   statusDotClasses,
 } from "@/lib/campaignUi";
-import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
+import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
+import {
+  parseWorkspaceSseEvent,
+  isCampaignRunProgress,
+  isCampaignRunStarted,
+  isCampaignRunCompleted,
+  isCampaignRunPaused,
+  isCampaignRunResumed,
+  isCampaignRunCancelled,
+} from "@/lib/sseEvents";
 import { CampaignDetailView } from "./CampaignDetailView";
 import { CampaignMetaSidebar } from "./CampaignMetaSidebar";
 
@@ -29,6 +39,8 @@ export type Campaign = {
   templateBindings?: Record<string, unknown> | null;
   scheduledAt?: string | null;
   timezone?: string;
+  updatedAt?: string;
+  runs?: { totalJobs?: number; completedJobs?: number; failedJobs?: number; skippedJobs?: number; successRate?: number }[];
 };
 
 type CampaignProgress = {
@@ -68,8 +80,10 @@ type CampaignRunJob = {
 
 export function CampaignsClient({
   initialCampaigns,
+  workspaceId,
 }: {
   initialCampaigns: Campaign[];
+  workspaceId: string;
 }) {
   const searchParams = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
@@ -220,6 +234,79 @@ export function CampaignsClient({
     void loadRunJobs();
   }, [loadRunJobs]);
 
+  // SSE: live campaign progress updates
+  useEffect(() => {
+    if (!workspaceId) return;
+    let cancelled = false;
+    let source: EventSource | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retries = 0;
+
+    const connect = () => {
+      if (cancelled) return;
+      source = new EventSource(`/api/sse/workspace/${workspaceId}`);
+      source.onopen = () => { retries = 0; };
+      source.onmessage = (event) => {
+        const ev = parseWorkspaceSseEvent(event.data);
+        if (!ev) return;
+
+        const campaignId = typeof ev.data.campaignId === "string" ? ev.data.campaignId : null;
+
+        if (isCampaignRunProgress(ev.type) && campaignId) {
+          // Update progress counters in real-time for the selected campaign
+          setProgress((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              totalJobs: typeof ev.data.totalJobs === "number" ? ev.data.totalJobs : prev.totalJobs,
+              completedJobs: typeof ev.data.completedJobs === "number" ? ev.data.completedJobs : prev.completedJobs,
+              progressPercent:
+                typeof ev.data.totalJobs === "number" && ev.data.totalJobs > 0
+                  ? Math.round(
+                      (((ev.data.completedJobs as number) +
+                        (ev.data.failedJobs as number) +
+                        (ev.data.skippedJobs as number)) /
+                        ev.data.totalJobs) *
+                        100
+                    )
+                  : prev.progressPercent,
+            };
+          });
+          return;
+        }
+
+        if (
+          isCampaignRunStarted(ev.type) ||
+          isCampaignRunCompleted(ev.type) ||
+          isCampaignRunPaused(ev.type) ||
+          isCampaignRunResumed(ev.type) ||
+          isCampaignRunCancelled(ev.type)
+        ) {
+          // State change — re-fetch everything for accuracy
+          void loadProgress();
+          void loadRuns();
+          void refresh();
+          return;
+        }
+      };
+      source.onerror = () => {
+        source?.close();
+        if (!cancelled) {
+          const delay = Math.min(1000 * 2 ** retries, 30000);
+          retries++;
+          retryTimer = setTimeout(connect, delay);
+        }
+      };
+    };
+
+    connect();
+    return () => {
+      cancelled = true;
+      source?.close();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [workspaceId, loadProgress, loadRuns, refresh]);
+
   const handleAction = useCallback(
     async (
       action:
@@ -359,7 +446,7 @@ export function CampaignsClient({
 
   const { setContent: setRightPanelContent, clearContent: clearRightPanelContent } =
     useRightPanel();
-  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
+  const isLgUp = useMediaQuery(LG_MEDIA_QUERY);
 
   const campaignDetailPanel = useMemo(() => {
     if (!selectedCampaign) return null;
@@ -452,7 +539,7 @@ export function CampaignsClient({
     setRightPanelContent({
       source: "campaigns",
       title: formatCampaignListTitle(selectedCampaign.name),
-      openAfter: isXlUp,
+      openAfter: isLgUp,
       content: campaignMetaPanel,
     });
   }, [
@@ -460,7 +547,7 @@ export function CampaignsClient({
     campaignMetaPanel,
     clearRightPanelContent,
     setRightPanelContent,
-    isXlUp,
+    isLgUp,
   ]);
 
   useEffect(() => {
@@ -493,6 +580,8 @@ export function CampaignsClient({
           {campaigns.map((campaign) => {
             const active = campaign.id === selectedId;
             const rowTone = campaignStatusTone(campaign.status);
+            const latestRun = campaign.runs?.[0];
+            const summaryLine = campaignRunSummaryLine(rowTone, latestRun);
             return (
               <button
                 key={campaign.id}
@@ -516,6 +605,18 @@ export function CampaignsClient({
                     <p className="mt-1 text-xs text-base-content/70">
                       {campaign.channel} · {campaign.status}
                     </p>
+                    {summaryLine ? (
+                      <p className="mt-0.5 text-xs tabular-nums text-base-content/55">
+                        {summaryLine}
+                      </p>
+                    ) : null}
+                    {rowTone === "running" && latestRun?.totalJobs ? (
+                      <progress
+                        className="progress progress-info mt-1 h-1 w-full"
+                        value={Math.min(100, Math.round(((latestRun.completedJobs ?? 0) / latestRun.totalJobs) * 100))}
+                        max={100}
+                      />
+                    ) : null}
                   </div>
                 </div>
               </button>

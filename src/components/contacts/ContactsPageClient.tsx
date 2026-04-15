@@ -9,11 +9,13 @@ export function ContactsPageClient({
   initialContacts,
   initialNextCursor,
   initialTotalCount,
+  meRole,
 }: {
   workspaceId: string;
   initialContacts: Contact[];
   initialNextCursor?: string;
   initialTotalCount?: number;
+  meRole: string;
 }) {
   const searchParams = useSearchParams();
   const segmentIdFromUrl = searchParams.get("segment");
@@ -26,6 +28,7 @@ export function ContactsPageClient({
         initialNextCursor={initialNextCursor}
         initialTotalCount={initialTotalCount}
         selectedSegmentId={segmentIdFromUrl}
+        meRole={meRole}
       />
     </div>
   );

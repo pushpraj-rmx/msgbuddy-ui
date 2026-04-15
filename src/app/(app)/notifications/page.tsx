@@ -33,7 +33,7 @@ export default function NotificationsPage() {
   const items = listQuery.data?.items ?? [];
 
   return (
-    <PageContainer className="mx-auto w-full max-w-4xl space-y-4 px-4 py-4 sm:px-6">
+    <PageContainer className="mx-auto w-full max-w-4xl">
       <PageHeader title="Notifications" description="Workspace notifications" />
 
       <section className="card border border-base-300 bg-base-100 shadow-sm">

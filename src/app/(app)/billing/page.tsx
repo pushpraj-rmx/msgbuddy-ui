@@ -1,23 +1,23 @@
-import { TemplatesClient } from "@/components/templates/TemplatesClient";
+import { BillingClient } from "@/components/billing/BillingClient";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
-import { canViewTemplates } from "@/lib/workspace-access";
+import { canAccessBillingPage } from "@/lib/workspace-access";
 
-export default async function TemplatesPage() {
+export default async function BillingPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
 
-  if (!canViewTemplates(String(me.role))) {
+  if (!canAccessBillingPage(String(me.role))) {
     return (
       <PageContainer>
         <PageHeader
-          title="Templates"
-          description="Create and manage message templates."
+          title="Billing"
+          description="Manage your subscription and plan."
         />
         <div role="alert" className="alert alert-warning">
-          <span>You don&apos;t have permission to view templates.</span>
+          <span>You don&apos;t have permission to view billing.</span>
         </div>
       </PageContainer>
     );
@@ -26,10 +26,10 @@ export default async function TemplatesPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Templates"
-        description="Create and manage message templates. Search, filter, sort, and preview on demand."
+        title="Billing"
+        description="Manage your subscription and plan."
       />
-      <TemplatesClient meRole={String(me.role)} />
+      <BillingClient workspaceId={me.workspace.id} />
     </PageContainer>
   );
 }

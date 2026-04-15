@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { dispatchOpenGlobalSearch, dispatchOpenShortcutsHelp } from "@/lib/shortcuts";
-import { useMediaQuery, XL_MEDIA_QUERY } from "@/hooks/useMediaQuery";
+import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 type Point = { x: number; y: number };
@@ -24,9 +24,13 @@ function isNativeContextTarget(target: EventTarget | null): boolean {
  * Extend menu items as needed.
  */
 export function GlobalContextMenu() {
-  const { isOpen: rightPanelOpen, close: closeRightPanel, open: openRightPanel } =
-    useRightPanel();
-  const isXlUp = useMediaQuery(XL_MEDIA_QUERY);
+  const {
+    isOpen: rightPanelOpen,
+    close: closeRightPanel,
+    open: openRightPanel,
+    panel: rightPanel,
+  } = useRightPanel();
+  const isLgUp = useMediaQuery(LG_MEDIA_QUERY);
   const [open, setOpen] = useState(false);
   const [point, setPoint] = useState<Point | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -121,7 +125,7 @@ export function GlobalContextMenu() {
         <span>Keyboard shortcuts</span>
         <kbd className="kbd kbd-sm">?</kbd>
       </button>
-      {isXlUp ? (
+      {isLgUp && rightPanel?.content ? (
         <button
           type="button"
           role="menuitem"

@@ -1,11 +1,6 @@
 "use client";
 
-import { Box, IconButton, Tooltip } from "@mui/material";
-import StarIcon from "@mui/icons-material/Star";
-import StarBorderIcon from "@mui/icons-material/StarBorder";
-import PushPinIcon from "@mui/icons-material/PushPin";
-import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { Star, Pin, Copy } from "lucide-react";
 
 interface MessageActionBarProps {
   isPinned?: boolean;
@@ -34,67 +29,41 @@ export function MessageActionBar({
   };
 
   return (
-    <Box
-      className="msg-action-bar"
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 0.25,
-        bgcolor: "background.paper",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 2,
-        boxShadow: 1,
-        px: 0.5,
-        py: 0.25,
-      }}
-    >
-      <Tooltip title={isStarred ? "Unstar" : "Star"} placement="top">
-        <span>
-          <IconButton
-            size="small"
-            onClick={onStar}
-            disabled={disabled}
-            sx={{ color: isStarred ? "warning.main" : "text.secondary", p: 0.5 }}
-          >
-            {isStarred ? (
-              <StarIcon sx={{ fontSize: 16 }} />
-            ) : (
-              <StarBorderIcon sx={{ fontSize: 16 }} />
-            )}
-          </IconButton>
-        </span>
-      </Tooltip>
+    <div className="msg-action-bar flex items-center gap-0.5 rounded-lg border border-base-300 bg-base-100 px-1 py-0.5 shadow-sm">
+      <div className="tooltip tooltip-top" data-tip={isStarred ? "Unstar" : "Star"}>
+        <button
+          type="button"
+          className={`btn btn-ghost btn-xs btn-square ${isStarred ? "text-warning" : "text-base-content/50"}`}
+          onClick={onStar}
+          disabled={disabled}
+        >
+          <Star className="h-4 w-4" fill={isStarred ? "currentColor" : "none"} />
+        </button>
+      </div>
 
-      <Tooltip title={isPinned ? "Unpin" : "Pin"} placement="top">
-        <span>
-          <IconButton
-            size="small"
-            onClick={onPin}
-            disabled={disabled}
-            sx={{ color: isPinned ? "primary.main" : "text.secondary", p: 0.5 }}
-          >
-            {isPinned ? (
-              <PushPinIcon sx={{ fontSize: 16 }} />
-            ) : (
-              <PushPinOutlinedIcon sx={{ fontSize: 16 }} />
-            )}
-          </IconButton>
-        </span>
-      </Tooltip>
+      <div className="tooltip tooltip-top" data-tip={isPinned ? "Unpin" : "Pin"}>
+        <button
+          type="button"
+          className={`btn btn-ghost btn-xs btn-square ${isPinned ? "text-primary" : "text-base-content/50"}`}
+          onClick={onPin}
+          disabled={disabled}
+        >
+          <Pin className="h-4 w-4" fill={isPinned ? "currentColor" : "none"} />
+        </button>
+      </div>
 
       {text && (
-        <Tooltip title="Copy text" placement="top">
-          <IconButton
-            size="small"
+        <div className="tooltip tooltip-top" data-tip="Copy text">
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs btn-square text-base-content/50"
             onClick={handleCopy}
             disabled={disabled}
-            sx={{ color: "text.secondary", p: 0.5 }}
           >
-            <ContentCopyIcon sx={{ fontSize: 14 }} />
-          </IconButton>
-        </Tooltip>
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

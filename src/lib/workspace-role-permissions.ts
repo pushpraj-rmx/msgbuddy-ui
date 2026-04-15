@@ -8,6 +8,8 @@ import type { WorkspaceRole } from "./types";
 const OWNER_PERMISSIONS: readonly string[] = [
   "conversations.view",
   "conversations.assign",
+  "conversations.claim",
+  "conversations.release",
   "messages.read",
   "messages.send",
   "contacts.view",
@@ -36,6 +38,8 @@ const ADMIN_PERMISSIONS: readonly string[] = [...OWNER_PERMISSIONS];
 const SUPERVISOR_PERMISSIONS: readonly string[] = [
   "conversations.view",
   "conversations.assign",
+  "conversations.claim",
+  "conversations.release",
   "messages.read",
   "messages.send",
   "contacts.view",
@@ -50,6 +54,8 @@ const SUPERVISOR_PERMISSIONS: readonly string[] = [
 
 const AGENT_PERMISSIONS: readonly string[] = [
   "conversations.view",
+  "conversations.claim",
+  "conversations.release",
   "messages.read",
   "messages.send",
   "contacts.view",

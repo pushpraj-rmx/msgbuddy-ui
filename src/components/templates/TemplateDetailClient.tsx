@@ -83,7 +83,7 @@ function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
                   ? "Approval needed"
                   : r.code;
             return (
-              <div key={r.code} className="flex items-center justify-between gap-3 rounded-lg border border-base-300/80 bg-base-100 px-3 py-2">
+              <div key={r.code} className="flex items-center justify-between gap-3 rounded-box border border-base-300/80 bg-base-100 px-3 py-2">
                 <div className="text-sm">
                   <div className="font-medium">{codeLabel}</div>
                   <div className="text-base-content/70">{r.message}</div>

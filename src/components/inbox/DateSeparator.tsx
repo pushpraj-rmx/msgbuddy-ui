@@ -1,36 +1,18 @@
 "use client";
 
-import { Box, Typography } from "@mui/material";
-
 interface DateSeparatorProps {
   label: string;
 }
 
 export function DateSeparator({ label }: DateSeparatorProps) {
   return (
-    <Box
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1.5,
-        my: 1.5,
-        px: 2,
-      }}
-    >
-      <Box sx={{ flex: 1, height: "1px", bgcolor: "divider" }} />
-      <Typography
-        variant="caption"
-        sx={{
-          color: "text.secondary",
-          fontWeight: 500,
-          whiteSpace: "nowrap",
-          userSelect: "none",
-        }}
-      >
+    <div className="flex items-center gap-3 my-3 px-2">
+      <div className="flex-1 h-px bg-base-300" />
+      <span className="text-xs font-medium text-base-content/50 whitespace-nowrap select-none">
         {label}
-      </Typography>
-      <Box sx={{ flex: 1, height: "1px", bgcolor: "divider" }} />
-    </Box>
+      </span>
+      <div className="flex-1 h-px bg-base-300" />
+    </div>
   );
 }
 

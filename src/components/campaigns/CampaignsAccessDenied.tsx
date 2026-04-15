@@ -30,7 +30,7 @@ export function CampaignsAccessDenied({
         <a href={mailto} className="btn btn-primary">
           Request access by email
         </a>
-        <Link href="/settings/team" className="btn btn-outline">
+        <Link href="/settings#team-members" className="btn btn-outline">
           Open team settings
         </Link>
       </div>

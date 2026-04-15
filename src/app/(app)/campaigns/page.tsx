@@ -30,7 +30,7 @@ export default async function CampaignsPage() {
         title="Campaigns"
         description="Create and monitor outbound campaigns."
       />
-      <CampaignsClient initialCampaigns={campaigns} />
+      <CampaignsClient initialCampaigns={campaigns} workspaceId={me.workspace.id} />
     </PageContainer>
   );
 }

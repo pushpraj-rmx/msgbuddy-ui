@@ -14,6 +14,7 @@ import type {
   TimelineResponse,
   DuplicatesResponse,
   ImportResult,
+  PhoneCheckResult,
   Template,
   TemplatesListResponse,
   TemplateLimitsResponse,
@@ -96,6 +97,9 @@ export type LoginHistoryEvent = {
 export interface Workspace {
   id: string;
   name: string;
+  plan?: string;
+  status?: string;
+  trialEndsAt?: string | null;
 }
 
 export type WorkspaceMemberResponseDto = {
@@ -182,6 +186,7 @@ export interface ConversationFilters {
   status?: "OPEN" | "CLOSED" | "ARCHIVED";
   channel?: "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
   assignedUserId?: string;
+  unassignedOnly?: boolean;
   tagIds?: string;
   search?: string;
   unreadOnly?: boolean;
@@ -209,14 +214,6 @@ export type ConversationSendPolicyDto = {
   windowClosesAt?: string | null;
 };
 
-export type ConversationNote = {
-  id: string;
-  conversationId?: string;
-  content: string;
-  authorUserId?: string;
-  createdAt?: string;
-};
-
 export type InternalTargetType = "CONTACT" | "CONVERSATION" | "CAMPAIGN";
 
 export type InternalNote = {
@@ -229,15 +226,6 @@ export type InternalNote = {
   authorId?: string;
   createdAt?: string;
   updatedAt?: string;
-};
-
-export type InternalMessage = {
-  id: string;
-  workspaceId?: string;
-  conversationId: string;
-  senderUserId?: string;
-  text: string;
-  createdAt?: string;
 };
 
 /** POST /v2/messages — TEXT (default) vs WhatsApp media (mediaId + type). */
@@ -340,18 +328,13 @@ export const conversationsApi = {
     const response = await api.put(endpoints.conversations.unassign(id));
     return response.data;
   },
-  listNotes: async (id: string): Promise<ConversationNote[]> => {
-    const response = await api.get<ConversationNote[]>(endpoints.conversations.notes(id));
+  claim: async (id: string) => {
+    const response = await api.post(endpoints.conversations.claim(id));
     return response.data;
   },
-  createNote: async (id: string, content: string): Promise<ConversationNote> => {
-    const response = await api.post<ConversationNote>(endpoints.conversations.notes(id), {
-      content,
-    });
+  release: async (id: string) => {
+    const response = await api.post(endpoints.conversations.release(id));
     return response.data;
-  },
-  deleteNote: async (id: string, noteId: string): Promise<void> => {
-    await api.delete(endpoints.conversations.noteById(id, noteId));
   },
   searchMessages: async (params: {
     q: string;
@@ -467,19 +450,6 @@ export const internalApi = {
     const response = await api.post<InternalNote>(endpoints.internal.toggleNotePin(id));
     return response.data;
   },
-  sendMessage: async (data: {
-    conversationId: string;
-    text: string;
-  }): Promise<InternalMessage> => {
-    const response = await api.post<InternalMessage>(endpoints.internal.messages, data);
-    return response.data;
-  },
-  listMessages: async (conversationId: string): Promise<InternalMessage[]> => {
-    const response = await api.get<InternalMessage[]>(
-      endpoints.internal.messagesByConversation(conversationId)
-    );
-    return response.data;
-  },
 };
 
 export const notificationsApi = {
@@ -552,10 +522,18 @@ export const contactsApi = {
     phone: string;
     phoneLabel?: string;
     name?: string;
+    designation?: string;
     email?: string;
     emailLabel?: string;
   }): Promise<Contact> => {
     const response = await api.post<Contact>(endpoints.contacts.create, data);
+    return response.data;
+  },
+  checkPhone: async (phone: string): Promise<PhoneCheckResult> => {
+    const response = await api.get<PhoneCheckResult>(
+      endpoints.contacts.checkPhone,
+      { params: { phone } }
+    );
     return response.data;
   },
   importCsv: async (
@@ -586,6 +564,7 @@ export const contactsApi = {
     id: string,
     data: {
       name?: string;
+      designation?: string;
       email?: string;
       phoneLabel?: string;
       emailLabel?: string;
@@ -1067,6 +1046,13 @@ export const campaignsApi = {
     const response = await api.get(endpoints.campaigns.runJobs(id, runId));
     return response.data;
   },
+  contacts: async (
+    id: string,
+    params?: { status?: string; search?: string; limit?: number; cursor?: string },
+  ) => {
+    const response = await api.get(endpoints.campaigns.contacts(id), { params });
+    return response.data;
+  },
 };
 
 export interface MediaUploadForTemplateResponse {
@@ -1160,6 +1146,28 @@ export const mediaApi = {
     return response.data;
   },
   downloadUrl: (id: string) => `${API_BASE_URL}${endpoints.media.download(id)}`,
+  downloadFile: async (id: string, fallbackName?: string): Promise<void> => {
+    const response = await fetchWithAuthRefresh(endpoints.media.download(id));
+    if (!response.ok) {
+      throw new Error(`Download failed (${response.status})`);
+    }
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get("content-disposition") || "";
+    const fileNameMatch =
+      /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i.exec(contentDisposition);
+    const parsedName = fileNameMatch
+      ? decodeURIComponent(fileNameMatch[1] || fileNameMatch[2] || "")
+      : "";
+    const fileName = parsedName || fallbackName || `media-${id}`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   syncToProvider: async (id: string, provider: "whatsapp" | "telegram") => {
     const response = await api.post(endpoints.media.sync(id, provider));
     return response.data;
@@ -1397,6 +1405,25 @@ export const analyticsApi = {
     const response = await api.get(endpoints.analytics.campaignById(id));
     return response.data;
   },
+  /** Detailed campaign report with all sections. */
+  campaignDetailed: async (id: string) => {
+    const response = await api.get(endpoints.analytics.campaignDetailed(id));
+    return response.data;
+  },
+  /** Download campaign contacts as CSV. */
+  campaignExport: async (id: string): Promise<void> => {
+    const res = await fetchWithAuthRefresh(endpoints.analytics.campaignExport(id));
+    if (!res.ok) throw new Error(`Export failed (${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `campaign-${id}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  },
   conversations: async (params?: { start?: string; end?: string }) => {
     const response = await api.get(endpoints.analytics.conversations, { params });
     return response.data;
@@ -1413,7 +1440,7 @@ export const analyticsApi = {
     const response = await api.get(endpoints.analytics.agentActivity(id), { params });
     return response.data;
   },
-  templates: async (params: { start: string; end: string; templateId: string }) => {
+  templates: async (params: { start: string; end: string; templateId?: string }) => {
     const response = await api.get(endpoints.analytics.templates, { params });
     return response.data;
   },
@@ -1482,6 +1509,69 @@ export const usageApi = {
     const response = await api.post(endpoints.usage.rebuild);
     return response.data;
   },
+};
+
+export const billingApi = {
+  current: async (workspaceId: string) => {
+    const response = await api.get(endpoints.billing.current(workspaceId));
+    return response.data as BillingCurrentResponse;
+  },
+  subscribe: async (planId: string) => {
+    const response = await api.post(endpoints.billing.subscribe, { planId });
+    return response.data as {
+      subscriptionId: string;
+      shortUrl: string;
+      status: string;
+    };
+  },
+  cancel: async () => {
+    const response = await api.post(endpoints.billing.cancel);
+    return response.data as {
+      subscriptionId: string;
+      status: string;
+      endsAt: string | null;
+    };
+  },
+  subscription: async () => {
+    const response = await api.get(endpoints.billing.subscription);
+    return response.data as {
+      subscription: {
+        id: string;
+        status: string;
+        planId: string;
+        currentStart: string | null;
+        currentEnd: string | null;
+        chargeAt: string;
+        paidCount: number;
+        shortUrl: string;
+      } | null;
+      configured: boolean;
+    };
+  },
+};
+
+export type BillingCurrentResponse = {
+  plan: string;
+  billingEmail: string | null;
+  subscriptionId: string | null;
+  planExpiresAt: string | null;
+  billingCycleStart: string;
+  billingCycleEnd: string;
+  limits: {
+    maxMessages: number;
+    maxContacts: number;
+    maxAgents: number;
+    maxNumbers: number;
+    maxStorageBytes: number;
+  };
+  usage: {
+    messagesSent: number;
+    messagesReceived: number;
+    contactsCreated: number;
+    mediaUploaded: number;
+    templatesSent: number;
+    campaignMessages: number;
+  } | null;
 };
 
 export type CloudApiConnectionStatus =

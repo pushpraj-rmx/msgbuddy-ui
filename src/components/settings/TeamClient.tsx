@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { workspaceApi, type WorkspaceMemberResponseDto } from "@/lib/api";
 import {
   permissionsForWorkspaceRole,
+  roleHasWorkspacePermission,
   workspaceRolePermissionSummary,
 } from "@/lib/workspace-role-permissions";
 import type { WorkspaceRole } from "@/lib/types";
@@ -57,7 +58,7 @@ export function TeamClient({
   meUserId?: string;
 }) {
   const router = useRouter();
-  const canManage = meRole === "OWNER" || meRole === "ADMIN";
+  const canManage = roleHasWorkspacePermission(meRole, "members.manage");
 
   const [members, setMembers] = useState<MemberRow[]>(
     initialMembers.map(normalizeMember)

@@ -31,20 +31,22 @@ export async function GET(
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
 
-  const upstream = await fetch(
-    `${API_BASE_URL}${endpoints.sse.workspace(resolvedParams.workspaceId)}`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "text/event-stream",
-      },
-    }
-  );
+  const url = `${API_BASE_URL}${endpoints.sse.workspace(resolvedParams.workspaceId)}`;
+
+  const upstream = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "text/event-stream",
+    },
+    signal: _request.signal,
+    cache: "no-store",
+  });
 
   if (!upstream.ok || !upstream.body) {
     return NextResponse.json(
       { message: "Unable to connect to event stream." },
-      { status: upstream.status || 500 }
+      { status: upstream.status || 500 },
     );
   }
 

@@ -22,6 +22,7 @@ import {
 import type { Template } from "@/lib/types";
 import { TemplateCreateModal } from "./TemplateCreateModal";
 import { getApiError } from "@/lib/api-error";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 const SORT_FIELDS = [
   { value: "updatedAt", label: "Updated" },
@@ -32,8 +33,9 @@ const SORT_FIELDS = [
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
-export function TemplatesClient() {
+export function TemplatesClient({ meRole }: { meRole: string }) {
   const router = useRouter();
+  const canCreateTemplate = roleHasWorkspacePermission(meRole, "templates.create");
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("updatedAt");
@@ -294,25 +296,29 @@ export function TemplatesClient() {
                   {limits.isVerified && " (verified)"}
                 </span>
               )}
-              <Link
-                href="/settings/integrations/whatsapp/import-templates"
-                className="btn btn-outline btn-sm"
-                title="Import existing WhatsApp templates from Meta"
-              >
-                Import from Meta
-              </Link>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={() => {
-                  setCreateError(null);
-                  setCreating(true);
-                }}
-                disabled={atLimit}
-                title={atLimit ? "Template limit reached" : undefined}
-              >
-                Create template
-              </button>
+              {canCreateTemplate && (
+                <Link
+                  href="/settings/integrations/whatsapp/import-templates?returnTo=%2Ftemplates"
+                  className="btn btn-outline btn-sm"
+                  title="Import existing WhatsApp templates from Meta"
+                >
+                  Import from Meta
+                </Link>
+              )}
+              {canCreateTemplate && (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setCreateError(null);
+                    setCreating(true);
+                  }}
+                  disabled={atLimit}
+                  title={atLimit ? "Template limit reached" : undefined}
+                >
+                  Create template
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"

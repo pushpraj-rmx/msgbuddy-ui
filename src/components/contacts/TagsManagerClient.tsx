@@ -8,7 +8,7 @@ import type { Tag } from "@/lib/types";
 
 const TAGS_QUERY_KEY = ["tags"] as const;
 
-export function TagsManagerClient() {
+export function TagsManagerClient({ canManageTags }: { canManageTags: boolean }) {
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
@@ -63,16 +63,18 @@ export function TagsManagerClient() {
         <Link href="/people/contacts" className="btn btn-ghost btn-sm">
           ← People
         </Link>
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          onClick={() => {
-            setEditingTag(null);
-            setModalOpen(true);
-          }}
-        >
-          + New tag
-        </button>
+        {canManageTags ? (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setEditingTag(null);
+              setModalOpen(true);
+            }}
+          >
+            + New tag
+          </button>
+        ) : null}
       </div>
 
       {isFetching && tags.length === 0 ? (
@@ -80,16 +82,19 @@ export function TagsManagerClient() {
       ) : tags.length === 0 ? (
         <div className="rounded-box border border-base-300 bg-base-200 p-8 text-center">
           <p className="text-sm text-base-content/70">
-            No tags yet. Create a tag to organize contacts and use them in
-            segments.
+            {canManageTags
+              ? "No tags yet. Create a tag to organize contacts and use them in segments."
+              : "No tags available yet."}
           </p>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm mt-4"
-            onClick={() => setModalOpen(true)}
-          >
-            Create your first tag
-          </button>
+          {canManageTags ? (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm mt-4"
+              onClick={() => setModalOpen(true)}
+            >
+              Create your first tag
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
@@ -98,7 +103,7 @@ export function TagsManagerClient() {
               <tr>
                 <th>Name</th>
                 <th>Color</th>
-                <th className="w-0" />
+                {canManageTags ? <th className="w-0" /> : null}
               </tr>
             </thead>
             <tbody>
@@ -116,35 +121,37 @@ export function TagsManagerClient() {
                       <span className="text-base-content/50">—</span>
                     )}
                   </td>
-                  <td>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => {
-                          setEditingTag(tag);
-                          setModalOpen(true);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs text-error"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Delete tag "${tag.name}"? It will be removed from all contacts.`
+                  {canManageTags ? (
+                    <td>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => {
+                            setEditingTag(tag);
+                            setModalOpen(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs text-error"
+                          onClick={() => {
+                            if (
+                              confirm(
+                                `Delete tag "${tag.name}"? It will be removed from all contacts.`
+                              )
                             )
-                          )
-                            deleteMutation.mutate(tag.id);
-                        }}
-                        disabled={isPending}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+                              deleteMutation.mutate(tag.id);
+                          }}
+                          disabled={isPending}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -152,7 +159,7 @@ export function TagsManagerClient() {
         </div>
       )}
 
-      {(modalOpen || editingTag) && (
+      {canManageTags && (modalOpen || editingTag) && (
         <TagFormModal
           tag={editingTag}
           onClose={() => {

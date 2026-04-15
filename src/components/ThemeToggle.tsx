@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import DarkModeRounded from "@mui/icons-material/DarkModeRounded";
-import LightModeRounded from "@mui/icons-material/LightModeRounded";
+import { Moon, Sun } from "lucide-react";
 
 const STORAGE_KEY = "theme-preference";
 type ThemePreference = "dark" | "light";
@@ -58,8 +57,8 @@ export function ThemeToggle() {
       aria-label={`Theme: ${label}. Click to switch.`}
       title={`Theme: ${label}`}
     >
-      {displayPreference === "light" && <LightModeRounded className="h-5 w-5" />}
-      {displayPreference === "dark" && <DarkModeRounded className="h-5 w-5" />}
+      {displayPreference === "light" && <Sun className="h-5 w-5" />}
+      {displayPreference === "dark" && <Moon className="h-5 w-5" />}
     </button>
   );
 }

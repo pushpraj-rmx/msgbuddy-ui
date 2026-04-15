@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { contactsApi } from "@/lib/api";
+import { getApiError } from "@/lib/api-error";
 import type { ImportResult } from "@/lib/types";
 
 export function ImportModal({
@@ -32,10 +33,7 @@ export function ImportModal({
         onSuccess();
       }
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data
-          ?.message ?? "Failed to import contacts.";
-      onError(msg);
+      onError(getApiError(err));
     } finally {
       setUploading(false);
     }
@@ -87,11 +85,18 @@ export function ImportModal({
             <div className="space-y-2 rounded-box border border-base-300 bg-base-200 p-3">
               <div className="flex flex-wrap gap-4 text-sm">
                 <span className="text-success">
-                  Imported: <strong>{result.imported}</strong>
+                  New: <strong>{result.created ?? result.imported}</strong>
                 </span>
-                <span className="text-error">
-                  Failed: <strong>{result.failed}</strong>
-                </span>
+                {(result.updated ?? 0) > 0 && (
+                  <span className="text-info">
+                    Updated: <strong>{result.updated}</strong>
+                  </span>
+                )}
+                {result.failed > 0 && (
+                  <span className="text-error">
+                    Failed: <strong>{result.failed}</strong>
+                  </span>
+                )}
               </div>
               {result.errors.length > 0 && (
                 <div className="overflow-x-auto">

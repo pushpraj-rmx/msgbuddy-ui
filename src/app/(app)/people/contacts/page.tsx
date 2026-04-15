@@ -26,6 +26,7 @@ export default async function PeopleContactsPage() {
         initialContacts={initialContacts.contacts ?? []}
         initialNextCursor={initialContacts.nextCursor ?? undefined}
         initialTotalCount={initialContacts.totalCount}
+        meRole={String(me.role)}
       />
     </PageContainer>
   );

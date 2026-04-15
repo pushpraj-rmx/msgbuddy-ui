@@ -8,6 +8,7 @@ import type {
 } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 async function getCloudApiSafe(
   workspaceId: string
@@ -32,8 +33,9 @@ function isWhatsAppConnected(
 
 export default async function DashboardPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
-  const cloudApiConfig = await getCloudApiSafe(me.workspace.id);
-  const showConnectWhatsAppTodo = !isWhatsAppConnected(cloudApiConfig);
+  const isViewer = !roleHasWorkspacePermission(String(me.role), "contacts.create");
+  const cloudApiConfig = isViewer ? null : await getCloudApiSafe(me.workspace.id);
+  const showConnectWhatsAppTodo = !isViewer && !isWhatsAppConnected(cloudApiConfig);
 
   return (
     <PageContainer>
@@ -42,7 +44,7 @@ export default async function DashboardPage() {
         description={`Welcome back, ${me.user?.email ?? "User"}.`}
       />
 
-      <DashboardClient />
+      <DashboardClient meRole={String(me.role)} />
 
       {showConnectWhatsAppTodo && (
         <IntegrationCard

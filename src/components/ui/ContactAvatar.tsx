@@ -39,7 +39,7 @@ export function ContactAvatar({
 
   return (
     <div
-      className={`relative shrink-0 overflow-hidden rounded-lg bg-primary text-primary-content ${box} ${className}`.trim()}
+      className={`relative shrink-0 overflow-hidden rounded-box bg-primary text-primary-content ${box} ${className}`.trim()}
       aria-hidden
     >
       {showPhoto ? (

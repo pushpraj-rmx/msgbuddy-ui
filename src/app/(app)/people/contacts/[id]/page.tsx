@@ -11,13 +11,13 @@ export default async function PeopleContactDetailPage({
 }) {
   const { id } = await params;
   let contact: Contact;
-  let me: { user: { id: string } };
+  let me: { user: { id: string }; role: string };
   try {
     [contact, me] = await Promise.all([
       serverFetch<Contact>(
         `${endpoints.contacts.byId(id)}?include=tags,customFields`
       ),
-      serverFetch<{ user: { id: string } }>(endpoints.auth.me),
+      serverFetch<{ user: { id: string }; role: string }>(endpoints.auth.me),
     ]);
   } catch {
     notFound();
@@ -30,7 +30,11 @@ export default async function PeopleContactDetailPage({
           View and edit contact details, tags, notes, and activity.
         </p>
       </div>
-      <ContactDetailClient initialContact={contact} currentUserId={me.user.id} />
+      <ContactDetailClient
+        initialContact={contact}
+        currentUserId={me.user.id}
+        meRole={String(me.role)}
+      />
     </div>
   );
 }

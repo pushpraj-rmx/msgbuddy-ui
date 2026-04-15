@@ -34,3 +34,13 @@ export function canAccessUsagePage(workspaceRole: string): boolean {
   const r = R(workspaceRole);
   return r === "OWNER" || r === "ADMIN";
 }
+
+/** Billing / subscription management — OWNER only. */
+export function canAccessBillingPage(workspaceRole: string): boolean {
+  return R(workspaceRole) === "OWNER";
+}
+
+/** Workspace hard-delete — OWNER only (product rule; ADMIN is excluded intentionally). */
+export function canDeleteWorkspace(workspaceRole: string): boolean {
+  return R(workspaceRole) === "OWNER";
+}

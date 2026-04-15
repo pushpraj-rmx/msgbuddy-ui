@@ -57,9 +57,9 @@ function WhatsAppBubblePreview({
 }) {
   return (
     <div className="flex justify-center py-2">
-      <div className="w-full max-w-xs bg-[#dcf8c6] rounded-xl shadow-md p-3 space-y-2 text-sm text-gray-800 dark:bg-[#1f5c36] dark:text-gray-100">
+      <div className="w-full max-w-xs bg-success/15 rounded-box shadow-md p-3 space-y-2 text-sm text-base-content">
         {headerType !== "NONE" && (
-          <div className="rounded-lg bg-black/10 dark:bg-white/10 px-2 py-1.5 text-xs font-medium text-center">
+          <div className="rounded-box bg-black/10 dark:bg-white/10 px-2 py-1.5 text-xs font-medium text-center">
             {headerType === "TEXT" ? (
               <span>{headerContent || <span className="opacity-50 italic">Header text</span>}</span>
             ) : (
@@ -80,7 +80,7 @@ function WhatsAppBubblePreview({
             {buttons.map((btn, i) => (
               <div
                 key={i}
-                className="text-center text-[#075e54] dark:text-[#44c767] text-xs font-semibold py-1 rounded bg-white/60 dark:bg-white/10"
+                className="text-center text-success text-xs font-semibold py-1 rounded bg-white/60 dark:bg-white/10"
               >
                 {btn.type === "URL" ? "🔗 " : btn.type === "PHONE_NUMBER" ? "📞 " : ""}
                 {btn.text || "(button)"}
