@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Eye } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { logoutAllAction } from "@/app/actions/auth";
 import type { LoginHistoryEvent } from "@/lib/api";
 import { meApi } from "@/lib/api";
@@ -42,6 +42,7 @@ export function AccountSecurityClient({
   const [nameSaving, setNameSaving] = useState(false);
   const [logoutAllBusy, setLogoutAllBusy] = useState(false);
   const [showSessions, setShowSessions] = useState(false);
+  const [showConfirmLogoutAll, setShowConfirmLogoutAll] = useState(false);
 
   const onAvatarUploaded = async (url: string) => {
     setAvatarUrl(url);
@@ -70,10 +71,6 @@ export function AccountSecurityClient({
   };
 
   const onLogoutAll = () => {
-    const ok = window.confirm(
-      "Sign out all sessions on every device? You will need to sign in again on this device."
-    );
-    if (!ok) return;
     setLogoutAllBusy(true);
     void (async () => {
       await logoutAllAction();
@@ -83,119 +80,131 @@ export function AccountSecurityClient({
   };
 
   return (
-    <div className="rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-5">
-      <div className="grid gap-4">
-        <div className="grid gap-4 md:grid-cols-[4.75rem_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
-          <div>
-            <AvatarCropUpload
-              currentUrl={avatarUrl}
-              initials={displayName ? displayName.slice(0, 2).toUpperCase() : accountEmail.slice(0, 2).toUpperCase()}
-              onUploaded={onAvatarUploaded}
-            />
-          </div>
-
-          <form onSubmit={onSaveName} className="space-y-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/55">
-              Display Name
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                className="input input-sm input-bordered w-full bg-base-200/50"
-                placeholder="Your name"
-                value={displayName}
-                onChange={(e) => {
-                  setDisplayName(e.target.value);
-                  setNameSaved(false);
-                }}
-              />
-              <button type="submit" className="btn btn-sm btn-primary" disabled={nameSaving}>
-                {nameSaving ? <span className="loading loading-spinner loading-xs" /> : "Save"}
-              </button>
-            </div>
-          </form>
-
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-base-content/55">
-              Email Address
-            </label>
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-base-300 bg-base-200/50 px-3 py-2 text-sm">
-              <span className="truncate">{accountEmail}</span>
-              <span className="badge badge-success badge-sm badge-soft">Verified</span>
-            </div>
-          </div>
+    <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
+      {/* ── Profile row ── */}
+      <div className="grid gap-4 md:grid-cols-[4.75rem_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
+        <div>
+          <AvatarCropUpload
+            currentUrl={avatarUrl}
+            initials={displayName ? displayName.slice(0, 2).toUpperCase() : accountEmail.slice(0, 2).toUpperCase()}
+            onUploaded={onAvatarUploaded}
+          />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-3">
-          <div>
-            <p className="text-sm font-medium text-base-content">Active Sessions</p>
-            <p className="text-xs text-base-content/60">
-              {Math.max(1, Math.min(loginHistory.length, 6))} devices currently logged in
-            </p>
-          </div>
+        <form onSubmit={onSaveName} className="space-y-1">
+          <span className="op-label">Display name</span>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost border border-base-300/70"
-              onClick={() => setShowSessions((v) => !v)}
-            >
-              <Eye className="h-4 w-4" />
-              Manage Sessions
+            <input
+              type="text"
+              className="input input-sm input-bordered w-full"
+              placeholder="Your name"
+              value={displayName}
+              onChange={(e) => {
+                setDisplayName(e.target.value);
+                setNameSaved(false);
+              }}
+            />
+            <button type="submit" className="btn btn-sm btn-primary" disabled={nameSaving}>
+              {nameSaving ? <span className="loading loading-spinner loading-xs" /> : "Save"}
             </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost text-error hover:bg-error/10"
-              disabled={logoutAllBusy}
-              onClick={onLogoutAll}
-            >
-              {logoutAllBusy ? "Signing out..." : "Sign out everywhere"}
-            </button>
+          </div>
+        </form>
+
+        <div className="space-y-1">
+          <span className="op-label">Email</span>
+          <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-[7px] text-[13px]">
+            <span className="truncate">{accountEmail}</span>
+            <span className="op-tag op-tag-ok">Verified</span>
           </div>
         </div>
-
-        {nameError ? <p className="text-xs text-error">{nameError}</p> : null}
-        {nameSaved ? <p className="text-xs text-success">Name saved.</p> : null}
-        {!hasPassword ? (
-          <p className="text-xs text-base-content/65">
-            Password login is not set for this account yet.
-          </p>
-        ) : null}
-
-        {showSessions ? (
-          <div className="rounded-xl border border-base-300 bg-base-200/25 p-3">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-base-content/55">
-              Recent sign-in activity
-            </p>
-            {loginHistory.length === 0 ? (
-              <p className="text-sm text-base-content/60">No events yet.</p>
-            ) : (
-              <div className="max-h-56 overflow-auto rounded-lg border border-base-300 bg-base-100">
-                <table className="table table-sm">
-                  <thead className="bg-base-200/80">
-                    <tr>
-                      <th>When</th>
-                      <th>Event</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loginHistory.map((row) => (
-                      <tr key={row.id}>
-                        <td className="whitespace-nowrap text-xs">
-                          {new Date(row.createdAt).toLocaleString(undefined, {
-                            dateStyle: "medium",
-                            timeStyle: "short",
-                          })}
-                        </td>
-                        <td className="text-sm">{formatLoginAction(row.action)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        ) : null}
       </div>
+
+      {/* ── Feedback messages ── */}
+      {nameError && <p className="text-[12px] text-error">{nameError}</p>}
+      {nameSaved && <p className="text-[12px] text-success">Name saved.</p>}
+      {!hasPassword && (
+        <p className="text-[12px] text-base-content/50">
+          Password login is not set for this account.{" "}
+          <a href="/settings/password" className="text-primary hover:underline">Set one</a>
+        </p>
+      )}
+
+      {/* ── Sessions ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-3">
+        <div>
+          <span className="op-label">sessions</span>
+          <p className="mt-0.5 text-[12px] text-base-content/55">
+            {Math.max(1, Math.min(loginHistory.length, 6))} device{loginHistory.length === 1 ? "" : "s"} logged in
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={() => setShowSessions((v) => !v)}
+          >
+            {showSessions ? "Hide" : "View activity"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs text-error/70 hover:text-error"
+            disabled={logoutAllBusy}
+            onClick={() => setShowConfirmLogoutAll(true)}
+          >
+            {logoutAllBusy ? "Signing out…" : "Sign out everywhere"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── Login history table ── */}
+      {showSessions && (
+        <div className="rounded-box border border-base-300 overflow-hidden">
+          <div className="px-3 py-2 bg-base-100/50">
+            <span className="op-label">recent activity</span>
+          </div>
+          {loginHistory.length === 0 ? (
+            <p className="px-3 py-3 text-[12px] text-base-content/50">No events yet.</p>
+          ) : (
+            <div className="max-h-48 overflow-auto">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="border-b border-base-300 bg-base-100/30">
+                    <th className="op-label px-3 py-2 text-left font-medium">When</th>
+                    <th className="op-label px-3 py-2 text-left font-medium">Event</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loginHistory.map((row) => (
+                    <tr key={row.id} className="border-b border-base-300 last:border-b-0">
+                      <td className="whitespace-nowrap px-3 py-2 tabular-nums text-base-content/65">
+                        {new Date(row.createdAt).toLocaleString(undefined, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                      </td>
+                      <td className="px-3 py-2">{formatLoginAction(row.action)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={showConfirmLogoutAll}
+        title="Revoke all other sessions?"
+        description="Sign out all sessions on every device? You will need to sign in again on this device."
+        confirmLabel="Sign out everywhere"
+        tone="danger"
+        loading={logoutAllBusy}
+        onConfirm={() => {
+          setShowConfirmLogoutAll(false);
+          onLogoutAll();
+        }}
+        onClose={() => setShowConfirmLogoutAll(false)}
+      />
     </div>
   );
 }

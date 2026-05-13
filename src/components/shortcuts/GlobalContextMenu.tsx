@@ -94,7 +94,7 @@ export function GlobalContextMenu() {
       ref={menuRef}
       role="menu"
       aria-label="App menu"
-      className="fixed z-[60] min-w-[12rem] rounded-box border border-base-300 bg-base-100 p-1 shadow-xl"
+      className="fixed z-[60] min-w-[12rem] rounded-box border border-base-300 bg-base-200 p-1 shadow-lg"
       style={{ left, top }}
     >
       <button
@@ -107,11 +107,11 @@ export function GlobalContextMenu() {
         }}
       >
         <span>Global search</span>
-        <kbd className="kbd kbd-sm">
+        <span className="op-kbd">
           {typeof navigator !== "undefined" && /Mac|iPhone|iPod|iPad/i.test(navigator.platform)
             ? "⌘K"
             : "Ctrl+K"}
-        </kbd>
+        </span>
       </button>
       <button
         type="button"
@@ -123,7 +123,7 @@ export function GlobalContextMenu() {
         }}
       >
         <span>Keyboard shortcuts</span>
-        <kbd className="kbd kbd-sm">?</kbd>
+        <span className="op-kbd">?</span>
       </button>
       {isLgUp && rightPanel?.content ? (
         <button

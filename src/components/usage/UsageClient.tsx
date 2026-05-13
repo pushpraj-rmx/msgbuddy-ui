@@ -62,10 +62,10 @@ function formatBytes(bytes: number): string {
   return `${v.toFixed(digits)} ${units[i]}`;
 }
 
-function progressTone(percent: number): string {
-  if (percent >= 100) return "progress-error";
-  if (percent >= 90) return "progress-warning";
-  return "progress-primary";
+function progressBarColor(percent: number): string {
+  if (percent >= 100) return "bg-error";
+  if (percent >= 90) return "bg-warning";
+  return "bg-primary";
 }
 
 function QuotaBlock({
@@ -88,11 +88,7 @@ function QuotaBlock({
             <p className="mt-0.5 text-xs text-base-content/60">{subtitle}</p>
           ) : null}
         </div>
-        <span
-          className={`badge badge-sm shrink-0 ${
-            pct >= 100 ? "badge-error" : pct >= 90 ? "badge-warning" : "badge-ghost"
-          }`}
-        >
+        <span className={`shrink-0 ${pct >= 100 ? "op-tag op-tag-danger" : pct >= 90 ? "op-tag op-tag-warn" : "op-tag"}`}>
           {pct}%
         </span>
       </div>
@@ -103,11 +99,12 @@ function QuotaBlock({
       <p className="text-xs text-base-content/60">
         {slice.remaining} remaining this period
       </p>
-      <progress
-        className={`progress mt-3 h-2 w-full ${progressTone(pct)}`}
-        value={pct}
-        max={100}
-      />
+      <div className="mt-3 h-2 w-full overflow-hidden rounded-sm bg-base-300">
+        <div
+          className={`h-full ${progressBarColor(pct)} transition-[width] duration-300`}
+          style={{ width: `${Math.min(100, pct)}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -129,7 +126,7 @@ function ActivityGrid({ usage, heading }: { usage: UsageSummary; heading: string
         {rows.map((row) => (
           <div
             key={row.label}
-            className="flex items-center justify-between gap-3 rounded-box border border-base-300 bg-base-100 px-3 py-2.5"
+            className="flex items-center justify-between gap-3 card bg-base-100 border border-base-300 px-3 py-2.5"
           >
             <span className="text-sm text-base-content/70">{row.label}</span>
             <span className="tabular-nums text-sm font-semibold text-base-content">
@@ -289,7 +286,7 @@ export function UsageClient() {
       </div>
 
       {error ? (
-        <div role="alert" className="alert alert-error alert-soft">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span>{error}</span>
         </div>
       ) : null}
@@ -317,7 +314,7 @@ export function UsageClient() {
             </div>
           </section>
 
-          <section className="rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
+          <section className="card bg-base-100 border border-base-300 p-4 sm:p-6">
             <ActivityGrid
               usage={usage}
               heading="This billing month — activity"
@@ -331,7 +328,7 @@ export function UsageClient() {
           <h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
             Media storage
           </h2>
-          <div className="rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
+          <div className="card bg-base-100 border border-base-300 p-4 sm:p-6">
             <div className="flex flex-wrap items-end justify-between gap-4">
               <div>
                 <h3 className="text-base font-medium">Workspace media</h3>
@@ -344,21 +341,16 @@ export function UsageClient() {
                   <span className="text-base-content/50"> used</span>
                 </p>
               </div>
-              <span
-                className={`badge ${
-                  storageData.usedPercent >= 95
-                    ? "badge-warning"
-                    : "badge-ghost"
-                }`}
-              >
+              <span className={storageData.usedPercent >= 95 ? "op-tag op-tag-warn" : "op-tag"}>
                 {storageData.usedPercent}%
               </span>
             </div>
-            <progress
-              className={`progress mt-4 h-3 w-full ${progressTone(storageData.usedPercent)}`}
-              value={Math.min(100, storageData.usedPercent)}
-              max={100}
-            />
+            <div className="mt-4 h-3 w-full overflow-hidden rounded-sm bg-base-300">
+              <div
+                className={`h-full ${progressBarColor(storageData.usedPercent)} transition-[width] duration-300`}
+                style={{ width: `${Math.min(100, storageData.usedPercent)}%` }}
+              />
+            </div>
           </div>
         </section>
       ) : null}
@@ -413,7 +405,7 @@ export function UsageClient() {
         <h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
           Custom date range
         </h2>
-        <div className="rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
+        <div className="card bg-base-100 border border-base-300 p-4 sm:p-6">
           <p className="text-sm text-base-content/70">
             Compare usage for any date range (does not change plan limits above).
           </p>

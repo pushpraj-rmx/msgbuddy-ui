@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { Search, MessageSquare, User, ArrowRight } from "lucide-react";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { contactsApi, conversationsApi } from "@/lib/api";
 import { SHORTCUT_EVENTS } from "@/lib/shortcuts";
@@ -45,26 +45,45 @@ export function GlobalSearch({
       window.removeEventListener(SHORTCUT_EVENTS.OPEN_GLOBAL_SEARCH, onOpenFromShortcut);
   }, [variant]);
 
+  // Close on outside click
   useEffect(() => {
+    if (!open) return;
     const onPointerDown = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) {
         setOpen(false);
+        setQuery("");
       }
     };
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
-  }, []);
+  }, [open]);
 
+  // Close on Escape
   useEffect(() => {
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || !open) return;
+      if (e.key !== "Escape") return;
       e.preventDefault();
       e.stopPropagation();
       setOpen(false);
+      setQuery("");
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [open]);
+
+  // ⌘K to open
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setOpen(true);
+        window.requestAnimationFrame(() => inputRef.current?.focus());
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const searchQuery = useQuery({
     queryKey: ["global-search", debounced],
@@ -94,89 +113,167 @@ export function GlobalSearch({
 
   const contacts = searchQuery.data?.contacts ?? [];
   const conversations = searchQuery.data?.conversations ?? [];
+  const hasResults = contacts.length > 0 || conversations.length > 0;
 
+  // Trigger button (shown when closed)
+  if (!open && variant === "desktop") {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setOpen(true);
+          window.requestAnimationFrame(() => inputRef.current?.focus());
+        }}
+        className="input input-bordered input-sm gap-2 text-base-content/50 font-normal cursor-pointer"
+      >
+        <Search className="h-4 w-4" />
+        <span className="hidden sm:inline">Search...</span>
+        <span className="op-kbd ml-auto">⌘K</span>
+      </button>
+    );
+  }
+
+  if (!open && variant === "mobile") {
+    return null;
+  }
+
+  // Command palette modal
   return (
-    <div ref={containerRef} className="relative w-full max-w-xl">
-      <label className="input input-bordered flex h-12 w-full items-center gap-2 rounded-full border-base-300 bg-base-200/60 text-sm transition-colors focus-within:border-primary/40 focus-within:bg-base-100 ">
-        <Search className="h-4 w-4 shrink-0 text-base-content/40" />
-        <input
-          ref={inputRef}
-          id={inputId}
-          type="text"
-          placeholder="Search contacts, conversations…"
-          value={query}
-          onFocus={() => setOpen(true)}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setOpen(true);
-          }}
-          className="grow bg-transparent placeholder:text-base-content/40"
-        />
-        <kbd className="kbd kbd-sm hidden shrink-0 text-base-content/30 sm:inline">⌘K</kbd>
-      </label>
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-50 bg-base-content/40" />
 
-      {open && debounced.length >= 2 ? (
-        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-40 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl">
-          {searchQuery.isLoading ? (
-            <div className="p-3 text-sm text-base-content/65">Searching...</div>
-          ) : contacts.length === 0 && conversations.length === 0 ? (
-            <div className="p-3 text-sm text-base-content/65">No matches found.</div>
-          ) : (
-            <div className="space-y-2">
-              {conversations.length > 0 ? (
-                <section className="space-y-1">
-                  <p className="px-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">
-                    Conversations
-                  </p>
-                  {conversations.slice(0, 4).map((conversation) => {
-                    const name =
-                      conversation.contact?.name ||
-                      conversation.contact?.phone || 2
-                    conversation.contact?.email ||
-                      "Conversation";
-                    return (
+      {/* Palette */}
+      <div className="fixed inset-0 z-50 flex items-start justify-center pt-[15vh]">
+        <div
+          ref={containerRef}
+          className="w-full max-w-lg mx-4 overflow-hidden rounded-box border border-base-300 bg-base-200 shadow-lg"
+        >
+          {/* Search input */}
+          <div className="flex items-center gap-3 border-b border-base-300 px-4">
+            <Search className="h-5 w-5 shrink-0 text-base-content/40" />
+            <input
+              ref={inputRef}
+              id={inputId}
+              type="text"
+              placeholder="Search contacts, conversations..."
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-base-content/40"
+              autoFocus
+            />
+            <span className="op-kbd shrink-0">ESC</span>
+          </div>
+
+          {/* Results */}
+          <div className="max-h-80 overflow-y-auto">
+            {debounced.length < 2 ? (
+              <div className="p-6 text-center text-sm text-base-content/40">
+                Type to search contacts and conversations
+              </div>
+            ) : searchQuery.isLoading ? (
+              <div className="flex items-center justify-center gap-2 p-6">
+                <span className="loading loading-spinner loading-sm" />
+                <span className="text-sm text-base-content/50">Searching...</span>
+              </div>
+            ) : !hasResults ? (
+              <div className="px-6 py-8 text-center">
+                <span className="op-label mb-2 block">no results</span>
+                <p className="text-[13px] text-base-content/55">
+                  Nothing matched &ldquo;{debounced}&rdquo;
+                </p>
+              </div>
+            ) : (
+              <div className="py-2">
+                {conversations.length > 0 && (
+                  <div>
+                    <p className="op-label px-4 py-2">
+                      Conversations
+                    </p>
+                    {conversations.slice(0, 4).map((conversation) => {
+                      const name =
+                        conversation.contact?.name ||
+                        conversation.contact?.phone ||
+                        conversation.contact?.email ||
+                        "Conversation";
+                      return (
+                        <Link
+                          key={conversation.id}
+                          href={`/inbox?conversationId=${conversation.id}&focus=reply`}
+                          onClick={() => {
+                            setOpen(false);
+                            setQuery("");
+                          }}
+                          className="flex items-center gap-3 px-4 py-2 hover:bg-base-200 transition-colors"
+                        >
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100 text-base-content/70">
+                            <MessageSquare className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{name}</p>
+                            <p className="truncate text-xs text-base-content/50">
+                              {conversation.lastMessage?.text || "Open conversation"}
+                            </p>
+                          </div>
+                          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-base-content/30" />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {contacts.length > 0 && (
+                  <div>
+                    {conversations.length > 0 && <div className="border-t border-base-300" />}
+                    <p className="op-label px-4 py-2">
+                      Contacts
+                    </p>
+                    {contacts.slice(0, 4).map((contact: Contact) => (
                       <Link
-                        key={conversation.id}
-                        href={`/inbox?conversationId=${conversation.id}&focus=reply`}
-                        onClick={() => setOpen(false)}
-                        className="block rounded-box border border-transparent px-2 py-2 hover:border-base-300 hover:bg-base-200"
+                        key={contact.id}
+                        href={`/people/contacts/${contact.id}`}
+                        onClick={() => {
+                          setOpen(false);
+                          setQuery("");
+                        }}
+                        className="flex items-center gap-3 px-4 py-2 hover:bg-base-200 transition-colors"
                       >
-                        <p className="truncate text-sm font-medium">{name}</p>
-                        <p className="truncate text-xs text-base-content/60">
-                          {conversation.lastMessage?.text || "Open conversation"}
-                        </p>
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100 text-base-content/70">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {contact.name || contact.phone || contact.email || "Contact"}
+                          </p>
+                          <p className="truncate text-xs text-base-content/50">
+                            {contact.email || contact.phone}
+                          </p>
+                        </div>
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-base-content/30" />
                       </Link>
-                    );
-                  })}
-                </section>
-              ) : null}
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-              {contacts.length > 0 ? (
-                <section className="space-y-1">
-                  <p className="px-2 text-xs font-semibold uppercase tracking-wide text-base-content/60">
-                    Contacts
-                  </p>
-                  {contacts.slice(0, 4).map((contact: Contact) => (
-                    <Link
-                      key={contact.id}
-                      href={`/people/contacts/${contact.id}`}
-                      onClick={() => setOpen(false)}
-                      className="block rounded-box border border-transparent px-2 py-2 hover:border-base-300 hover:bg-base-200"
-                    >
-                      <p className="truncate text-sm font-medium">
-                        {contact.name || contact.phone || contact.email || "Contact"}
-                      </p>
-                      <p className="truncate text-xs text-base-content/60">
-                        {contact.email || contact.phone}
-                      </p>
-                    </Link>
-                  ))}
-                </section>
-              ) : null}
+          {/* Footer */}
+          <div className="flex items-center justify-between border-t border-base-300 px-4 py-2">
+            <span className="text-xs text-base-content/40">
+              {hasResults
+                ? `${conversations.length + contacts.length} results`
+                : "Search by name, email, or phone"}
+            </span>
+            <div className="flex items-center gap-1.5 font-mono-op text-[10px] text-base-content/40">
+              <span className="op-kbd">↑↓</span>
+              <span>navigate</span>
+              <span className="op-kbd ml-1">↵</span>
+              <span>open</span>
             </div>
-          )}
+          </div>
         </div>
-      ) : null}
-    </div>
+      </div>
+    </>
   );
 }

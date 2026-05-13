@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { segmentsApi } from "@/lib/api";
 import type { Segment, SegmentQuery } from "@/lib/types";
 import { SegmentFormModal } from "./SegmentFormModal";
@@ -19,6 +20,7 @@ export function SegmentsPageClient({
   const [modalOpen, setModalOpen] = useState(false);
   const [editingSegment, setEditingSegment] = useState<Segment | null>(null);
   const [previewingSegment, setPreviewingSegment] = useState<Segment | null>(null);
+  const [confirmDeleteSegment, setConfirmDeleteSegment] = useState<Segment | null>(null);
 
   const { data: segments = [] } = useQuery({
     queryKey: SEGMENTS_QUERY_KEY,
@@ -72,7 +74,7 @@ export function SegmentsPageClient({
   });
 
   const handleDelete = (seg: Segment) => {
-    if (confirm(`Delete segment "${seg.name}"?`)) deleteMutation.mutate(seg.id);
+    setConfirmDeleteSegment(seg);
   };
 
   return (
@@ -223,6 +225,19 @@ export function SegmentsPageClient({
           onClose={() => setPreviewingSegment(null)}
         />
       ) : null}
+
+      <ConfirmDialog
+        open={confirmDeleteSegment !== null}
+        title={`Delete segment "${confirmDeleteSegment?.name ?? ""}"?`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteSegment) deleteMutation.mutate(confirmDeleteSegment.id);
+          setConfirmDeleteSegment(null);
+        }}
+        onClose={() => setConfirmDeleteSegment(null)}
+      />
     </div>
   );
 }

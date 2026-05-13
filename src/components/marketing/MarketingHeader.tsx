@@ -15,7 +15,7 @@ export async function MarketingHeader() {
   const isAuthenticated = Boolean(raw && decodeURIComponent(raw));
 
   return (
-    <header className="border-b border-base-300 bg-base-100/90 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-base-300 bg-base-100">
       <div className="navbar mx-auto w-full max-w-6xl px-4 sm:px-6">
         <div className="navbar-start">
           <div className="dropdown md:hidden">

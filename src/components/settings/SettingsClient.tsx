@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useRouter } from "next/navigation";
-import { ShieldCheck, Building2, Users, MessageCircle } from "lucide-react";
 import {
   type WhatsAppConnectionSummary,
   type WorkspaceCloudApiConfigResponse,
@@ -108,6 +108,44 @@ export function SettingsClient({
   const [dangerBusy, setDangerBusy] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  // Chatbot form state
+  const [chatbotForm, setChatbotForm] = useState({
+    chatbotEnabled: settings.chatbotEnabled ?? false,
+    chatbotSystemPrompt: settings.chatbotSystemPrompt ?? "",
+    chatbotApiKey: "",
+    chatbotProvider: settings.chatbotProvider ?? "anthropic",
+    chatbotModel: settings.chatbotModel ?? "claude-sonnet-4-20250514",
+  });
+  const [savingChatbot, setSavingChatbot] = useState(false);
+  const [chatbotError, setChatbotError] = useState<string | null>(null);
+  const [chatbotSaved, setChatbotSaved] = useState(false);
+
+  const onSaveChatbot = async () => {
+    setSavingChatbot(true);
+    setChatbotError(null);
+    setChatbotSaved(false);
+    try {
+      const payload: Partial<WorkspaceSettingsPayload> = {
+        chatbotEnabled: chatbotForm.chatbotEnabled,
+        chatbotSystemPrompt: chatbotForm.chatbotSystemPrompt.trim() || undefined,
+        chatbotProvider: chatbotForm.chatbotProvider,
+        chatbotModel: chatbotForm.chatbotModel,
+      };
+      if (chatbotForm.chatbotApiKey.trim()) {
+        payload.chatbotApiKey = chatbotForm.chatbotApiKey.trim();
+      }
+      await workspaceApi.updateSettings(workspace.id, payload);
+      setChatbotForm((s) => ({ ...s, chatbotApiKey: "" }));
+      setChatbotSaved(true);
+      router.refresh();
+    } catch (e) {
+      setChatbotError(e instanceof Error ? e.message : "Failed to save chatbot settings");
+    } finally {
+      setSavingChatbot(false);
+    }
+  };
 
   const openEdit = () => {
     setForm(initialForm);
@@ -151,10 +189,6 @@ export function SettingsClient({
 
   const onDeleteWorkspace = async () => {
     if (!canDeleteWorkspaceAction) return;
-    const ok = window.confirm(
-      "Delete this workspace? This is a soft-delete, but it will immediately block access."
-    );
-    if (!ok) return;
     setDangerBusy(true);
     try {
       await workspaceApi.deleteWorkspace(workspace.id);
@@ -168,381 +202,355 @@ export function SettingsClient({
 
   return (
     <section className="mx-auto w-full max-w-6xl">
-      <div className="space-y-6">
-          <header className="space-y-1">
-            <h1 className="text-3xl font-bold tracking-tight text-base-content">Workspace Settings</h1>
-            <p className="text-base text-base-content/65">
-              Configure your account, workspace, and integrations.
-            </p>
-          </header>
+      <div className="space-y-8">
+        {/* ── Page header ── */}
+        <header>
+          <span className="op-label">settings</span>
+          <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">
+            Workspace Settings
+          </h1>
+          <p className="mt-0.5 text-[13px] text-base-content/55">
+            Configure your account, workspace, and integrations.
+          </p>
+        </header>
 
-          <section id="account-security" className="space-y-3">
-            <div className="flex items-center gap-2 text-base-content">
-              <ShieldCheck className="h-5 w-5 text-success" />
-              <h2 className="text-2xl font-semibold tracking-tight">Account &amp; Security</h2>
-            </div>
-            <AccountSecurityClient
-              accountEmail={accountEmail}
-              accountName={accountName}
-              accountAvatarUrl={accountAvatarUrl}
-              hasPassword={hasPassword}
-              loginHistory={loginHistory}
-            />
-          </section>
+        {/* ── Account & Security ── */}
+        <section id="account-security" className="space-y-3">
+          <span className="op-section-title">Account &amp; Security</span>
+          <AccountSecurityClient
+            accountEmail={accountEmail}
+            accountName={accountName}
+            accountAvatarUrl={accountAvatarUrl}
+            hasPassword={hasPassword}
+            loginHistory={loginHistory}
+          />
+        </section>
 
-          <section id="workspace-info" className="space-y-3">
-            <div className="flex items-center gap-2 text-base-content">
-              <Building2 className="h-5 w-5 text-success" />
-              <h2 className="text-2xl font-semibold tracking-tight">Workspace Info</h2>
-            </div>
-            {canManageWorkspace ? (
-              <div className="space-y-4 rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-6">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <InfoRow label="Workspace name" value={workspace.name} />
-                  <InfoRow label="Workspace slug" value={workspace.slug} />
-                  <InfoRow label="Workspace description" value={workspace.description} fullWidth />
-                  <InfoRow label="Timezone" value={settings.timezone || workspace.timezone} />
-                  <InfoRow label="Locale" value={settings.locale || workspace.locale} />
-                  <InfoRow label="Status" value={workspace.status || "Active subscription"} />
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-4">
-                  <p className="text-sm text-base-content/70">
-                    Personal workspace • {members.length} member{members.length === 1 ? "" : "s"}
-                  </p>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-success btn-sm px-5"
-                      onClick={openEdit}
-                    >
-                      Save Changes
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-base-300 bg-base-100 p-4 text-sm text-base-content/80">
-                You do not have permission to change workspace settings.
-              </div>
-            )}
-          </section>
-
-          {canViewMembers ? (
-            <section id="team-members" className="space-y-3">
-              <div className="flex items-center gap-2 text-base-content">
-                <Users className="h-5 w-5 text-success" />
-                <h2 className="text-2xl font-semibold tracking-tight">Team Members</h2>
-              </div>
-              <TeamClient
-                workspaceId={workspace.id}
-                initialMembers={members}
-                meRole={meRole}
-                meUserId={meUserId}
-              />
-            </section>
-          ) : null}
-
-          <section id="whatsapp-integration" className="space-y-3">
-            <div className="flex items-center gap-2 text-base-content">
-              <MessageCircle className="h-5 w-5 text-success" />
-              <h2 className="text-2xl font-semibold tracking-tight">WhatsApp Integration</h2>
-            </div>
-            <div className="rounded-2xl border border-base-300 bg-base-100 p-4 shadow-sm sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">WhatsApp Business Cloud API</h3>
-                    <span
-                      className={`badge badge-sm ${
-                        isWhatsAppConnected(cloudApiConfig)
-                          ? "badge-success badge-soft"
-                          : "badge-ghost"
-                      }`}
-                    >
-                      {isWhatsAppConnected(cloudApiConfig) ? "Connected" : "Disconnected"}
-                    </span>
-                  </div>
-                  <p className="text-sm text-base-content/65">
-                    Instance synced. Manage conversations and automation from dashboard.
-                  </p>
-                </div>
-                {canManageWorkspace ? (
-                  <a
-                    href="/settings/integrations/whatsapp"
-                    className="btn btn-sm btn-ghost border border-base-300/80"
-                  >
-                    Configure Webhooks
-                  </a>
-                ) : null}
-              </div>
-              <div className="mt-4 grid rounded-xl border border-base-300 sm:grid-cols-3">
-                <StatCell
-                  label="Number"
-                  value={
-                    whatsappConnection?.displayPhoneNumber ||
-                    whatsappConnection?.phoneNumberId ||
-                    cloudApiConfig?.phoneNumberId ||
-                    workspace.phone ||
-                    "—"
-                  }
-                />
-                <StatCell
-                  label="WABA ID"
-                  value={whatsappConnection?.wabaId || cloudApiConfig?.wabaId || "—"}
-                />
-                <StatCell
-                  label="Business ID"
-                  value={whatsappConnection?.businessId || workspace.businessId || "—"}
+        {/* ── Workspace Info ── */}
+        <section id="workspace-info" className="space-y-3">
+          <span className="op-section-title">Workspace</span>
+          {canManageWorkspace ? (
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <InfoRow label="Name" value={workspace.name} />
+                <InfoRow label="Slug" value={workspace.slug} />
+                <InfoRow label="Status" value={workspace.status || "Active"} />
+                <InfoRow label="Timezone" value={settings.timezone || workspace.timezone} />
+                <InfoRow label="Locale" value={settings.locale || workspace.locale} />
+                <InfoRow
+                  label="Members"
+                  value={`${members.length} member${members.length === 1 ? "" : "s"}`}
                 />
               </div>
-            </div>
-          </section>
-
-          {canDeleteWorkspaceAction ? (
-            <section className="rounded-2xl border border-error/30 bg-base-100 p-4 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-base font-semibold text-error">Archive Workspace</h3>
-                  <p className="text-sm text-base-content/70">
-                    Pauses all integrations and automation. Reactivate anytime.
-                  </p>
-                </div>
+              {workspace.description && (
+                <p className="text-[12px] text-base-content/50">{workspace.description}</p>
+              )}
+              <div className="flex items-center justify-end border-t border-base-300 pt-3">
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline btn-error"
-                  onClick={onDeleteWorkspace}
-                  disabled={dangerBusy}
+                  className="btn btn-primary btn-sm"
+                  onClick={openEdit}
                 >
-                  {dangerBusy ? "Archiving..." : "Archive Workspace"}
+                  Edit workspace
                 </button>
               </div>
-            </section>
-          ) : null}
+            </div>
+          ) : (
+            <div className="rounded-box border border-base-300 bg-base-200 px-4 py-3 text-[13px] text-base-content/55">
+              You do not have permission to change workspace settings.
+            </div>
+          )}
+        </section>
+
+        {/* ── Team Members ── */}
+        {canViewMembers ? (
+          <section id="team-members" className="space-y-3">
+            <span className="op-section-title">Team Members</span>
+            <TeamClient
+              workspaceId={workspace.id}
+              initialMembers={members}
+              meRole={meRole}
+              meUserId={meUserId}
+            />
+          </section>
+        ) : null}
+
+        {/* ── WhatsApp Integration ── */}
+        <section id="whatsapp-integration" className="space-y-3">
+          <span className="op-section-title">WhatsApp</span>
+          <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[14px] font-semibold">Cloud API</span>
+                  <span className={isWhatsAppConnected(cloudApiConfig) ? "op-tag op-tag-ok" : "op-tag"}>
+                    {isWhatsAppConnected(cloudApiConfig) ? "Connected" : "Disconnected"}
+                  </span>
+                </div>
+                <p className="text-[12px] text-base-content/55">
+                  Manage conversations, templates, and automation from dashboard.
+                </p>
+              </div>
+              {canManageWorkspace ? (
+                <a
+                  href="/settings/integrations/whatsapp"
+                  className="btn btn-outline btn-sm"
+                >
+                  Manage
+                </a>
+              ) : null}
+            </div>
+
+            <div className="grid gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-3">
+              <StatCell
+                label="Number"
+                value={
+                  whatsappConnection?.displayPhoneNumber ||
+                  whatsappConnection?.phoneNumberId ||
+                  cloudApiConfig?.phoneNumberId ||
+                  workspace.phone ||
+                  "—"
+                }
+              />
+              <StatCell
+                label="WABA ID"
+                value={whatsappConnection?.wabaId || cloudApiConfig?.wabaId || "—"}
+              />
+              <StatCell
+                label="Business ID"
+                value={whatsappConnection?.businessId || workspace.businessId || "—"}
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* ── Chatbot ── */}
+        {canManageWorkspace ? (
+          <section id="chatbot" className="space-y-3">
+            <span className="op-section-title">Chatbot</span>
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[14px] font-semibold">LLM Auto-Reply</span>
+                    <span className={chatbotForm.chatbotEnabled ? "op-tag op-tag-ok" : "op-tag"}>
+                      {chatbotForm.chatbotEnabled ? "Active" : "Disabled"}
+                    </span>
+                  </div>
+                  <p className="text-[12px] text-base-content/55">
+                    Automatically replies to unassigned conversations using an LLM.
+                    Stops when an agent claims the conversation.
+                  </p>
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <span className="text-[12px] text-base-content/55">Enabled</span>
+                  <input
+                    type="checkbox"
+                    className="toggle toggle-sm toggle-primary"
+                    checked={chatbotForm.chatbotEnabled}
+                    onChange={(e) =>
+                      setChatbotForm((s) => ({ ...s, chatbotEnabled: e.target.checked }))
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="form-control w-full">
+                  <span className="op-label mb-1">Provider</span>
+                  <select
+                    className="select select-bordered select-sm w-full"
+                    value={chatbotForm.chatbotProvider}
+                    onChange={(e) =>
+                      setChatbotForm((s) => ({ ...s, chatbotProvider: e.target.value }))
+                    }
+                  >
+                    <option value="anthropic">Anthropic</option>
+                  </select>
+                </label>
+
+                <label className="form-control w-full">
+                  <span className="op-label mb-1">Model</span>
+                  <select
+                    className="select select-bordered select-sm w-full"
+                    value={chatbotForm.chatbotModel}
+                    onChange={(e) =>
+                      setChatbotForm((s) => ({ ...s, chatbotModel: e.target.value }))
+                    }
+                  >
+                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                  </select>
+                </label>
+              </div>
+
+              <label className="form-control w-full">
+                <span className="op-label mb-1">
+                  API Key
+                  {settings.hasChatbotApiKey ? (
+                    <span className="ml-2 text-success">Key saved</span>
+                  ) : null}
+                </span>
+                <input
+                  type="password"
+                  className="input input-bordered input-sm w-full font-mono"
+                  placeholder="sk-ant-..."
+                  value={chatbotForm.chatbotApiKey}
+                  onChange={(e) =>
+                    setChatbotForm((s) => ({ ...s, chatbotApiKey: e.target.value }))
+                  }
+                />
+                <span className="mt-1 text-[11px] text-base-content/40">
+                  Leave blank to keep the existing key. Enter a new value to replace it.
+                </span>
+              </label>
+
+              <label className="form-control w-full">
+                <span className="op-label mb-1">System Prompt</span>
+                <textarea
+                  className="textarea textarea-bordered textarea-sm w-full"
+                  rows={4}
+                  placeholder="You are a helpful customer support assistant for [Company]. Be concise, friendly, and helpful..."
+                  value={chatbotForm.chatbotSystemPrompt}
+                  onChange={(e) =>
+                    setChatbotForm((s) => ({ ...s, chatbotSystemPrompt: e.target.value }))
+                  }
+                />
+              </label>
+
+              {chatbotError ? (
+                <div className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
+                  <span className="op-label mb-1 block text-error">error</span>
+                  <p className="text-[13px]">{chatbotError}</p>
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-2 border-t border-base-300 pt-3">
+                {chatbotSaved ? (
+                  <span className="text-[12px] text-success">Saved.</span>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={onSaveChatbot}
+                  disabled={savingChatbot}
+                >
+                  {savingChatbot ? (
+                    <>
+                      <span className="loading loading-spinner loading-xs" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save chatbot settings"
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* ── Danger zone ── */}
+        {canDeleteWorkspaceAction ? (
+          <section className="rounded-box border border-error/20 bg-base-200 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <span className="op-label text-error">danger zone</span>
+                <p className="mt-1 text-[14px] font-semibold">Archive workspace</p>
+                <p className="mt-0.5 text-[12px] text-base-content/55">
+                  Pauses all integrations and automation. Reactivate anytime.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline btn-error"
+                onClick={() => setShowConfirmDelete(true)}
+                disabled={dangerBusy}
+              >
+                {dangerBusy ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs" />
+                    Archiving…
+                  </>
+                ) : (
+                  "Archive"
+                )}
+              </button>
+            </div>
+          </section>
+        ) : null}
       </div>
 
-      <dialog id="edit_workspace_modal" className="modal">
+      {/* ── Edit workspace modal ── */}
+      <dialog id="edit_workspace_modal" className="modal modal-middle">
         <div className="modal-box max-w-3xl">
-          <h3 className="text-lg font-semibold">Edit workspace</h3>
-          <p className="mt-1 text-sm text-base-content/70">
+          <span className="op-label mb-1 block">workspace</span>
+          <h3 className="text-[17px] font-semibold">Edit workspace</h3>
+          <p className="mt-0.5 text-[12.5px] text-base-content/55">
             Changes apply to the entire workspace.
           </p>
 
           {error ? (
-            <div role="alert" className="alert alert-error alert-soft mt-4">
-              <span className="text-sm">{error}</span>
+            <div className="mt-4 rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
+              <span className="op-label mb-1 block text-error">error</span>
+              <p className="text-[13px]">{error}</p>
             </div>
           ) : null}
 
           <details
             open
-            className="group mt-4 rounded-box border border-base-300 bg-base-200/20 p-4"
+            className="group mt-4 rounded-box border border-base-300 bg-base-200/30"
           >
-            <summary className="cursor-pointer text-sm font-medium text-base-content">
+            <summary className="cursor-pointer select-none px-4 py-3 text-[13px] font-semibold">
               General
             </summary>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Name</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, name: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Website</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.website}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, website: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full md:col-span-2">
-                <div className="label">
-                  <span className="label-text">Description</span>
-                </div>
-                <textarea
-                  className="textarea textarea-bordered w-full"
-                  value={form.description}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, description: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Timezone</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.timezone}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, timezone: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Locale</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.locale}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, locale: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full md:col-span-2">
-                <div className="label">
-                  <span className="label-text">Logo URL</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.logoUrl}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, logoUrl: e.target.value }))
-                  }
-                />
-              </label>
+            <div className="border-t border-base-300 px-4 py-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <ModalField label="Name" value={form.name} onChange={(v) => setForm((s) => ({ ...s, name: v }))} />
+                <ModalField label="Website" value={form.website} onChange={(v) => setForm((s) => ({ ...s, website: v }))} />
+                <ModalField label="Description" value={form.description} onChange={(v) => setForm((s) => ({ ...s, description: v }))} fullWidth textarea />
+                <ModalField label="Timezone" value={form.timezone} onChange={(v) => setForm((s) => ({ ...s, timezone: v }))} />
+                <ModalField label="Locale" value={form.locale} onChange={(v) => setForm((s) => ({ ...s, locale: v }))} />
+                <ModalField label="Logo URL" value={form.logoUrl} onChange={(v) => setForm((s) => ({ ...s, logoUrl: v }))} fullWidth />
+              </div>
             </div>
           </details>
 
-          <details className="group mt-3 rounded-box border border-base-300 bg-base-200/20 p-4">
-            <summary className="cursor-pointer text-sm font-medium text-base-content">
+          <details className="group mt-3 rounded-box border border-base-300 bg-base-200/30">
+            <summary className="cursor-pointer select-none px-4 py-3 text-[13px] font-semibold">
               Business profile
             </summary>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Business name</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.businessName}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, businessName: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Industry</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.industry}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, industry: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Country</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.country}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, country: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Phone</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.phone}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, phone: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Billing email</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.email}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, email: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full md:col-span-2">
-                <div className="label">
-                  <span className="label-text">Business address</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.businessAddress}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, businessAddress: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full md:col-span-2">
-                <div className="label">
-                  <span className="label-text">Business about</span>
-                </div>
-                <textarea
-                  className="textarea textarea-bordered w-full"
-                  value={form.businessAbout}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, businessAbout: e.target.value }))
-                  }
-                />
-              </label>
-
-              <label className="form-control w-full">
-                <div className="label">
-                  <span className="label-text">Vertical</span>
-                </div>
-                <input
-                  className="input input-bordered w-full"
-                  value={form.businessVertical}
-                  onChange={(e) =>
-                    setForm((s) => ({ ...s, businessVertical: e.target.value }))
-                  }
-                />
-              </label>
+            <div className="border-t border-base-300 px-4 py-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <ModalField label="Business name" value={form.businessName} onChange={(v) => setForm((s) => ({ ...s, businessName: v }))} />
+                <ModalField label="Industry" value={form.industry} onChange={(v) => setForm((s) => ({ ...s, industry: v }))} />
+                <ModalField label="Country" value={form.country} onChange={(v) => setForm((s) => ({ ...s, country: v }))} />
+                <ModalField label="Phone" value={form.phone} onChange={(v) => setForm((s) => ({ ...s, phone: v }))} />
+                <ModalField label="Billing email" value={form.email} onChange={(v) => setForm((s) => ({ ...s, email: v }))} />
+                <ModalField label="Vertical" value={form.businessVertical} onChange={(v) => setForm((s) => ({ ...s, businessVertical: v }))} />
+                <ModalField label="Business address" value={form.businessAddress} onChange={(v) => setForm((s) => ({ ...s, businessAddress: v }))} fullWidth />
+                <ModalField label="About" value={form.businessAbout} onChange={(v) => setForm((s) => ({ ...s, businessAbout: v }))} fullWidth textarea />
+              </div>
             </div>
           </details>
 
           <div className="modal-action">
-            <button type="button" className="btn btn-ghost" onClick={closeEdit}>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={closeEdit}>
               Cancel
             </button>
             <button
               type="button"
-              className="btn btn-primary"
+              className="btn btn-primary btn-sm"
               onClick={onSave}
               disabled={saving}
             >
-              {saving ? "Saving..." : "Save changes"}
+              {saving ? (
+                <>
+                  <span className="loading loading-spinner loading-xs" />
+                  Saving…
+                </>
+              ) : (
+                "Save changes"
+              )}
             </button>
           </div>
         </div>
@@ -550,37 +558,82 @@ export function SettingsClient({
           <button aria-label="close">close</button>
         </form>
       </dialog>
+
+      <ConfirmDialog
+        open={showConfirmDelete}
+        title="Archive this workspace?"
+        description="This is a soft-delete, but it will immediately block access."
+        confirmLabel="Archive Workspace"
+        tone="warning"
+        loading={dangerBusy}
+        onConfirm={() => {
+          setShowConfirmDelete(false);
+          onDeleteWorkspace();
+        }}
+        onClose={() => setShowConfirmDelete(false)}
+      />
     </section>
   );
 }
 
+/* ── Helper components ────────────────────────────────────────── */
+
 function InfoRow({
   label,
   value,
-  fullWidth = false,
 }: {
   label: string;
   value?: string;
-  fullWidth?: boolean;
 }) {
   const display = value?.trim();
   return (
-    <div className={`rounded-xl border border-base-300 bg-base-200/30 px-3 py-2.5 ${fullWidth ? "sm:col-span-2" : ""}`}>
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-base-content/50">{label}</div>
-      <div className="mt-1 min-w-0 break-words text-sm font-medium text-base-content">
-        {display ? display : "—"}
-      </div>
+    <div className="space-y-0.5 px-1">
+      <span className="op-label">{label}</span>
+      <p className="text-[13px] font-medium text-base-content truncate">
+        {display || "—"}
+      </p>
     </div>
   );
 }
 
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border-b border-base-300 p-3 text-center last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0">
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-base-content/50">
-        {label}
-      </div>
-      <div className="mt-1 text-sm font-medium text-base-content">{value}</div>
+    <div className="bg-base-200 px-3 py-2.5">
+      <span className="op-label">{label}</span>
+      <p className="mt-0.5 text-[13px] font-medium tabular-nums truncate">{value}</p>
     </div>
+  );
+}
+
+function ModalField({
+  label,
+  value,
+  onChange,
+  fullWidth = false,
+  textarea = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  fullWidth?: boolean;
+  textarea?: boolean;
+}) {
+  return (
+    <label className={`form-control w-full ${fullWidth ? "md:col-span-2" : ""}`}>
+      <span className="op-label mb-1">{label}</span>
+      {textarea ? (
+        <textarea
+          className="textarea textarea-bordered textarea-sm w-full"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : (
+        <input
+          className="input input-bordered input-sm w-full"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </label>
   );
 }

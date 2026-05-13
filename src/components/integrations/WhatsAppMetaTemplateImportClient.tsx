@@ -26,7 +26,10 @@ export function WhatsAppMetaTemplateImportClient({
     retry: 1,
   });
 
-  const items: PreviewItem[] = (previewQuery.data?.items ?? []) as any;
+  const items: PreviewItem[] = useMemo(
+    () => (previewQuery.data?.items ?? []) as PreviewItem[],
+    [previewQuery.data?.items]
+  );
   const defaultSelected = useMemo(
     () => items.filter((i) => i.action !== "skip").map((i) => i.providerTemplateId),
     [items]
@@ -47,7 +50,7 @@ export function WhatsAppMetaTemplateImportClient({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+      <div className="card bg-base-100 border border-base-300 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="space-y-1">
             <div className="text-sm text-base-content/70">
@@ -96,9 +99,9 @@ export function WhatsAppMetaTemplateImportClient({
           <span className="loading loading-spinner loading-lg" />
         </div>
       ) : previewQuery.isError ? (
-        <div role="alert" className="alert alert-error">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span>
-            {(previewQuery.error as any)?.message ?? "Failed to load Meta templates preview."}
+            {(previewQuery.error as Error | null)?.message ?? "Failed to load Meta templates preview."}
           </span>
         </div>
       ) : (
@@ -143,7 +146,7 @@ export function WhatsAppMetaTemplateImportClient({
                     <td>{i.category}</td>
                     <td>{i.status}</td>
                     <td>
-                      <span className="badge badge-ghost">{i.action}</span>
+                      <span className="op-tag">{i.action}</span>
                     </td>
                     <td className="text-xs text-base-content/60">{i.reason ?? "—"}</td>
                   </tr>
@@ -155,14 +158,14 @@ export function WhatsAppMetaTemplateImportClient({
       )}
 
       {importMutation.isError && (
-        <div role="alert" className="alert alert-error">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span>
-            {(importMutation.error as any)?.message ?? "Import failed."}
+            {(importMutation.error as Error | null)?.message ?? "Import failed."}
           </span>
         </div>
       )}
       {importMutation.isSuccess && (
-        <div role="status" className="alert alert-success">
+        <div role="status" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-4 py-3">
           <span>Import completed.</span>
         </div>
       )}

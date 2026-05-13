@@ -25,8 +25,8 @@ export function TagsPicker({
         {tags.map((tag) => (
           <span
             key={tag.id}
-            className="badge badge-lg gap-1"
-            style={tag.color ? { borderColor: tag.color } : undefined}
+            className="op-tag flex items-center gap-1"
+            style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
           >
             {tag.name}
             <button

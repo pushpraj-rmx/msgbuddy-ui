@@ -78,7 +78,7 @@ export default async function WhatsAppIntegrationRoute() {
         description="Connect and configure WhatsApp for this workspace."
       />
       {settingsResult.permissionMessage ? (
-        <div role="alert" className="alert alert-warning mb-4">
+        <div role="alert" className="mb-4 rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <span>{settingsResult.permissionMessage}</span>
         </div>
       ) : null}

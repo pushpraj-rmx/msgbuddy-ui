@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import Link from "next/link";
 import { tagsApi } from "@/lib/api";
 import type { Tag } from "@/lib/types";
@@ -12,6 +13,7 @@ export function TagsManagerClient({ canManageTags }: { canManageTags: boolean })
   const queryClient = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
+  const [confirmDeleteTag, setConfirmDeleteTag] = useState<Tag | null>(null);
 
   const { data: tags = [], isFetching } = useQuery({
     queryKey: TAGS_QUERY_KEY,
@@ -97,7 +99,7 @@ export function TagsManagerClient({ canManageTags }: { canManageTags: boolean })
           ) : null}
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+        <div className="overflow-x-auto card bg-base-100 border border-base-300">
           <table className="table">
             <thead>
               <tr>
@@ -137,14 +139,7 @@ export function TagsManagerClient({ canManageTags }: { canManageTags: boolean })
                         <button
                           type="button"
                           className="btn btn-ghost btn-xs text-error"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Delete tag "${tag.name}"? It will be removed from all contacts.`
-                              )
-                            )
-                              deleteMutation.mutate(tag.id);
-                          }}
+                          onClick={() => setConfirmDeleteTag(tag)}
                           disabled={isPending}
                         >
                           Delete
@@ -179,6 +174,20 @@ export function TagsManagerClient({ canManageTags }: { canManageTags: boolean })
           isPending={createMutation.isPending || updateMutation.isPending}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmDeleteTag !== null}
+        title={`Delete tag "${confirmDeleteTag?.name ?? ""}"?`}
+        description="It will be removed from all contacts."
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteTag) deleteMutation.mutate(confirmDeleteTag.id);
+          setConfirmDeleteTag(null);
+        }}
+        onClose={() => setConfirmDeleteTag(null)}
+      />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
@@ -34,6 +34,9 @@ export function ContactFormModal({
   onViewExisting?: (contactId: string) => void;
 }) {
   const isLg = useMediaQuery("(min-width: 1024px)");
+  const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR hydration guard: delay render until media query resolves to prevent dialog flash
+  useEffect(() => { setMounted(true); }, []);
   const [phone, setPhone] = useState(contact?.phone ?? "");
   const [phoneLabel, setPhoneLabel] = useState(contact?.phoneLabel ?? "");
   const [name, setName] = useState(contact?.name ?? "");
@@ -101,11 +104,9 @@ export function ContactFormModal({
               required
             />
             {phoneCheck.data?.exists && phoneCheck.data.contact && (
-              <div className="alert alert-warning text-sm py-2 mt-1">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span>
+              <div className="mt-1 rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-[12.5px]">
+                <span className="op-label mb-1 block text-warning">duplicate phone</span>
+                <span className="text-base-content">
                   A contact with this phone already exists
                   {phoneCheck.data.contact.name ? `: ${phoneCheck.data.contact.name}` : ""}
                   {" "}({phoneCheck.data.contact.phone})
@@ -233,15 +234,18 @@ export function ContactFormModal({
     </>
   );
 
+  // Wait for hydration so isLg resolves correctly — prevents dialog→aside flash
+  if (!mounted) return null;
+
   if (isLg) {
     return (
       <aside
-        className="fixed right-0 top-0 z-40 flex h-full w-full flex-col border-l border-base-300 bg-base-100 shadow-xl lg:w-[400px]"
+        className="fixed right-0 top-0 z-40 flex h-full w-full flex-col border-l border-base-300 bg-base-100 shadow-lg lg:w-[400px]"
         role="dialog"
         aria-label={title}
       >
         <div className="flex items-center justify-between border-b border-base-300 p-4">
-          <h3 className="text-lg font-semibold">{title}</h3>
+          <h3 className="text-[17px] font-semibold tracking-[-0.015em]">{title}</h3>
           <button
             type="button"
             className="btn btn-ghost btn-sm btn-circle"
@@ -259,7 +263,7 @@ export function ContactFormModal({
   return (
     <dialog open className="modal modal-middle">
       <div className="modal-box max-w-md rounded-box">
-        <h3 className="text-lg font-semibold">{title}</h3>
+        <h3 className="text-[17px] font-semibold tracking-[-0.015em]">{title}</h3>
         <div className="mt-4">{formContent}</div>
       </div>
       <form method="dialog" className="modal-backdrop">

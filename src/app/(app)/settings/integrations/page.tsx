@@ -35,7 +35,7 @@ export default async function IntegrationsSettingsPage() {
           title="Integrations"
           description="Manage external channel connections for this workspace."
         />
-        <div role="alert" className="alert alert-warning">
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <span>You don’t have permission to manage integrations.</span>
         </div>
       </PageContainer>

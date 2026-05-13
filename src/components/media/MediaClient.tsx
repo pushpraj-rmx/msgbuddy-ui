@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { FileAudio, X, CloudUpload, Images, Trash2, Download, Image, Info, File, RefreshCw, ChevronsUpDown, FileVideo } from "lucide-react";
+import { FileAudio, X, CloudUpload, Images, Trash2, Download, Image as ImageIcon, Info, File, RefreshCw, ChevronsUpDown, FileVideo } from "lucide-react";
 import { mediaApi } from "@/lib/api";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getApiError } from "@/lib/api-error";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 import { MediaLightbox, type MediaSlide } from "@/components/ui/MediaLightbox";
+import { EmptyState } from "@/components/ui/states";
 
 export type MediaItem = {
   id: string;
@@ -45,7 +46,7 @@ function mimeSummary(mime: string): string {
 
 function MediaTypeIcon({ mimeType }: { mimeType: string }) {
   if (mimeType.startsWith("image/")) {
-    return <Image className="h-10 w-10 text-primary/80" aria-hidden />;
+    return <ImageIcon className="h-10 w-10 text-primary/80" aria-hidden />;
   }
   if (mimeType.startsWith("video/")) {
     return <FileVideo className="h-10 w-10 text-secondary/90" aria-hidden />;
@@ -300,15 +301,15 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
               onDragOver={(e) => e.preventDefault()}
               onDrop={onDropUpload}
               disabled={uploading}
-              className={`group flex min-h-[3.5rem] flex-1 items-center gap-3 rounded-xl border-2 border-dashed px-4 py-3 text-left transition ${
+              className={`group flex min-h-[3.5rem] flex-1 items-center gap-3 rounded-box border-2 border-dashed px-4 py-3 text-left transition-colors ${
                 dragOver
-                  ? "border-primary bg-primary/10"
-                  : "border-base-300/90 bg-base-100/80 hover:border-primary/50 hover:bg-base-100"
+                  ? "border-primary bg-base-200"
+                  : "border-base-300 bg-base-100 hover:border-base-content/30 hover:bg-base-200"
               } ${uploading ? "pointer-events-none opacity-60" : ""}`}
             >
               <span
-                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition ${
-                  dragOver ? "bg-primary/20 text-primary" : "bg-base-200 text-base-content/60 group-hover:text-primary"
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 transition-colors ${
+                  dragOver ? "text-primary" : "text-base-content/60 group-hover:text-base-content"
                 }`}
               >
                 {uploading ? (
@@ -383,23 +384,20 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
       </div>
 
       {error ? (
-        <div role="alert" className="alert alert-error rounded-xl shadow-sm">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span>{error}</span>
         </div>
       ) : null}
 
       {!media.length && !loading ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-base-300/80 bg-base-200/20 px-6 py-16 text-center">
-          <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-base-300/40 text-base-content/30">
-            <Images className="h-9 w-9" aria-hidden />
-          </div>
-          <p className="text-base font-medium text-base-content/80">No media yet</p>
-          <p className="mt-1 max-w-sm text-sm text-base-content/55">
-            {canWrite
+        <EmptyState
+          title="No media yet"
+          description={
+            canWrite
               ? "Upload a file to get started — it will appear in this gallery."
-              : "When your team uploads files, they will show up here."}
-          </p>
-        </div>
+              : "When your team uploads files, they will show up here."
+          }
+        />
       ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -408,7 +406,7 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
           return (
             <article
               key={item.id}
-              className="group flex flex-col overflow-hidden rounded-2xl border border-base-300/60 bg-base-100 shadow-md transition hover:border-primary/35 hover:shadow-lg"
+              className="group flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 transition-colors hover:border-base-content/20"
             >
               <div className="relative aspect-square overflow-hidden bg-gradient-to-b from-base-300/80 to-base-300">
                 {item.mimeType.startsWith("image/") ? (
@@ -524,15 +522,15 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
       </div>
 
       {selectedMediaId && selectedMedia ? (
-        <div className="sticky bottom-0 z-10 rounded-2xl border border-base-300/80 bg-base-100 p-4 shadow-2xl ring-1 ring-base-content/5">
+        <div className="sticky bottom-0 z-10 rounded-box border border-base-300 bg-base-200 p-4 shadow-lg">
           <div className="mb-4 flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                <Info className="h-5 w-5" aria-hidden />
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100 text-base-content/70">
+                <Info className="h-4 w-4" aria-hidden />
               </span>
               <div>
-                <h3 className="text-sm font-semibold text-base-content">File details</h3>
-                <p className="text-xs text-base-content/55">API payload for this media item</p>
+                <span className="op-label">File details</span>
+                <h3 className="text-[13px] font-semibold tracking-[-0.01em]">API payload for this media item</h3>
               </div>
             </div>
             <button

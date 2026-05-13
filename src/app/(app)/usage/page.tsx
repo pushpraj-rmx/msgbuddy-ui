@@ -16,8 +16,9 @@ export default async function UsagePage() {
           title="Usage"
           description="Track workspace usage, limits, and storage."
         />
-        <div role="alert" className="alert alert-warning">
-          <span>You don&apos;t have permission to view usage.</span>
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-warning">permission denied</span>
+          <p className="text-[13px] text-base-content">You don&apos;t have permission to view usage.</p>
         </div>
       </PageContainer>
     );

@@ -502,6 +502,8 @@ export const contactsApi = {
     order?: "asc" | "desc";
     includeTotal?: boolean;
     include?: string;
+    /** Comma-separated tag IDs. Server filters contacts that have ALL listed tags. */
+    tagIds?: string;
   }): Promise<ContactsListResponse> => {
     const response = await api.get<ContactsListResponse>(
       endpoints.contacts.list,
@@ -783,6 +785,7 @@ export const templatesApi = {
   list: async (params?: {
     q?: string;
     isActive?: boolean;
+    hasWhatsAppSendableVersion?: boolean;
     page?: number;
     limit?: number;
     sortBy?: string;
@@ -876,9 +879,9 @@ export const channelTemplatesApi = {
   update: async (
     id: string,
     data: { category: TemplateCategory }
-  ): Promise<any> => {
+  ): Promise<unknown> => {
     const response = await api.put(endpoints.channelTemplates.update(id), data);
-    return response.data as any;
+    return response.data;
   },
   listVersions: async (id: string): Promise<ChannelTemplateVersion[]> => {
     const response = await api.get<ChannelTemplateVersion[]>(
@@ -960,6 +963,15 @@ export const channelTemplatesApi = {
   ): Promise<ChannelTemplateVersion> => {
     const response = await api.put<ChannelTemplateVersion>(
       endpoints.channelTemplates.archive(id, version)
+    );
+    return response.data;
+  },
+  submitAndSync: async (
+    id: string,
+    version: number
+  ): Promise<ChannelTemplateSyncResult> => {
+    const response = await api.post<ChannelTemplateSyncResult>(
+      endpoints.channelTemplates.submitAndSync(id, version)
     );
     return response.data;
   },
@@ -1548,6 +1560,10 @@ export const billingApi = {
       configured: boolean;
     };
   },
+  syncPlanLimits: async () => {
+    const response = await api.post(endpoints.billing.syncPlanLimits);
+    return response.data as { synced: boolean; plan: string };
+  },
 };
 
 export type BillingCurrentResponse = {
@@ -1597,6 +1613,13 @@ export type VerificationCodeMethod = "SMS" | "VOICE";
 export interface WorkspaceSettingsPayload {
   timezone?: string;
   locale?: string;
+  // Chatbot
+  chatbotEnabled?: boolean;
+  chatbotSystemPrompt?: string;
+  chatbotApiKey?: string;
+  chatbotProvider?: string;
+  chatbotModel?: string;
+  hasChatbotApiKey?: boolean;
 }
 
 export interface WorkspaceCloudApiConfigPayload {

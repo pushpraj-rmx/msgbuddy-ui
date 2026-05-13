@@ -9,15 +9,13 @@ export default async function TermsPage() {
           <div className="space-y-6">
             <div className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="badge badge-primary badge-outline">Legal</span>
-                <span className="badge badge-ghost">
-                  Last Updated: 28/03/2026
-                </span>
+                <span className="op-section-title">Legal</span>
+                <span className="op-tag">Last Updated · 28/03/2026</span>
               </div>
-              <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+              <h1 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[40px]">
                 Terms of Service
               </h1>
-              <p className="max-w-3xl text-base-content/70">
+              <p className="max-w-3xl text-[14.5px] text-base-content/70">
                 These Terms govern your access to and use of the MsgBuddy
                 service.
               </p>
@@ -26,10 +24,10 @@ export default async function TermsPage() {
             <div className="rounded-box border border-base-300 bg-base-200 p-5 sm:p-8">
               <div className="space-y-4 text-base-content/80">
                 <p className="leading-relaxed">
-                  These Terms of Service ("Terms") govern your access to and use
-                  of MsgBuddy ("Company", "we", "our", "us") services, including
+                  These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use
+                  of MsgBuddy (&ldquo;Company&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;, &ldquo;us&rdquo;) services, including
                   our website, applications, and messaging platform
-                  (collectively, the "Service").
+                  (collectively, the &ldquo;Service&rdquo;).
                 </p>
                 <p className="leading-relaxed">
                   By using the Service, you agree to these Terms. If you do not
@@ -37,11 +35,14 @@ export default async function TermsPage() {
                 </p>
               </div>
 
-              <div className="divider my-7">Sections</div>
+              <div className="my-7 flex items-center gap-3">
+                <span className="op-label">Sections</span>
+                <div className="h-px flex-1 bg-base-300" />
+              </div>
 
               <article className="space-y-7">
                 <section id="eligibility" className="space-y-3">
-                  <h2 className="text-xl font-semibold">1. Eligibility</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">1. Eligibility</h2>
                   <p className="leading-relaxed text-base-content/80">
                     You must be at least 18 years old and capable of forming a
                     binding contract under applicable law.
@@ -56,7 +57,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="account-registration" className="space-y-3">
-                  <h2 className="text-xl font-semibold">2. Account Registration</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">2. Account Registration</h2>
                   <p className="text-base-content/80">
                     To access certain features, you must create an account.
                   </p>
@@ -76,7 +77,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="acceptable-use" className="space-y-3">
-                  <h2 className="text-xl font-semibold">3. Acceptable Use</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">3. Acceptable Use</h2>
                   <p className="text-base-content/80">
                     You agree to use the Service only for lawful and authorized
                     purposes.
@@ -95,7 +96,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="messaging-compliance" className="space-y-3">
-                  <h2 className="text-xl font-semibold">
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
                     4. Messaging Compliance &amp; User Obligations
                   </h2>
                   <p className="text-base-content/80">
@@ -144,7 +145,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="data-responsibility" className="space-y-3">
-                  <h2 className="text-xl font-semibold">5. Data Responsibility</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">5. Data Responsibility</h2>
                   <p className="text-base-content/80">
                     You are solely responsible for:
                   </p>
@@ -162,7 +163,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="intellectual-property" className="space-y-3">
-                  <h2 className="text-xl font-semibold">6. Intellectual Property</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">6. Intellectual Property</h2>
                   <p className="text-base-content/80">
                     All rights, title, and interest in the Service, including
                     software, design, and content, are owned by the Company or
@@ -176,7 +177,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="user-content" className="space-y-3">
-                  <h2 className="text-xl font-semibold">7. User Content</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">7. User Content</h2>
                   <p className="text-base-content/80">
                     You retain ownership of content you upload or send using the
                     Service.
@@ -196,7 +197,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="payments" className="space-y-3">
-                  <h2 className="text-xl font-semibold">8. Payments &amp; Subscriptions</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">8. Payments &amp; Subscriptions</h2>
                   <p className="text-base-content/80">If you use paid features:</p>
                   <ul className="list-disc space-y-1 pl-5 text-base-content/80">
                     <li>Fees are billed according to your selected plan</li>
@@ -207,7 +208,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="availability" className="space-y-3">
-                  <h2 className="text-xl font-semibold">9. Service Availability</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">9. Service Availability</h2>
                   <p className="text-base-content/80">
                     We aim to provide reliable service but do not guarantee
                     uninterrupted access.
@@ -220,7 +221,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="third-party" className="space-y-3">
-                  <h2 className="text-xl font-semibold">10. Third-Party Services</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">10. Third-Party Services</h2>
                   <p className="text-base-content/80">
                     The Service may integrate with third-party platforms.
                   </p>
@@ -235,7 +236,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="termination" className="space-y-3">
-                  <h2 className="text-xl font-semibold">11. Termination</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">11. Termination</h2>
                   <p className="text-base-content/80">
                     We may suspend or terminate your account if:
                   </p>
@@ -250,7 +251,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="liability" className="space-y-3">
-                  <h2 className="text-xl font-semibold">12. Limitation of Liability</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">12. Limitation of Liability</h2>
                   <p className="text-base-content/80">
                     To the maximum extent permitted by law:
                   </p>
@@ -266,7 +267,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="indemnification" className="space-y-3">
-                  <h2 className="text-xl font-semibold">13. Indemnification</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">13. Indemnification</h2>
                   <p className="text-base-content/80">
                     You agree to indemnify and hold harmless the Company from any
                     claims, damages, or liabilities arising from:
@@ -279,7 +280,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="privacy" className="space-y-3">
-                  <h2 className="text-xl font-semibold">14. Privacy</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">14. Privacy</h2>
                   <p className="text-base-content/80">
                     Your use of the Service is also governed by our{" "}
                     <Link href="/privacy" className="link link-hover">
@@ -290,7 +291,7 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="changes" className="space-y-3">
-                  <h2 className="text-xl font-semibold">15. Changes to Terms</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">15. Changes to Terms</h2>
                   <p className="text-base-content/80">
                     We may update these Terms from time to time.
                   </p>
@@ -301,15 +302,15 @@ export default async function TermsPage() {
                 </section>
 
                 <section id="governing-law" className="space-y-3">
-                  <h2 className="text-xl font-semibold">16. Governing Law</h2>
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">16. Governing Law</h2>
                   <p className="text-base-content/80">
                     These Terms are governed by the laws of [Your Country/State].
                   </p>
                 </section>
 
                 <section id="contact" className="space-y-3">
-                  <h2 className="text-xl font-semibold">17. Contact Information</h2>
-                  <div className="rounded-box border border-base-300 bg-base-100 p-4">
+                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">17. Contact Information</h2>
+                  <div className="card bg-base-100 border border-base-300 p-4">
                     <p className="text-sm text-base-content/80">
                       <span className="font-medium">Email:</span>{" "}
                       support@msgbuddy.com
@@ -325,7 +326,7 @@ export default async function TermsPage() {
                   </div>
                 </section>
 
-                <div className="divider" />
+                <div className="border-t border-base-300" />
                 <p className="text-sm text-base-content/70">
                   By using the Service, you acknowledge that you have read,
                   understood, and agreed to these Terms of Service.
@@ -337,8 +338,8 @@ export default async function TermsPage() {
           <aside className="hidden lg:block">
             <div className="sticky top-24 space-y-3">
               <div className="rounded-box border border-base-300 bg-base-200 p-4">
-                <p className="text-sm font-semibold">On this page</p>
-                <ul className="menu mt-2 w-full p-0 text-sm">
+                <p className="op-label mb-3">On this page</p>
+                <ul className="menu w-full p-0 text-[12.5px]">
                   <li>
                     <a href="#eligibility">1. Eligibility</a>
                   </li>

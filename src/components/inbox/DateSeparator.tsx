@@ -6,10 +6,10 @@ interface DateSeparatorProps {
 
 export function DateSeparator({ label }: DateSeparatorProps) {
   return (
-    <div className="flex items-center gap-3 my-3 px-2">
+    <div className="flex items-center gap-3 my-4 px-2">
       <div className="flex-1 h-px bg-base-300" />
-      <span className="text-xs font-medium text-base-content/50 whitespace-nowrap select-none">
-        {label}
+      <span className="op-label select-none whitespace-nowrap">
+        — {label} —
       </span>
       <div className="flex-1 h-px bg-base-300" />
     </div>

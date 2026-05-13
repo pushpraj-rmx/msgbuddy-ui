@@ -14,6 +14,7 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { ContactFormModal } from "./ContactFormModal";
 import { CustomFieldsSection } from "./CustomFieldsSection";
 import { NotesSection } from "./NotesSection";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { TagsPicker } from "./TagsPicker";
 
 const CONTACT_QUERY_KEY = (id: string) => ["contacts", id] as const;
@@ -129,8 +130,8 @@ export function ContactDetailClient({
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <span>Blocked</span>
+            <label className="flex items-center gap-2 text-sm" title="Blocked contacts cannot message your workspace">
+              <span className="flex items-center gap-1">Blocked <InfoTip tip="This contact cannot send messages to your workspace" /></span>
               <input
                 type="checkbox"
                 className="toggle toggle-warning toggle-sm"
@@ -144,8 +145,8 @@ export function ContactDetailClient({
                 }
               />
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <span>Opted out</span>
+            <label className="flex items-center gap-2 text-sm" title="Opted-out contacts have requested to stop receiving messages">
+              <span className="flex items-center gap-1">Opted out <InfoTip tip="Contact requested to stop receiving messages (compliance)" /></span>
               <input
                 type="checkbox"
                 className="toggle toggle-error toggle-sm"
@@ -216,11 +217,11 @@ export function ContactDetailClient({
         </button>
       </div>
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+      <div className="card bg-base-100 border border-base-300 p-4">
         {activeTab === "details" && (
           <div className="space-y-6">
             <section>
-              <h2 className="text-sm font-semibold text-base-content/70 mb-2">
+              <h2 className="op-section-title mb-3">
                 Custom fields
               </h2>
               <CustomFieldsSection contactId={contact.id} />
@@ -229,7 +230,7 @@ export function ContactDetailClient({
         )}
         {activeTab === "tags" && (
           <div>
-            <h2 className="text-sm font-semibold text-base-content/70 mb-2">
+            <h2 className="op-section-title mb-3">
               Tags
             </h2>
             {canEditContact ? (
@@ -254,7 +255,7 @@ export function ContactDetailClient({
         )}
         {activeTab === "notes" && (
           <div>
-            <h2 className="text-sm font-semibold text-base-content/70 mb-2">
+            <h2 className="op-section-title mb-3">
               Notes
             </h2>
             <NotesSection
@@ -265,7 +266,7 @@ export function ContactDetailClient({
         )}
         {activeTab === "activity" && (
           <div>
-            <h2 className="text-sm font-semibold text-base-content/70 mb-2">
+            <h2 className="op-section-title mb-3">
               Activity
             </h2>
             <ActivityTimeline contactId={contact.id} />

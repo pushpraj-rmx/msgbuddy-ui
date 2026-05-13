@@ -45,8 +45,28 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [verifiedNotice, setVerifiedNotice] = useState(false);
+  const [error, setError] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get("error");
+    if (!err) return null;
+    const KNOWN_ERRORS: Record<string, string> = {
+      verify_failed:
+        "That verification link is invalid or expired. Use \u201cResend verification email\u201d below if you still need to verify.",
+      missing_verification_token: "Invalid verification link.",
+    };
+    window.history.replaceState(null, "", "/login");
+    return KNOWN_ERRORS[err] ?? "Something went wrong. Please try again.";
+  });
+  const [verifiedNotice] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("verified") === "1") {
+      window.history.replaceState(null, "", "/login");
+      return true;
+    }
+    return false;
+  });
   const [resendMessage, setResendMessage] = useState<string | null>(null);
   const [resendPending, setResendPending] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -57,24 +77,6 @@ export default function LoginPage() {
       setActiveSlide((prev) => (prev + 1) % loginFeatureSlides.length);
     }, 3500);
     return () => window.clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    if (q.get("verified") === "1") {
-      setVerifiedNotice(true);
-      window.history.replaceState(null, "", "/login");
-    }
-    const err = q.get("error");
-    if (err) {
-      const KNOWN_ERRORS: Record<string, string> = {
-        verify_failed:
-          "That verification link is invalid or expired. Use \u201cResend verification email\u201d below if you still need to verify.",
-        missing_verification_token: "Invalid verification link.",
-      };
-      setError(KNOWN_ERRORS[err] ?? "Something went wrong. Please try again.");
-      window.history.replaceState(null, "", "/login");
-    }
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -115,33 +117,41 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-base-100 p-6 grid place-items-center">
-      <div className="w-full max-w-5xl overflow-hidden rounded-box border border-base-300 bg-base-100">
+      <div className="w-full max-w-5xl overflow-hidden rounded-box border border-base-300 bg-base-200">
         <div className="grid grid-cols-1 md:grid-cols-2">
-          <div className="bg-base-100 p-6 space-y-6">
-            <div className="space-y-2">
+          <div className="bg-base-100 p-8 space-y-6">
+            <div className="space-y-3">
               <div className="flex items-center">
                 <BrandLogo className="h-7 w-auto" priority />
               </div>
-              <h1 className="text-xl font-medium">Sign in</h1>
-              <p className="text-sm text-base-content/70">
+              <div className="flex flex-col gap-1.5">
+                <span className="op-label">Sign in</span>
+                <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Welcome back</h1>
+              </div>
+              <p className="text-[13px] text-base-content/65">
                 Access your workspace and inbox.
               </p>
             </div>
 
             <div className="space-y-3">
               <GoogleSignInButton />
-              <p className="text-xs text-base-content/60 text-center">
-                No inbox link required — Google handles sign-in.
+              <p className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50 text-center">
+                no inbox link required · google handles sign-in
               </p>
-              <div className="divider text-xs text-base-content/50">or</div>
+              <div className="flex items-center gap-3 py-1">
+                <div className="h-px flex-1 bg-base-300" />
+                <span className="op-label">or</span>
+                <div className="h-px flex-1 bg-base-300" />
+              </div>
             </div>
 
             {verifiedNotice ? (
               <div
                 role="status"
-                className="rounded-box border border-success/30 bg-success/10 px-4 py-3 text-sm text-success"
+                className="rounded-box border-l-2 border border-success/30 border-l-success bg-base-200 px-4 py-3"
               >
-                Email verified. You can sign in below.
+                <span className="op-label mb-1 block text-success">verified</span>
+                <p className="text-[13px] text-base-content">Email verified. You can sign in below.</p>
               </div>
             ) : null}
 
@@ -203,8 +213,9 @@ export default function LoginPage() {
               </div>
             </form>
 
-            <div className="rounded-box border border-base-300 bg-base-200/50 p-4 space-y-2">
-              <p className="text-xs font-medium text-base-content/70">
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 space-y-2">
+              <span className="op-label">needs verification?</span>
+              <p className="text-[12px] text-base-content/65">
                 Registered with email &amp; password but didn&apos;t get a verification
                 link? (Google sign-in doesn&apos;t use this.)
               </p>
@@ -229,15 +240,13 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="hidden md:flex flex-col justify-between bg-base-200 p-6">
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-base-content/60">
-                Preview
-              </p>
-              <h2 className="text-base font-medium text-base-content">
+          <div className="hidden md:flex flex-col justify-between bg-base-200 p-8">
+            <div className="space-y-3">
+              <span className="op-label">{String(activeSlide + 1).padStart(2, "0")} · preview</span>
+              <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
                 {loginFeatureSlides[activeSlide].title}
               </h2>
-              <p className="text-sm text-base-content/60">
+              <p className="text-[13px] text-base-content/60">
                 {loginFeatureSlides[activeSlide].description}
               </p>
             </div>
@@ -258,15 +267,15 @@ export default function LoginPage() {
                 <button
                   key={idx}
                   type="button"
-                  className={`h-1.5 w-6 rounded-full transition-all duration-150 ${
+                  className={`h-[2px] w-8 transition-colors ${
                     idx === activeSlide ? "bg-primary" : "bg-base-300"
                   }`}
                   onClick={() => setActiveSlide(idx)}
                   aria-label={`Go to slide ${idx + 1}`}
                 />
               ))}
-              <div className="ml-auto text-xs text-base-content/50">
-                {activeSlide + 1} / {loginFeatureSlides.length}
+              <div className="font-mono-op ml-auto text-[10px] tabular-nums text-base-content/45">
+                {String(activeSlide + 1).padStart(2, "0")} / {String(loginFeatureSlides.length).padStart(2, "0")}
               </div>
             </div>
           </div>

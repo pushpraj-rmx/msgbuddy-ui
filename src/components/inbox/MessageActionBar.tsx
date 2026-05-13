@@ -19,7 +19,6 @@ export function MessageActionBar({
   text,
   onPin,
   onStar,
-  direction = "INBOUND",
   disabled = false,
 }: MessageActionBarProps) {
   const handleCopy = () => {
@@ -29,7 +28,7 @@ export function MessageActionBar({
   };
 
   return (
-    <div className="msg-action-bar flex items-center gap-0.5 rounded-lg border border-base-300 bg-base-100 px-1 py-0.5 shadow-sm">
+    <div className="msg-action-bar flex items-center gap-0.5 rounded-md border border-base-300 bg-base-200 px-1 py-0.5 shadow-sm">
       <div className="tooltip tooltip-top" data-tip={isStarred ? "Unstar" : "Star"}>
         <button
           type="button"

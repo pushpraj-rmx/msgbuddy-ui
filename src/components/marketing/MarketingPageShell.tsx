@@ -8,7 +8,7 @@ type MarketingPageShellProps = {
 
 export async function MarketingPageShell({ children }: MarketingPageShellProps) {
   return (
-    <main className="min-h-screen bg-base-100 text-base-content">
+    <main className="h-screen overflow-y-auto bg-base-100 text-base-content">
       <MarketingHeader />
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         {children}

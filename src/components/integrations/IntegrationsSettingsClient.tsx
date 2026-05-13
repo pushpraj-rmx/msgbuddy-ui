@@ -6,6 +6,7 @@ import { IntegrationCard } from "@/components/integrations/IntegrationCard";
 import { TelegramSetupPanel } from "@/components/integrations/TelegramSetupPanel";
 import { EmailSetupPanel } from "@/components/integrations/EmailSetupPanel";
 import { SmsSetupPanel } from "@/components/integrations/SmsSetupPanel";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 
 function getErr(err: unknown): string {
   return (err as { response?: { data?: { message?: string } } })?.response?.data
@@ -63,8 +64,9 @@ export function IntegrationsSettingsClient({
       />
 
       {error ? (
-        <div role="alert" className="alert alert-error">
-          <span>{error}</span>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[13px] text-base-content">{error}</p>
         </div>
       ) : null}
 
@@ -74,12 +76,15 @@ export function IntegrationsSettingsClient({
         <SmsSetupPanel onDone={refresh} />
       </div>
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold">Existing integrations</h2>
+      <div className="rounded-box border border-base-300 bg-base-200">
+        <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Existing integrations</h2>
+            <span className="op-label">connected channels</span>
+          </div>
           <button
             type="button"
-            className="btn btn-sm btn-ghost"
+            className="btn btn-ghost btn-sm"
             onClick={() => void refresh()}
             disabled={loading}
           >
@@ -87,25 +92,33 @@ export function IntegrationsSettingsClient({
           </button>
         </div>
         {loading ? (
-          <span className="loading loading-spinner loading-sm" />
+          <div className="p-4">
+            <LoadingState label="Loading integrations…" />
+          </div>
         ) : rows.length ? (
-          <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-            <table className="table table-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12.5px]">
               <thead>
-                <tr>
-                  <th>Channel</th>
-                  <th>Status</th>
-                  <th>Default</th>
-                  <th className="text-right">Actions</th>
+                <tr className="border-b border-base-300 bg-base-100">
+                  <th className="op-label px-3 py-2.5 text-left font-medium">Channel</th>
+                  <th className="op-label px-3 py-2.5 text-left font-medium">Status</th>
+                  <th className="op-label px-3 py-2.5 text-left font-medium">Default</th>
+                  <th className="op-label px-3 py-2.5 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.channel}</td>
-                    <td>{row.status || (row.isActive ? "ACTIVE" : "INACTIVE")}</td>
-                    <td>{row.isDefault ? "Yes" : "No"}</td>
-                    <td className="text-right">
+                  <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                    <td className="px-3 py-3 font-medium">{row.channel}</td>
+                    <td className="px-3 py-3">
+                      <span className={row.isActive ? "op-tag op-tag-ok" : "op-tag"}>
+                        {row.status || (row.isActive ? "ACTIVE" : "INACTIVE")}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      {row.isDefault ? <span className="op-tag op-tag-ok">Yes</span> : <span className="op-tag">No</span>}
+                    </td>
+                    <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-1">
                         <button
                           type="button"
@@ -148,7 +161,12 @@ export function IntegrationsSettingsClient({
             </table>
           </div>
         ) : (
-          <p className="text-sm text-base-content/60">No integrations configured yet.</p>
+          <div className="p-4">
+            <EmptyState
+              title="No integrations configured yet"
+              description="Connect a channel above to start sending and receiving messages."
+            />
+          </div>
         )}
       </div>
     </div>

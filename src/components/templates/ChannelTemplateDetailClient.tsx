@@ -25,20 +25,23 @@ import type {
 import { channelTemplateRequirementHref } from "@/lib/site";
 import {
   parseWorkspaceSseEvent,
+  isChannelTemplateStatusChanged,
   isChannelTemplateCategoryPending,
   isWhatsAppAccountRestriction,
 } from "@/lib/sseEvents";
 import { ChannelTemplateVersionEditor } from "./ChannelTemplateVersionEditor";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getApiError } from "@/lib/api-error";
+import { StatusTag } from "@/components/ui/StatusTag";
+
 
 function statusLabel(status: TemplateVersionStatus): string {
   switch (status) {
     case "DRAFT": return "Draft";
-    case "PENDING": return "Pending review";
-    case "APPROVED": return "Approved";
-    case "REJECTED": return "Rejected";
-    case "PROVIDER_PENDING": return "Under Meta review";
+    case "PENDING": return "Internal review";
+    case "APPROVED": return "Approved internally";
+    case "REJECTED": return "Rejected internally";
+    case "PROVIDER_PENDING": return "Awaiting Meta approval";
     case "PROVIDER_APPROVED": return "Live on WhatsApp";
     case "PROVIDER_REJECTED": return "Rejected by Meta";
     case "PROVIDER_PAUSED": return "Paused by Meta";
@@ -48,25 +51,23 @@ function statusLabel(status: TemplateVersionStatus): string {
 }
 
 function statusBadge(status: TemplateVersionStatus) {
-  const cls =
+  const tone: "success" | "warning" | "info" | "danger" | "neutral" =
     status === "PROVIDER_APPROVED"
-      ? "badge-success"
-      : status === "DRAFT"
-        ? "badge-ghost"
-        : status === "PENDING" || status === "PROVIDER_PENDING"
-          ? "badge-warning"
-          : status === "APPROVED"
-            ? "badge-info"
-            : status === "REJECTED" || status === "PROVIDER_REJECTED"
-              ? "badge-error"
-              : "badge-ghost";
-  return <span className={`badge badge-sm ${cls}`}>{statusLabel(status)}</span>;
+      ? "success"
+      : status === "PENDING" || status === "PROVIDER_PENDING"
+        ? "warning"
+        : status === "APPROVED"
+          ? "info"
+          : status === "REJECTED" || status === "PROVIDER_REJECTED"
+            ? "danger"
+            : "neutral";
+  return <StatusTag tone={tone}>{statusLabel(status)}</StatusTag>;
 }
 
 const WA_STEPS: { key: TemplateVersionStatus | string; label: string }[] = [
   { key: "DRAFT", label: "Draft" },
-  { key: "PENDING", label: "Pending review" },
-  { key: "APPROVED", label: "Approved locally" },
+  { key: "PENDING", label: "Internal review" },
+  { key: "APPROVED", label: "Approved" },
   { key: "PROVIDER_PENDING", label: "Meta review" },
   { key: "PROVIDER_APPROVED", label: "Live" },
 ];
@@ -175,6 +176,7 @@ function VersionCardHeaderStrip({
   return (
     <div className="relative -mx-3 -mt-3 mb-2 overflow-hidden rounded-t-xl border-b border-base-200 bg-gradient-to-br from-base-200/90 to-base-300/40 aspect-[16/10] min-h-[72px] max-h-[140px]">
       {canShowImg ? (
+// eslint-disable-next-line @next/next/no-img-element -- dynamic user content, dimensions unknown
         <img
           src={imageSrc}
           alt=""
@@ -233,17 +235,6 @@ function VersionCardHeaderStrip({
   );
 }
 
-function jsonOrDash(value: unknown): string {
-  if (value == null) return "—";
-  if (typeof value === "string") return value || "—";
-  try {
-    const s = JSON.stringify(value, null, 2);
-    return s.length > 4000 ? `${s.slice(0, 4000)}…` : s;
-  } catch {
-    return "—";
-  }
-}
-
 function VersionCompareModal({
   open,
   onClose,
@@ -260,7 +251,7 @@ function VersionCompareModal({
   const [older, newer] = [a, b].sort((x, y) => x.version - y.version);
 
   const col = (v: ChannelTemplateVersion, label: string) => (
-    <div className="rounded-box border border-base-300 bg-base-100 p-3 min-w-0">
+    <div className="card bg-base-100 border border-base-300 p-3 min-w-0">
       <div className="text-sm font-semibold mb-2">{label}</div>
       <dl className="space-y-2 text-sm">
         <div>
@@ -311,9 +302,7 @@ function VersionCompareModal({
           <dd className="flex flex-wrap gap-1 mt-1">
             {Array.isArray(v.variables) && v.variables.length > 0
               ? (v.variables as Array<{ key?: string; name?: string }>).map((vr, i) => (
-                  <span key={i} className="badge badge-ghost badge-sm font-mono">
-                    {vr.key ?? vr.name ?? String(vr)}
-                  </span>
+                  <span key={i} className="op-tag">{vr.key ?? vr.name ?? String(vr)}</span>
                 ))
               : <span className="text-base-content/50">—</span>}
           </dd>
@@ -372,7 +361,7 @@ export function ChannelTemplateDetailClient({
     refetchInterval: 10_000,
     enabled: !!state,
   });
-  const versions = versionsQuery.data ?? [];
+  const versions = useMemo(() => versionsQuery.data ?? [], [versionsQuery.data]);
 
   const active = state?.activeVersion ?? null;
   const latest = state?.latestVersion ?? null;
@@ -425,6 +414,17 @@ export function ChannelTemplateDetailClient({
       source.onmessage = (event) => {
         const ev = parseWorkspaceSseEvent(event.data);
         if (!ev) return;
+        if (isChannelTemplateStatusChanged(ev.type)) {
+          const id = ev.data.channelTemplateId as string | undefined;
+          if (id === channelTemplateId) {
+            void queryClient.invalidateQueries({
+              queryKey: channelTemplateKeys.state(channelTemplateId),
+            });
+            void queryClient.invalidateQueries({
+              queryKey: channelTemplateKeys.versions(channelTemplateId),
+            });
+          }
+        }
         if (isChannelTemplateCategoryPending(ev.type)) {
           const id = ev.data.channelTemplateId as string | undefined;
           if (id === channelTemplateId) {
@@ -461,10 +461,12 @@ export function ChannelTemplateDetailClient({
   const canActivate = version != null && version.status === "PROVIDER_APPROVED" && !version.archivedAt;
 
   /** Meta-linked template: can pull status/category without sending a new version. */
+  /* eslint-disable react-hooks/preserve-manual-memoization -- narrowed deps are intentional; compiler wants full `state` but we only need two fields */
   const canRefreshFromMeta = useMemo(
     () => state?.channel === "WHATSAPP" && Boolean(state.providerTemplateId?.trim()),
     [state?.channel, state?.providerTemplateId]
   );
+  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const canSyncToProvider = useMemo(() => {
     if (!version || state?.channel !== "WHATSAPP") return false;
@@ -501,21 +503,29 @@ export function ChannelTemplateDetailClient({
     return "Submit & approve this version locally first, then send it to Meta.";
   }, [version, state?.channel]);
 
+  const handleAutoSwitchCategoryToMarketing = useCallback(() => {
+    if (!state?.category || state.category !== "UTILITY") return;
+    updateChannelTemplateMutation.mutate({
+      id: channelTemplateId,
+      category: "MARKETING",
+    });
+  }, [state?.category, channelTemplateId, updateChannelTemplateMutation]);
+
   const onCreate = useCallback(() => {
     const payload: ChannelTemplateVersionPayload =
       version?.body
         ? {
             // Clone currently selected version as a starting point.
             body: version.body,
-            headerType: (version.headerType ?? "NONE") as any,
+            headerType: version.headerType ?? "NONE",
             headerContent: version.headerContent ?? null,
             footer: version.footer ?? null,
             language: version.language ?? "en",
             parameterFormat: version.parameterFormat ?? "POSITIONAL",
-            layoutType: (version.layoutType ?? "STANDARD") as any,
-            buttons: (version.buttons as any) ?? null,
-            variables: (version.variables as any) ?? null,
-            carouselCards: (version.carouselCards as any) ?? null,
+            layoutType: version.layoutType ?? "STANDARD",
+            buttons: (version.buttons as unknown[] | null) ?? null,
+            variables: (version.variables as unknown[] | null) ?? null,
+            carouselCards: (version.carouselCards as unknown[] | null) ?? null,
             allowCategoryChange: version.allowCategoryChange !== false,
           }
         : {
@@ -658,7 +668,7 @@ export function ChannelTemplateDetailClient({
 
   if (stateQuery.isError) {
     return (
-      <div role="alert" className="alert alert-error">
+      <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
         <span>{getApiError(stateQuery.error)}</span>
       </div>
     );
@@ -668,7 +678,7 @@ export function ChannelTemplateDetailClient({
   return (
     <div className="space-y-4">
       {state.whatsappUtilityRestriction && (
-        <div role="alert" className="alert alert-warning">
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <span>
             WhatsApp account notice
             {state.whatsappUtilityRestriction.level != null &&
@@ -681,31 +691,46 @@ export function ChannelTemplateDetailClient({
       )}
 
       {state.categoryPendingChange && (
-        <div role="alert" className="alert alert-info">
-          <span>
-            Upcoming category change: Meta will move this template from{" "}
-            <strong>{state.categoryPendingChange.currentCategory}</strong> to{" "}
-            <strong>{state.categoryPendingChange.correctCategory}</strong>
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-warning">category change required</span>
+          <p className="text-[13px] text-base-content">
+            Meta detected this template should be <strong>{state.categoryPendingChange.correctCategory}</strong> instead
+            of <strong>{state.categoryPendingChange.currentCategory}</strong>.
             {state.categoryPendingChange.fetchedAt && (
-              <>
-                {" "}
-                (checked {new Date(state.categoryPendingChange.fetchedAt).toLocaleString()})
-              </>
+              <span className="font-mono-op ml-1.5 text-[11px] text-base-content/50">
+                checked {new Date(state.categoryPendingChange.fetchedAt).toLocaleString()}
+              </span>
             )}
-            .
-          </span>
+          </p>
+          <p className="mt-1.5 text-[12px] text-base-content/60">
+            Update the category in template settings to match Meta&apos;s classification, or your template may be paused.
+          </p>
         </div>
       )}
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+      <div className="card bg-base-100 border border-base-300 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="badge badge-ghost">{state.channel}</span>
-            {state.category && <span className="badge badge-outline">{state.category}</span>}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="op-tag">{state.channel}</span>
+            <select
+              className="select select-bordered select-xs"
+              value={state.category ?? "UTILITY"}
+              onChange={(e) =>
+                updateChannelTemplateMutation.mutate({
+                  id: channelTemplateId,
+                  category: e.target.value as "UTILITY" | "MARKETING" | "AUTHENTICATION",
+                })
+              }
+              disabled={updateChannelTemplateMutation.isPending}
+            >
+              <option value="UTILITY">Utility</option>
+              <option value="MARKETING">Marketing</option>
+              <option value="AUTHENTICATION">Authentication</option>
+            </select>
             {state.isSendable ? (
-              <span className="badge badge-success">Sendable</span>
+              <span className="op-tag op-tag-ok">Sendable</span>
             ) : (
-              <span className="badge badge-warning">Not sendable</span>
+              <span className="op-tag op-tag-warn">Not sendable</span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -748,8 +773,8 @@ export function ChannelTemplateDetailClient({
             role="status"
             className={
               syncFeedback.type === "success"
-                ? "alert alert-success text-sm mt-3"
-                : "alert alert-error text-sm mt-3"
+                ? "mt-3 rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-3 py-2 text-sm"
+                : "mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm"
             }
           >
             <span>{syncFeedback.message}</span>
@@ -759,8 +784,8 @@ export function ChannelTemplateDetailClient({
         {state.missingRequirements.length > 0 && (
           <div className="mt-3 space-y-2">
             {state.missingRequirements.map((r) => {
-              const isDraftNoSend =
-                r.code === "NO_SENDABLE_VERSION" && latest?.status === "DRAFT";
+              // Hide the draft notice entirely — the version status tag is sufficient.
+              if (r.code === "NO_SENDABLE_VERSION" && latest?.status === "DRAFT") return null;
 
               const isMetaPendingNotice =
                 r.code === "NO_SENDABLE_VERSION" &&
@@ -770,7 +795,7 @@ export function ChannelTemplateDetailClient({
               return (
                 <div
                   key={r.code}
-                  className={isDraftNoSend ? "alert alert-info" : "alert alert-warning"}
+                  className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3"
                 >
                   {isMetaPendingNotice ? (
                     <div className="flex items-center gap-2">
@@ -811,7 +836,135 @@ export function ChannelTemplateDetailClient({
         )}
       </div>
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+      {/* Selected version actions + editor */}
+      {versionQuery.isLoading ? (
+        <div className="flex justify-center py-6">
+          <span className="loading loading-spinner loading-md" />
+        </div>
+      ) : versionQuery.isError ? (
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span>{getApiError(versionQuery.error)}</span>
+        </div>
+      ) : version ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="op-tag op-tag-info">v{version.version}</span>
+            {statusBadge(version.status)}
+            {version.isActive && <span className="op-tag op-tag-ok">Active</span>}
+            {version.isLocked && !version.archivedAt && <span className="op-tag" title="Content is locked and cannot be edited">🔒 Locked</span>}
+            {version.archivedAt && <span className="op-tag">Archived</span>}
+          </div>
+          {state?.channel === "WHATSAPP" && !version.archivedAt && (
+            <VersionWorkflowStepper status={version.status} />
+          )}
+
+          {/* Instant structural rejection (sync error from Meta API) */}
+          {version.syncError && version.status !== "PROVIDER_REJECTED" && (
+            <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+              <span className="op-label mb-1 block text-error">sync error — structural</span>
+              <p className="text-[13px] text-base-content">{version.syncError}</p>
+              <p className="mt-1.5 text-[12px] text-base-content/55">
+                Meta rejected the template format instantly. The template was NOT registered on Meta&apos;s side.
+                Edit the content below to fix the issue, then re-submit and sync.
+              </p>
+            </div>
+          )}
+
+          {/* Async content rejection (Meta reviewed and rejected via webhook) */}
+          {version.status === "PROVIDER_REJECTED" && (
+            <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+              <span className="op-label mb-1 block text-error">rejected by meta — content review</span>
+              <p className="text-[13px] text-base-content">
+                {version.providerRejectionReason || version.syncError || "Meta rejected this template after content review."}
+              </p>
+              <p className="mt-1.5 text-[12px] text-base-content/55">
+                This template name is now registered on Meta&apos;s side as rejected.
+                You cannot reuse the same name — create a new template with a different name, or create a new version and resubmit.
+              </p>
+            </div>
+          )}
+
+          <ChannelTemplateVersionEditor
+            channelTemplateId={channelTemplateId}
+            version={version}
+            channelCategory={state?.category ?? null}
+            onAutoSwitchCategoryToMarketing={handleAutoSwitchCategoryToMarketing}
+            onCopyAsNewDraft={() => {
+              createMutation.reset();
+              setCreateOpen(true);
+            }}
+          />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={onSubmitAndApprove}
+              disabled={
+                anyMutationPending ||
+                version.status !== "DRAFT" ||
+                version.isLocked
+              }
+            >
+              Submit & approve
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={onApprove}
+              disabled={anyMutationPending || version.status !== "PENDING"}
+            >
+              Approve
+            </button>
+            <button
+              className="btn btn-outline btn-sm"
+              onClick={() => setRejectOpen(true)}
+              disabled={anyMutationPending || version.status !== "PENDING"}
+            >
+              Reject
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={onActivate}
+              disabled={anyMutationPending || !canActivate}
+            >
+              Activate
+            </button>
+            <div className="tooltip tooltip-bottom" data-tip={
+              version.archivedAt ? "Already archived"
+              : version.isActive ? "Deactivate before archiving"
+              : "Archive this version (keeps audit trail)"
+            }>
+              <button
+                className="btn btn-ghost btn-sm text-error"
+                onClick={onArchive}
+                disabled={anyMutationPending || !!version.archivedAt || version.isActive}
+              >
+                Archive
+              </button>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={onSyncToProvider}
+              disabled={anyMutationPending || !canSyncToProvider}
+              title={syncToProviderTitle}
+            >
+              {syncMutation.isPending || refreshProviderMutation.isPending ? (
+                <>
+                  <span className="loading loading-spinner loading-sm" />
+                  Syncing…
+                </>
+              ) : (
+                syncToProviderLabel
+              )}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="text-base-content/60">No version selected.</div>
+      )}
+
+      {/* Version history */}
+      <div className="card bg-base-100 border border-base-300 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-lg font-semibold">Version history</div>
@@ -831,7 +984,7 @@ export function ChannelTemplateDetailClient({
         ) : (
           <>
             {pickedForCompare.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-2">
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 card bg-base-100 border border-base-300 px-3 py-2">
                 <span className="text-sm">
                   {pickedForCompare.length === 2
                     ? `Ready: v${pickedForCompare[0]} & v${pickedForCompare[1]}`
@@ -869,10 +1022,10 @@ export function ChannelTemplateDetailClient({
                 return (
                   <div
                     key={v.id}
-                    className={`flex flex-col overflow-hidden rounded-box border border-base-300 bg-base-100 p-3 text-left ${
+                    className={`flex flex-col overflow-hidden rounded-box border bg-base-100 p-3 text-left transition-colors ${
                       isSelected
-                        ? "border-primary ring-2 ring-primary/25 shadow-md"
-                        : "border-base-300/70 hover:border-primary/30"
+                        ? "border-primary border-l-2"
+                        : "border-base-300 hover:border-base-content/20"
                     }`}
                   >
                     <button
@@ -886,14 +1039,11 @@ export function ChannelTemplateDetailClient({
                         headerPreviewUrl={v.headerPreviewUrl}
                       />
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="badge badge-primary badge-sm">v{v.version}</span>
+                        <span className="op-tag op-tag-info">v{v.version}</span>
                         {statusBadge(v.status)}
-                        {v.isActive && (
-                          <span className="badge badge-success badge-sm">Active</span>
-                        )}
-                        {v.archivedAt && (
-                          <span className="badge badge-ghost badge-sm">Archived</span>
-                        )}
+                        {v.isActive && <span className="op-tag op-tag-ok">Active</span>}
+                        {v.isLocked && !v.archivedAt && <span className="op-tag" title="Content is locked and cannot be edited">🔒 Locked</span>}
+                        {v.archivedAt && <span className="op-tag">Archived</span>}
                       </div>
                       {tagBits.length > 0 && (
                         <div className="mt-1 text-xs text-base-content/50">
@@ -917,10 +1067,14 @@ export function ChannelTemplateDetailClient({
                           </span>
                         )}
                       </div>
-                      {v.syncError && (
-                        <p className="mt-1 text-xs text-error line-clamp-2" title={v.syncError}>
-                          {v.syncError}
-                        </p>
+                      {(v.syncError || (v.status === "PROVIDER_REJECTED" && v.providerRejectionReason)) && (
+                        <div className="mt-1 rounded-md border border-error/20 bg-error/5 px-2 py-1">
+                          <p className="text-[11px] text-error line-clamp-2" title={v.providerRejectionReason || v.syncError || ""}>
+                            {v.status === "PROVIDER_REJECTED"
+                              ? `Rejected: ${v.providerRejectionReason || v.syncError || "Content review failed"}`
+                              : `Error: ${v.syncError}`}
+                          </p>
+                        </div>
                       )}
                     </button>
                     <label className="mt-3 flex cursor-pointer items-center gap-2 border-t border-base-200 pt-2 text-xs text-base-content/70">
@@ -939,115 +1093,6 @@ export function ChannelTemplateDetailClient({
             </div>
           </>
         )}
-
-        <div className="mt-4">
-          {versionQuery.isLoading ? (
-            <div className="flex justify-center py-6">
-              <span className="loading loading-spinner loading-md" />
-            </div>
-          ) : versionQuery.isError ? (
-            <div role="alert" className="alert alert-error">
-              <span>{getApiError(versionQuery.error)}</span>
-            </div>
-          ) : version ? (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="badge badge-primary">v{version.version}</span>
-                {statusBadge(version.status)}
-                {version.isActive && <span className="badge badge-success">Active</span>}
-                {version.archivedAt && <span className="badge badge-ghost">Archived</span>}
-              </div>
-              {state?.channel === "WHATSAPP" && !version.archivedAt && (
-                <VersionWorkflowStepper status={version.status} />
-              )}
-
-              {version.syncError && (
-                <div role="alert" className="alert alert-error">
-                  <span>{version.syncError}</span>
-                </div>
-              )}
-
-              <ChannelTemplateVersionEditor
-                channelTemplateId={channelTemplateId}
-                version={version}
-                channelCategory={state?.category ?? null}
-                onAutoSwitchCategoryToMarketing={() => {
-                  if (!state?.category) return;
-                  if (state.category !== "UTILITY") return;
-                  updateChannelTemplateMutation.mutate({
-                    id: channelTemplateId,
-                    category: "MARKETING",
-                  });
-                }}
-                onCopyAsNewDraft={() => {
-                  // Uses the already-selected version as the clone source.
-                  createMutation.reset();
-                  setCreateOpen(true);
-                }}
-              />
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={onSubmitAndApprove}
-                  disabled={
-                    anyMutationPending ||
-                    version.status !== "DRAFT" ||
-                    version.isLocked
-                  }
-                >
-                  Submit & approve
-                </button>
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={onApprove}
-                  disabled={anyMutationPending || version.status !== "PENDING"}
-                >
-                  Approve
-                </button>
-                <button
-                  className="btn btn-outline btn-sm"
-                  onClick={() => setRejectOpen(true)}
-                  disabled={anyMutationPending || version.status !== "PENDING"}
-                >
-                  Reject
-                </button>
-                <button
-                  className="btn btn-primary btn-sm"
-                  onClick={onActivate}
-                  disabled={anyMutationPending || !canActivate}
-                >
-                  Activate
-                </button>
-                <button
-                  className="btn btn-ghost btn-sm text-error"
-                  onClick={onArchive}
-                  disabled={anyMutationPending || !!version.archivedAt}
-                >
-                  Archive
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm"
-                  onClick={onSyncToProvider}
-                  disabled={anyMutationPending || !canSyncToProvider}
-                  title={syncToProviderTitle}
-                >
-                  {syncMutation.isPending || refreshProviderMutation.isPending ? (
-                    <>
-                      <span className="loading loading-spinner loading-sm" />
-                      Syncing…
-                    </>
-                  ) : (
-                    syncToProviderLabel
-                  )}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="text-base-content/60">No version selected.</div>
-          )}
-        </div>
       </div>
 
       {createOpen && (
@@ -1058,7 +1103,7 @@ export function ChannelTemplateDetailClient({
               Creates a draft version. You can edit body, header, and footer below.
             </p>
             {createMutation.isError && (
-              <div role="alert" className="alert alert-error mt-3 text-sm">
+              <div role="alert" className="mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
                 <span>{getApiError(createMutation.error)}</span>
               </div>
             )}

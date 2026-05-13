@@ -54,11 +54,12 @@ function ResetPasswordForm() {
     return (
       <div
         role="status"
-        className="rounded-box border border-success/30 bg-success/10 px-4 py-3 text-sm text-success space-y-3"
+        className="rounded-box border-l-2 border border-success/30 border-l-success bg-base-200 px-4 py-3 space-y-3"
       >
-        <p>Your password was updated. You can sign in with your new password.</p>
+        <span className="op-label block text-success">password updated</span>
+        <p className="text-[13px] text-base-content">Your password was updated. You can sign in with your new password.</p>
         <Link href="/login" className="btn btn-primary btn-sm">
-          Sign in
+          Sign in →
         </Link>
       </div>
     );
@@ -116,9 +117,10 @@ export default function ResetPasswordPage() {
         <div className="flex items-center">
           <BrandLogo className="h-7 w-auto" priority />
         </div>
-        <div>
-          <h1 className="text-xl font-medium">Set a new password</h1>
-          <p className="text-sm text-base-content/70 mt-1">
+        <div className="space-y-1.5">
+          <span className="op-label">Account recovery</span>
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Set a new password</h1>
+          <p className="text-[13px] text-base-content/65">
             Choose a new password for your account.
           </p>
         </div>

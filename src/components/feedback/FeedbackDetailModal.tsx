@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { feedbackApi } from "@/lib/api";
 import type { FeedbackReport, FeedbackStatus } from "@/lib/types";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { StatusTag } from "@/components/ui/StatusTag";
 
 const STATUS_OPTIONS: { value: FeedbackStatus; label: string }[] = [
   { value: "OPEN", label: "Open" },
@@ -15,13 +16,13 @@ const STATUS_OPTIONS: { value: FeedbackStatus; label: string }[] = [
   { value: "WONT_FIX", label: "Won't Fix" },
 ];
 
-const STATUS_CLASS: Record<string, string> = {
-  OPEN: "badge-neutral",
-  IN_REVIEW: "badge-info",
-  PLANNED: "badge-secondary",
-  IN_PROGRESS: "badge-warning",
-  DONE: "badge-success",
-  WONT_FIX: "badge-ghost",
+const STATUS_TONE: Record<string, "neutral" | "info" | "warning" | "success"> = {
+  OPEN: "neutral",
+  IN_REVIEW: "info",
+  PLANNED: "info",
+  IN_PROGRESS: "warning",
+  DONE: "success",
+  WONT_FIX: "neutral",
 };
 
 function formatDate(iso: string): string {
@@ -79,25 +80,23 @@ export function FeedbackDetailModal({ report, isAdmin, onClose }: FeedbackDetail
         {/* Header */}
         <div className="pr-8 mb-4">
           <div className="flex flex-wrap items-center gap-1.5 mb-2">
-            <span
-              className={`badge badge-sm ${report.type === "BUG" ? "badge-error" : "badge-info"}`}
-            >
+            <StatusTag tone={report.type === "BUG" ? "danger" : "info"}>
               {report.type === "BUG" ? "Bug" : "Feature"}
-            </span>
-            <span className={`badge badge-sm ${STATUS_CLASS[report.status] ?? "badge-neutral"}`}>
+            </StatusTag>
+            <StatusTag tone={STATUS_TONE[report.status] ?? "neutral"}>
               {STATUS_OPTIONS.find((s) => s.value === report.status)?.label ?? report.status}
-            </span>
+            </StatusTag>
             {report.type === "BUG" && (
-              <span className="badge badge-sm badge-outline">
+              <span className="op-tag">
                 {report.priority.charAt(0) + report.priority.slice(1).toLowerCase()}
               </span>
             )}
             {report.type === "FEATURE_REQUEST" && (
-              <span className="badge badge-sm badge-outline">▲ {report.voteCount}</span>
+              <span className="op-tag">▲ {report.voteCount}</span>
             )}
           </div>
-          <h3 className="font-semibold text-base">{report.title}</h3>
-          <p className="text-xs text-base-content/50 mt-1">
+          <h3 className="text-[15px] font-semibold tracking-[-0.015em]">{report.title}</h3>
+          <p className="font-mono-op mt-1 text-[11px] tabular-nums text-base-content/50">
             {report.submittedBy ? `${report.submittedBy} · ` : ""}
             {formatDate(report.createdAt)}
           </p>
@@ -117,6 +116,7 @@ export function FeedbackDetailModal({ report, isAdmin, onClose }: FeedbackDetail
                 <div key={i} className="rounded border border-base-300 overflow-hidden bg-base-200">
                   {att.mimeType.startsWith("image/") ? (
                     <a href={att.url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- dynamic user content */}
                       <img
                         src={att.url}
                         alt={att.name}

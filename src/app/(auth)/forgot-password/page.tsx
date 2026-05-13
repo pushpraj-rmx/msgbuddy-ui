@@ -31,9 +31,10 @@ export default function ForgotPasswordPage() {
         <div className="flex items-center">
           <BrandLogo className="h-7 w-auto" priority />
         </div>
-        <div>
-          <h1 className="text-xl font-medium">Forgot password</h1>
-          <p className="text-sm text-base-content/70 mt-1">
+        <div className="space-y-1.5">
+          <span className="op-label">Account recovery</span>
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Forgot password</h1>
+          <p className="text-[13px] text-base-content/65">
             If an account exists with this email and uses a password, we will
             send a reset link.
           </p>
@@ -42,10 +43,13 @@ export default function ForgotPasswordPage() {
         {done ? (
           <div
             role="status"
-            className="rounded-box border border-success/30 bg-success/10 px-4 py-3 text-sm text-success"
+            className="rounded-box border-l-2 border border-success/30 border-l-success bg-base-200 px-4 py-3"
           >
-            If we found a matching account, check your inbox for a reset link.
-            It expires in one hour.
+            <span className="op-label mb-1 block text-success">reset link sent</span>
+            <p className="text-[13px] text-base-content">
+              If we found a matching account, check your inbox for a reset link.
+              It expires in one hour.
+            </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">

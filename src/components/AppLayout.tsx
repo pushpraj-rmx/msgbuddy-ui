@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { AppDock } from "./AppDock";
+import { PwaInstallPrompt } from "./PwaInstallPrompt";
+import { AppUpdateToast } from "./AppUpdateToast";
 import { SessionRefresh } from "./SessionRefresh";
 import { AppShortcuts } from "./shortcuts/AppShortcuts";
 import { GlobalRightPanel } from "./right-panel/GlobalRightPanel";
@@ -13,7 +15,7 @@ import type { MeResponse } from "@/lib/api";
 import { conversationsApi } from "@/lib/api";
 
 const DRAWER_ID = "app-drawer";
-const DESKTOP_SIDEBAR_KEY = "desktop-sidebar-open";
+const SIDEBAR_KEY = "sidebar-collapsed";
 
 export function AppLayout({
   children,
@@ -22,26 +24,26 @@ export function AppLayout({
   children: React.ReactNode;
   me: MeResponse;
 }) {
-  const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(() => {
-    if (typeof window === "undefined") return true;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Sync with localStorage after hydration
+  useEffect(() => {
     try {
-      const raw = localStorage.getItem(DESKTOP_SIDEBAR_KEY);
-      if (raw === "true" || raw === "false") {
-        return raw === "true";
-      }
+      const stored = localStorage.getItem(SIDEBAR_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR hydration guard: localStorage unavailable during SSR
+      if (stored === "true") setSidebarCollapsed(true);
     } catch {
       // ignore
     }
-    return true;
-  });
+  }, []);
 
   useEffect(() => {
     try {
-      localStorage.setItem(DESKTOP_SIDEBAR_KEY, String(isDesktopSidebarOpen));
+      localStorage.setItem(SIDEBAR_KEY, String(sidebarCollapsed));
     } catch {
       // ignore
     }
-  }, [isDesktopSidebarOpen]);
+  }, [sidebarCollapsed]);
 
   // Handle inline reply actions from push notification service worker
   useEffect(() => {
@@ -68,60 +70,62 @@ export function AppLayout({
     return () => navigator.serviceWorker.removeEventListener("message", handler);
   }, []);
 
+  const mainContent = (
+    <>
+      <TrialBanner workspace={me.workspace} />
+      <Topbar
+        drawerId={DRAWER_ID}
+        me={me}
+        workspaceId={me.workspace.id}
+      />
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-4 lg:p-5">
+            {children}
+          </div>
+          <GlobalRightPanel />
+        </div>
+      </main>
+      <AppDock
+        platformRole={me.platformRole ?? "NONE"}
+        workspaceRole={String(me.role)}
+      />
+    </>
+  );
+
   return (
     <RightPanelProvider>
       <SessionRefresh />
       <AppShortcuts />
-      <div className="flex h-[100dvh] flex-col overflow-hidden">
-        <TrialBanner workspace={me.workspace} />
-        <Topbar
+      <PwaInstallPrompt />
+      <AppUpdateToast />
+
+      {/* Desktop: sidebar + content side by side */}
+      <div className="hidden h-[100dvh] overflow-hidden lg:flex">
+        <Sidebar
           drawerId={DRAWER_ID}
           me={me}
-          workspaceId={me.workspace.id}
-          isDesktopSidebarOpen={isDesktopSidebarOpen}
-          onDesktopSidebarToggle={() =>
-            setIsDesktopSidebarOpen((prev) => {
-              if (prev) {
-                // Closing: reset mobile drawer-toggle. If it stays :checked, DaisyUI
-                // still shows drawer-side (overlay/fixed) after lg:drawer-open is removed,
-                // which flashes the wrong layout vs sticky desktop nav.
-                const input = document.getElementById(
-                  DRAWER_ID
-                ) as HTMLInputElement | null;
-                if (input?.checked) input.checked = false;
-              }
-              return !prev;
-            })
-          }
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((prev) => !prev)}
         />
-        <div
-          className={`app-shell-drawer drawer h-full min-h-0 flex-1 overflow-hidden bg-base-100 ${isDesktopSidebarOpen ? "lg:drawer-open" : ""
-            }`}
-        >
-          <input id={DRAWER_ID} type="checkbox" className="drawer-toggle" />
-          <div className="drawer-content flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-            <main className="flex min-h-0 flex-1 flex-col overflow-hidden pb-[calc(3.5rem+env(safe-area-inset-bottom,0px))] lg:pb-0">
-              <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
-                {/* Main + details pane: split row so content shrinks when details is open (no overlay). */}
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-[var(--layout-gutter-x)]">
-                  {children}
-                </div>
-                <GlobalRightPanel />
-              </div>
-            </main>
-            <AppDock
-              platformRole={me.platformRole ?? "NONE"}
-              workspaceRole={String(me.role)}
-            />
-          </div>
-          <div className="drawer-side z-30">
-            <label
-              htmlFor={DRAWER_ID}
-              aria-label="close sidebar"
-              className="drawer-overlay"
-            />
-            <Sidebar drawerId={DRAWER_ID} me={me} />
-          </div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          {mainContent}
+        </div>
+      </div>
+
+      {/* Mobile: drawer wraps everything, content inside drawer-content */}
+      <div className="drawer h-[100dvh] overflow-hidden lg:hidden">
+        <input id={DRAWER_ID} type="checkbox" className="drawer-toggle" />
+        <div className="drawer-content flex min-h-0 flex-1 flex-col overflow-hidden">
+          {mainContent}
+        </div>
+        <div className="drawer-side z-30">
+          <label
+            htmlFor={DRAWER_ID}
+            aria-label="close sidebar"
+            className="drawer-overlay"
+          />
+          <Sidebar drawerId={DRAWER_ID} me={me} />
         </div>
       </div>
     </RightPanelProvider>

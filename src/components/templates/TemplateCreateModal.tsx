@@ -36,10 +36,12 @@ export function TemplateCreateModal({
   return (
     <dialog open className="modal modal-middle">
       <div className="modal-box">
-        <h3 className="text-lg font-semibold">Create message</h3>
+        <span className="op-label">New template</span>
+        <h3 className="mt-1 text-[17px] font-semibold tracking-[-0.015em]">Create message</h3>
         {errorMessage && (
-          <div role="alert" className="alert alert-error mt-3 text-sm">
-            <span>{errorMessage}</span>
+          <div role="alert" className="mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+            <span className="op-label mb-1 block text-error">error</span>
+            <p className="text-[13px] text-base-content">{errorMessage}</p>
           </div>
         )}
         <div className="mt-4 space-y-3">

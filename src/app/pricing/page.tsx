@@ -93,85 +93,72 @@ const PLANS: Plan[] = [
 export default async function PricingPage() {
   return (
     <MarketingPageShell>
-      <div className="space-y-8">
-        <div className="space-y-3 text-center">
-          <span className="badge badge-primary badge-outline">Pricing</span>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+      <div className="space-y-12 py-10">
+        <div className="flex flex-col gap-4 text-center">
+          <span className="op-section-title mx-auto">Pricing</span>
+          <h1 className="text-[36px] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[44px]">
             Simple plans for growing teams
           </h1>
-          <p className="mx-auto max-w-2xl text-base-content/80">
+          <p className="mx-auto max-w-2xl text-[15px] text-base-content/70">
             Start with a 14-day free trial of our Growth plan. No credit card
             required. Scale your messaging as your team grows.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
           {PLANS.map((plan) => (
             <article
               key={plan.name}
-              className={`card card-border bg-base-200 ${
-                plan.highlighted ? "border-primary ring-2 ring-primary/20" : ""
+              className={`op-grain relative flex flex-col rounded-box border bg-base-200 ${
+                plan.highlighted ? "border-primary" : "border-base-300"
               }`}
             >
-              <div className="card-body">
-                <div className="flex items-center gap-2">
-                  <h2 className="card-title">{plan.name}</h2>
+              <div className="flex flex-col gap-4 p-5">
+                <div className="flex items-center justify-between">
+                  <span className="op-label">{plan.name.toLowerCase()}</span>
                   {plan.highlighted ? (
-                    <span className="badge badge-primary badge-sm">
-                      Popular
-                    </span>
+                    <span className="op-tag op-tag-ok">popular</span>
                   ) : null}
                 </div>
-                <p className="text-sm text-base-content/60">
-                  {plan.description}
-                </p>
-                <p className="mt-2">
-                  <span className="text-3xl font-semibold">{plan.price}</span>
-                  {plan.period ? (
-                    <span className="text-sm text-base-content/70">
-                      {plan.period}
-                    </span>
-                  ) : null}
-                </p>
-                <ul className="mt-4 space-y-2">
+                <div>
+                  <p className="font-mono-op text-[28px] font-semibold leading-none tabular-nums">
+                    {plan.price}
+                    {plan.period ? (
+                      <span className="ml-1 text-[13px] font-normal text-base-content/55">
+                        {plan.period}
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="mt-2 text-[13px] text-base-content/60">
+                    {plan.description}
+                  </p>
+                </div>
+
+                <ul className="flex flex-col gap-1.5 border-t border-base-300 pt-4">
                   {plan.features.map((f) => (
-                    <li
-                      key={f}
-                      className="flex items-start gap-2 text-sm text-base-content/80"
-                    >
+                    <li key={f} className="flex items-start gap-2 text-[13px] text-base-content/80">
                       <svg
-                        className="mt-0.5 h-4 w-4 shrink-0 text-success"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2.5}
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary"
+                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                       >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M5 13l4 4L19 7"
-                        />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                       </svg>
                       {f}
                     </li>
                   ))}
                 </ul>
-                <div className="card-actions mt-6">
+
+                <div className="mt-auto pt-2">
                   {plan.ctaHref.startsWith("mailto:") ? (
-                    <a
-                      href={plan.ctaHref}
-                      className="btn btn-ghost btn-sm w-full"
-                    >
-                      {plan.cta}
+                    <a href={plan.ctaHref} className="btn btn-sm w-full">
+                      {plan.cta} →
                     </a>
                   ) : (
                     <Link
                       href={plan.ctaHref}
-                      className={`btn btn-sm w-full ${
-                        plan.highlighted ? "btn-primary" : "btn-ghost"
-                      }`}
+                      className={`btn btn-sm w-full ${plan.highlighted ? "btn-primary" : ""}`}
                     >
-                      {plan.cta}
+                      {plan.cta} →
                     </Link>
                   )}
                 </div>
@@ -180,9 +167,8 @@ export default async function PricingPage() {
           ))}
         </div>
 
-        <div className="text-center text-sm text-base-content/60">
-          All paid plans include a 14-day free trial of the Growth tier. No
-          credit card required.
+        <div className="text-center font-mono-op text-[11px] tracking-[0.04em] text-base-content/55">
+          all paid plans include a 14-day free trial of the growth tier · no credit card required
         </div>
       </div>
     </MarketingPageShell>

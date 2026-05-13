@@ -55,8 +55,8 @@ export function getAppNav(
         { href: "/people/segments", label: "Segments", Icon: LayoutGrid },
       ],
     },
-    { href: "/campaigns", label: "Campaigns", Icon: Rocket },
-    { href: "/templates", label: "Templates", Icon: FileText },
+    { href: "/campaigns", label: "Campaigns", Icon: Rocket, showInDock: true },
+    { href: "/templates", label: "Templates", Icon: FileText, showInDock: true },
     { href: "/media", label: "Media", Icon: Image },
     { href: "/analytics", label: "Analytics", Icon: BarChart3 },
     { href: "/notifications", label: "Notifications", Icon: Bell },
@@ -67,7 +67,6 @@ export function getAppNav(
       href: "/settings",
       label: "Settings",
       Icon: Settings,
-      showInDock: true,
     },
   ];
 

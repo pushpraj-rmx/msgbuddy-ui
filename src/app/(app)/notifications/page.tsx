@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useNotifications } from "@/hooks/use-notifications";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 
 function formatRelativeTime(input: string): string {
   const date = new Date(input);
@@ -36,13 +37,14 @@ export default function NotificationsPage() {
     <PageContainer className="mx-auto w-full max-w-4xl">
       <PageHeader title="Notifications" description="Workspace notifications" />
 
-      <section className="card border border-base-300 bg-base-100 shadow-sm">
-        <div className="card-body gap-4 p-4">
+      <section className="rounded-box border border-base-300 bg-base-200">
+        <div className="flex flex-col gap-4 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="join">
               <button
                 type="button"
-                className={`btn btn-sm join-item ${!unreadOnly ? "btn-primary" : "btn-outline"}`}
+                className={`btn btn-sm join-item ${!unreadOnly ? "btn-primary" : ""}`}
+                aria-pressed={!unreadOnly}
                 onClick={() => {
                   setUnreadOnly(false);
                   setPage(1);
@@ -52,7 +54,8 @@ export default function NotificationsPage() {
               </button>
               <button
                 type="button"
-                className={`btn btn-sm join-item ${unreadOnly ? "btn-primary" : "btn-outline"}`}
+                className={`btn btn-sm join-item ${unreadOnly ? "btn-primary" : ""}`}
+                aria-pressed={unreadOnly}
                 onClick={() => {
                   setUnreadOnly(true);
                   setPage(1);
@@ -63,7 +66,7 @@ export default function NotificationsPage() {
             </div>
             <button
               type="button"
-              className="btn btn-sm btn-ghost"
+              className="btn btn-ghost btn-sm"
               onClick={() => markAllRead.mutate()}
               disabled={markAllRead.isPending}
             >
@@ -72,11 +75,14 @@ export default function NotificationsPage() {
           </div>
 
           {listQuery.isLoading ? (
-            <div className="text-sm text-base-content/70">Loading notifications...</div>
+            <LoadingState label="Loading notifications…" />
           ) : items.length === 0 ? (
-            <div className="text-sm text-base-content/70">No notifications found.</div>
+            <EmptyState
+              title="No notifications found"
+              description={unreadOnly ? "All notifications have been read." : "Workspace notifications will appear here."}
+            />
           ) : (
-            <div className="space-y-2">
+            <ul className="flex flex-col gap-2">
               {items.map((item) => {
                 const isUnread = !item.readAt;
                 const href =
@@ -86,31 +92,33 @@ export default function NotificationsPage() {
                     ? item.data.href
                     : null;
                 return (
-                  <article
+                  <li
                     key={item.id}
-                    className={`rounded-box border p-3 ${isUnread ? "border-base-300 bg-base-200" : "border-base-300 bg-base-100"}`}
+                    className={`rounded-box border bg-base-100 ${
+                      isUnread ? "border-base-300 border-l-2 border-l-primary" : "border-base-300"
+                    }`}
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start justify-between gap-3 p-3">
                       <div className="min-w-0">
                         {href ? (
                           <Link href={href} className="block hover:opacity-90">
-                            <h2 className="text-sm font-semibold">{item.title}</h2>
-                            <p className="mt-1 text-sm text-base-content/75">{item.body}</p>
+                            <h2 className={`text-[13px] ${isUnread ? "font-semibold" : "font-medium"}`}>{item.title}</h2>
+                            <p className="mt-1 text-[13px] text-base-content/75">{item.body}</p>
                           </Link>
                         ) : (
                           <>
-                            <h2 className="text-sm font-semibold">{item.title}</h2>
-                            <p className="mt-1 text-sm text-base-content/75">{item.body}</p>
+                            <h2 className={`text-[13px] ${isUnread ? "font-semibold" : "font-medium"}`}>{item.title}</h2>
+                            <p className="mt-1 text-[13px] text-base-content/75">{item.body}</p>
                           </>
                         )}
-                        <p className="mt-1 text-xs text-base-content/60">
+                        <p className="font-mono-op mt-1.5 text-[10px] tracking-[0.04em] tabular-nums text-base-content/50">
                           {formatRelativeTime(item.createdAt)}
                         </p>
                       </div>
                       {isUnread ? (
                         <button
                           type="button"
-                          className="btn btn-xs btn-outline"
+                          className="btn btn-xs"
                           onClick={() => markRead.mutate(item.id)}
                           disabled={markRead.isPending}
                         >
@@ -118,14 +126,14 @@ export default function NotificationsPage() {
                         </button>
                       ) : null}
                     </div>
-                  </article>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
 
           <div className="flex items-center justify-between">
-            <span className="text-xs text-base-content/60">
+            <span className="font-mono-op text-[10px] tracking-[0.04em] tabular-nums text-base-content/50">
               Page {page} of {totalPages}
             </span>
             <div className="join">

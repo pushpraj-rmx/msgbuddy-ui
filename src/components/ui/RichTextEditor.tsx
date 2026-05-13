@@ -24,7 +24,7 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
           e.preventDefault();
           editor.chain().focus().toggleBold().run();
         }}
-        className={`btn btn-xs ${editor.isActive("bold") ? "btn-primary" : "btn-ghost"}`}
+        className={`btn btn-xs ${editor.isActive("bold") ? "bg-base-300 text-primary" : "btn-ghost"}`}
       >
         B
       </button>
@@ -34,7 +34,7 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
           e.preventDefault();
           editor.chain().focus().toggleItalic().run();
         }}
-        className={`btn btn-xs italic ${editor.isActive("italic") ? "btn-primary" : "btn-ghost"}`}
+        className={`btn btn-xs italic ${editor.isActive("italic") ? "bg-base-300 text-primary" : "btn-ghost"}`}
       >
         I
       </button>
@@ -44,7 +44,7 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
           e.preventDefault();
           editor.chain().focus().toggleCode().run();
         }}
-        className={`btn btn-xs font-mono ${editor.isActive("code") ? "btn-primary" : "btn-ghost"}`}
+        className={`btn btn-xs font-mono ${editor.isActive("code") ? "bg-base-300 text-primary" : "btn-ghost"}`}
       >
         {"<>"}
       </button>
@@ -55,7 +55,7 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
           e.preventDefault();
           editor.chain().focus().toggleBulletList().run();
         }}
-        className={`btn btn-xs ${editor.isActive("bulletList") ? "btn-primary" : "btn-ghost"}`}
+        className={`btn btn-xs ${editor.isActive("bulletList") ? "bg-base-300 text-primary" : "btn-ghost"}`}
       >
         •—
       </button>
@@ -65,7 +65,7 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
           e.preventDefault();
           editor.chain().focus().toggleOrderedList().run();
         }}
-        className={`btn btn-xs ${editor.isActive("orderedList") ? "btn-primary" : "btn-ghost"}`}
+        className={`btn btn-xs ${editor.isActive("orderedList") ? "bg-base-300 text-primary" : "btn-ghost"}`}
       >
         1—
       </button>
@@ -75,7 +75,7 @@ function Toolbar({ editor }: { editor: ReturnType<typeof useEditor> }) {
           e.preventDefault();
           editor.chain().focus().toggleBlockquote().run();
         }}
-        className={`btn btn-xs ${editor.isActive("blockquote") ? "btn-primary" : "btn-ghost"}`}
+        className={`btn btn-xs ${editor.isActive("blockquote") ? "bg-base-300 text-primary" : "btn-ghost"}`}
       >
         ❝
       </button>

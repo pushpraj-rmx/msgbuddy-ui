@@ -46,7 +46,14 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [agreeToLegal, setAgreeToLegal] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const q = new URLSearchParams(window.location.search);
+    const err = q.get("error");
+    if (!err) return null;
+    window.history.replaceState(null, "", "/register");
+    return err.length > 280 ? `${err.slice(0, 280)}…` : err;
+  });
   const [verificationSentTo, setVerificationSentTo] = useState<string | null>(
     null
   );
@@ -58,15 +65,6 @@ export default function RegisterPage() {
       setActiveSlide((prev) => (prev + 1) % registerFeatureSlides.length);
     }, 3500);
     return () => window.clearInterval(intervalId);
-  }, []);
-
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    const err = q.get("error");
-    if (err) {
-      setError(err.length > 280 ? `${err.slice(0, 280)}…` : err);
-      window.history.replaceState(null, "", "/register");
-    }
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -92,25 +90,26 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-base-100 p-6 grid place-items-center">
-      <div className="w-full max-w-5xl overflow-hidden rounded-box border border-base-300 bg-base-100">
+      <div className="w-full max-w-5xl overflow-hidden rounded-box border border-base-300 bg-base-200">
         <div className="grid grid-cols-1 md:grid-cols-2">
-          <div className="bg-base-100 p-6 space-y-6">
-            <div className="space-y-2">
+          <div className="bg-base-100 p-8 space-y-6">
+            <div className="space-y-3">
               <div className="flex items-center">
                 <BrandLogo className="h-7 w-auto" priority />
               </div>
-              <h1 className="text-xl font-medium">Create account</h1>
-              <p className="text-sm text-base-content/70">
+              <div className="flex flex-col gap-1.5">
+                <span className="op-label">Register</span>
+                <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Create your account</h1>
+              </div>
+              <p className="text-[13px] text-base-content/65">
                 We&apos;ll create your workspace automatically — you can rename it
                 anytime in settings.
               </p>
             </div>
 
             {verificationSentTo ? (
-              <div className="rounded-box border border-success/30 bg-success/10 px-4 py-4 space-y-3 text-left">
-                <p className="text-sm font-medium text-success">
-                  Check your email
-                </p>
+              <div className="rounded-box border-l-2 border border-success/30 border-l-success bg-base-200 px-4 py-4 space-y-3 text-left">
+                <span className="op-label text-success">check your email</span>
                 <p className="text-sm text-base-content/80">
                   We sent a verification link to{" "}
                   <span className="font-medium text-base-content">
@@ -132,11 +131,13 @@ export default function RegisterPage() {
               <>
             <div className="space-y-3">
               <GoogleSignInButton label="Sign up with Google" />
-              <p className="text-xs text-base-content/60 text-center">
-                Google confirms your address — no separate verification email from us.
+              <p className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50 text-center">
+                google confirms your address · no separate verification email from us
               </p>
-              <div className="divider text-xs text-base-content/50">
-                or register with email and password
+              <div className="flex items-center gap-3 py-1">
+                <div className="h-px flex-1 bg-base-300" />
+                <span className="op-label whitespace-nowrap">or · email &amp; password</span>
+                <div className="h-px flex-1 bg-base-300" />
               </div>
             </div>
 
@@ -236,15 +237,13 @@ export default function RegisterPage() {
             )}
           </div>
 
-          <div className="hidden md:flex flex-col justify-between bg-base-200 p-6">
-            <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-base-content/60">
-                Preview
-              </p>
-              <h2 className="text-base font-medium text-base-content">
+          <div className="hidden md:flex flex-col justify-between bg-base-200 p-8">
+            <div className="space-y-3">
+              <span className="op-label">{String(activeSlide + 1).padStart(2, "0")} · preview</span>
+              <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
                 {registerFeatureSlides[activeSlide].title}
               </h2>
-              <p className="text-sm text-base-content/60">
+              <p className="text-[13px] text-base-content/60">
                 {registerFeatureSlides[activeSlide].description}
               </p>
             </div>
@@ -265,15 +264,15 @@ export default function RegisterPage() {
                 <button
                   key={idx}
                   type="button"
-                  className={`h-1.5 w-6 rounded-full transition-all duration-150 ${
+                  className={`h-[2px] w-8 transition-colors ${
                     idx === activeSlide ? "bg-primary" : "bg-base-300"
                   }`}
                   onClick={() => setActiveSlide(idx)}
                   aria-label={`Go to slide ${idx + 1}`}
                 />
               ))}
-              <div className="ml-auto text-xs text-base-content/50">
-                {activeSlide + 1} / {registerFeatureSlides.length}
+              <div className="font-mono-op ml-auto text-[10px] tabular-nums text-base-content/45">
+                {String(activeSlide + 1).padStart(2, "0")} / {String(registerFeatureSlides.length).padStart(2, "0")}
               </div>
             </div>
           </div>

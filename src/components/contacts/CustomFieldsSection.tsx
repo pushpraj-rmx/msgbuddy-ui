@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { contactsApi, customFieldsApi } from "@/lib/api";
 import type {
   CustomFieldDef,
@@ -121,6 +122,7 @@ function ManageDefinitionsModal({
   const [type, setType] = useState<CustomFieldType>("TEXT");
   const [isRequired, setIsRequired] = useState(false);
   const [editingDef, setEditingDef] = useState<CustomFieldDef | null>(null);
+  const [confirmDeleteDef, setConfirmDeleteDef] = useState<CustomFieldDef | null>(null);
 
   const queryClient = useQueryClient();
   const { data: definitions = [] } = useQuery({
@@ -279,15 +281,7 @@ function ManageDefinitionsModal({
                       <button
                         type="button"
                         className="btn btn-ghost btn-xs text-error"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Delete "${def.label}"? All contact values for this field will be removed.`
-                            )
-                          ) {
-                            deleteMutation.mutate(def.id);
-                          }
-                        }}
+                        onClick={() => setConfirmDeleteDef(def)}
                         disabled={deleteMutation.isPending}
                       >
                         Delete
@@ -328,6 +322,20 @@ function ManageDefinitionsModal({
       <form method="dialog" className="modal-backdrop">
         <button type="button" onClick={onClose} aria-label="Close" />
       </form>
+
+      <ConfirmDialog
+        open={confirmDeleteDef !== null}
+        title={`Delete "${confirmDeleteDef?.label ?? ""}"?`}
+        description="All contact values for this field will be removed."
+        confirmLabel="Delete"
+        tone="danger"
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (confirmDeleteDef) deleteMutation.mutate(confirmDeleteDef.id);
+          setConfirmDeleteDef(null);
+        }}
+        onClose={() => setConfirmDeleteDef(null)}
+      />
     </dialog>
   );
 }

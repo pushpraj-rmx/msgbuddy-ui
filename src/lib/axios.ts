@@ -8,7 +8,7 @@ import {
   setAccessToken,
   DEFAULT_ACCESS_TOKEN_TTL_SEC,
 } from "./auth";
-import { API_BASE_URL, endpoints } from "./endpoints";
+import { API_BASE_URL } from "./endpoints";
 
 // ---------------------------------------------------------------------------
 // Token refresh — shared between the ApiClient interceptor and fetchWithAuthRefresh

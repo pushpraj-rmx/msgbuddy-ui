@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   analyticsApi,
   campaignsApi,
@@ -12,10 +12,25 @@ import {
   campaignRunSummaryLine,
   campaignStatusTone,
   normalizeStatus,
-  statusBadgeClasses,
   type CampaignRunSummary,
+  type CampaignStatusTone,
 } from "@/lib/campaignUi";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
+import { KpiCard } from "@/components/ui/KpiCard";
+import { QuotaBar } from "@/components/ui/QuotaBar";
+import { useRightPanel } from "@/components/right-panel/useRightPanel";
+import { PanelBody, PanelSection } from "@/components/right-panel/PanelBody";
+import { StatusTag, type StatusTagTone } from "@/components/ui/StatusTag";
+
+function toneToTagTone(tone: CampaignStatusTone): StatusTagTone {
+  switch (tone) {
+    case "success": return "success";
+    case "running": return "running";
+    case "warning": return "warning";
+    case "danger":  return "danger";
+    default:        return "neutral";
+  }
+}
 
 type DeliveryStats = {
   total?: number;
@@ -121,30 +136,6 @@ function isCampaignInFlight(status: string): boolean {
     s === "SCHEDULED" ||
     s === "PENDING" ||
     s === "QUEUED"
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-}) {
-  return (
-    <div className="rounded-box border border-base-300 bg-base-100">
-      <div className="gap-1 p-4 sm:p-5">
-        <div className="text-xs font-medium uppercase tracking-wide text-base-content/60">
-          {label}
-        </div>
-        <div className="text-2xl font-semibold tabular-nums">{value}</div>
-        {hint ? (
-          <div className="text-xs text-base-content/50">{hint}</div>
-        ) : null}
-      </div>
-    </div>
   );
 }
 
@@ -278,13 +269,53 @@ function LineGraph({ points }: { points: TimeSeriesPoint[] }) {
 }
 
 
+type PeriodKey = "7d" | "30d" | "90d" | "month" | "custom";
+
+const PERIOD_OPTIONS: Array<{ key: PeriodKey; label: string }> = [
+  { key: "7d", label: "Last 7 days" },
+  { key: "30d", label: "Last 30 days" },
+  { key: "90d", label: "Last 90 days" },
+  { key: "month", label: "This month" },
+  { key: "custom", label: "Custom range" },
+];
+
+function rangeForPeriod(period: PeriodKey, customStart?: string, customEnd?: string) {
+  const end = new Date();
+  let start: Date;
+
+  switch (period) {
+    case "7d":
+      start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+      break;
+    case "30d":
+      start = new Date(end.getTime() - 29 * 24 * 60 * 60 * 1000);
+      break;
+    case "90d":
+      start = new Date(end.getTime() - 89 * 24 * 60 * 60 * 1000);
+      break;
+    case "month":
+      start = new Date(end.getFullYear(), end.getMonth(), 1);
+      break;
+    case "custom":
+      return {
+        start: customStart || fmtDateInput(new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000)),
+        end: customEnd || fmtDateInput(end),
+      };
+  }
+  return { start: fmtDateInput(start), end: fmtDateInput(end) };
+}
+
 export function DashboardClient({ meRole }: { meRole: string }) {
   const isViewer = !roleHasWorkspacePermission(meRole, "contacts.create");
-  const range = useMemo(() => {
-    const end = new Date();
-    const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
-    return { start: fmtDateInput(start), end: fmtDateInput(end) };
-  }, []);
+  const [period, setPeriod] = useState<PeriodKey>("7d");
+  const [customStart, setCustomStart] = useState<string>("");
+  const [customEnd, setCustomEnd] = useState<string>("");
+  const range = useMemo(
+    () => rangeForPeriod(period, customStart, customEnd),
+    [period, customStart, customEnd]
+  );
+  const periodLabel =
+    PERIOD_OPTIONS.find((opt) => opt.key === period)?.label ?? "Last 7 days";
 
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
@@ -292,21 +323,42 @@ export function DashboardClient({ meRole }: { meRole: string }) {
   const [convStats, setConvStats] = useState<Record<string, unknown> | null>(null);
   const [inFlightCampaigns, setInFlightCampaigns] = useState<CampaignRow[]>([]);
   const [recentCampaigns, setRecentCampaigns] = useState<CampaignRow[]>([]);
+  const [channelMix, setChannelMix] = useState<Array<{ channel: string; total: number }>>([]);
+  const [campaignTab, setCampaignTab] = useState<"recent" | "top">("recent");
+  const { setContent: setRightPanelContent, clearContent: clearRightPanelContent, close: closeRightPanel } = useRightPanel();
+
+  // Ensure panel is closed on dashboard mount
+  useEffect(() => {
+    closeRightPanel();
+  }, [closeRightPanel]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const [sum, lim, cs, campRes] = await Promise.all([
+      const [sum, lim, cs, campRes, chMix] = await Promise.all([
         analyticsApi.summary({ start: range.start, end: range.end }).catch(() => null),
         isViewer ? Promise.resolve(null) : usageApi.limits().catch(() => null),
         isViewer ? Promise.resolve(null) : conversationsApi.stats().catch(() => null),
         isViewer ? Promise.resolve([]) : campaignsApi.list().catch(() => []),
+        analyticsApi.channels({ start: range.start, end: range.end }).catch(() => null),
       ]);
       if (cancelled) return;
 
       setSummary((sum ?? null) as AnalyticsSummary | null);
       setLimits((lim ?? null) as Record<string, unknown> | null);
+
+      // Parse channel mix
+      try {
+        const chArr = Array.isArray(chMix) ? chMix : [];
+        const parsed = chArr.map((ch: Record<string, unknown>) => ({
+          channel: String(ch.channel ?? "unknown"),
+          total: ((ch.outbound as Record<string, unknown>)?.sent as number ?? 0) + (ch.inbound as number ?? 0),
+        })).filter((c) => c.total > 0).sort((a, b) => b.total - a.total);
+        setChannelMix(parsed);
+      } catch {
+        setChannelMix([]);
+      }
       setConvStats(
         cs && typeof cs === "object" && !Array.isArray(cs)
           ? (cs as Record<string, unknown>)
@@ -342,7 +394,7 @@ export function DashboardClient({ meRole }: { meRole: string }) {
   }, [isViewer, range.start, range.end]);
 
   const delivery = summary?.delivery;
-  const timeSeries = summary?.timeSeries ?? [];
+  const timeSeries = useMemo(() => summary?.timeSeries ?? [], [summary?.timeSeries]);
   const topCampaigns = (summary?.topCampaigns ?? []).slice(0, 4);
   const openCount = pickOpenCount(convStats);
   const usageRows = useMemo(() => usageRowsFromLimits(limits), [limits]);
@@ -350,6 +402,89 @@ export function DashboardClient({ meRole }: { meRole: string }) {
     () => timeSeries.reduce((a, p) => a + (p.inbound ?? 0), 0),
     [timeSeries]
   );
+
+  // Clear right panel on unmount
+  useEffect(() => {
+    return () => clearRightPanelContent("dashboard");
+  }, [clearRightPanelContent]);
+
+  const showCampaignInPanel = useCallback((c: CampaignRow) => {
+    const rTone = campaignStatusTone(c.status);
+    const latestRun = c.runs?.[0];
+    const line = campaignRunSummaryLine(rTone, latestRun);
+    setRightPanelContent({
+      source: "dashboard",
+      title: c.name,
+      openAfter: true,
+      content: (
+        <PanelBody>
+          <PanelSection label="Campaign">
+            <div className="flex flex-wrap gap-x-6 gap-y-3 text-[12.5px]">
+              <div>
+                <span className="op-label">ID</span>
+                <p className="font-mono-op mt-1 text-[11px] tracking-wider text-base-content/60">{c.id.slice(0, 8).toUpperCase()}</p>
+              </div>
+              <div>
+                <span className="op-label">Channel</span>
+                <p className="mt-1 text-base-content">{(c.channel ?? "—").toLowerCase()}</p>
+              </div>
+              <div>
+                <span className="op-label">Status</span>
+                <p className="mt-1"><StatusTag tone={toneToTagTone(rTone)}>{normalizeStatus(c.status)}</StatusTag></p>
+              </div>
+              {c.updatedAt ? (
+                <div>
+                  <span className="op-label">Updated</span>
+                  <p className="font-mono-op mt-1 tabular-nums text-base-content/70">{new Date(c.updatedAt).toLocaleString()}</p>
+                </div>
+              ) : null}
+            </div>
+          </PanelSection>
+          {latestRun ? (
+            <PanelSection label="Latest run">
+              <div className="flex flex-wrap gap-x-6 gap-y-3 text-[12.5px]">
+                {latestRun.totalJobs != null ? (
+                  <div>
+                    <span className="op-label">Recipients</span>
+                    <p className="font-mono-op mt-1 tabular-nums text-base-content">{latestRun.totalJobs.toLocaleString()}</p>
+                  </div>
+                ) : null}
+                {latestRun.completedJobs != null ? (
+                  <div>
+                    <span className="op-label">Completed</span>
+                    <p className="font-mono-op mt-1 tabular-nums text-base-content">{latestRun.completedJobs.toLocaleString()}</p>
+                  </div>
+                ) : null}
+                {latestRun.failedJobs != null && latestRun.failedJobs > 0 ? (
+                  <div>
+                    <span className="op-label">Failed</span>
+                    <p className="font-mono-op mt-1 tabular-nums text-error">{latestRun.failedJobs.toLocaleString()}</p>
+                  </div>
+                ) : null}
+                {latestRun.successRate != null ? (
+                  <div>
+                    <span className="op-label">Success</span>
+                    <p className="font-mono-op mt-1 tabular-nums text-primary">{Math.round(latestRun.successRate)}%</p>
+                  </div>
+                ) : null}
+              </div>
+              {line ? (
+                <p className="font-mono-op mt-2 text-[11px] tracking-[0.04em] text-base-content/50">{line}</p>
+              ) : null}
+            </PanelSection>
+          ) : null}
+          <PanelSection noBorder>
+            <Link
+              href={`/campaigns?id=${c.id}`}
+              className="btn btn-primary btn-sm"
+            >
+              Go to campaign →
+            </Link>
+          </PanelSection>
+        </PanelBody>
+      ),
+    });
+  }, [setRightPanelContent]);
 
   if (loading) {
     return (
@@ -367,18 +502,53 @@ export function DashboardClient({ meRole }: { meRole: string }) {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">Last 7 days</h2>
-          <p className="text-sm text-base-content/60">
-            {range.start} → {range.end} · Outcomes from your workspace analytics
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="flex flex-col gap-1.5">
+          <h2 className="text-[22px] font-semibold tracking-[-0.025em]">{periodLabel}</h2>
+          <p className="font-mono-op text-[11px] tracking-[0.04em] text-base-content/50">
+            {range.start} → {range.end} · UTC
           </p>
         </div>
-        {!isViewer ? (
-          <Link href="/analytics" className="btn btn-outline btn-sm">
-            Full analytics
-          </Link>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className="select select-bordered select-sm"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as PeriodKey)}
+            aria-label="Select date range"
+          >
+            {PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          {period === "custom" && (
+            <>
+              <input
+                type="date"
+                className="input input-bordered input-sm"
+                value={customStart}
+                max={customEnd || undefined}
+                onChange={(e) => setCustomStart(e.target.value)}
+                aria-label="Start date"
+              />
+              <span className="text-sm text-base-content/40">→</span>
+              <input
+                type="date"
+                className="input input-bordered input-sm"
+                value={customEnd}
+                min={customStart || undefined}
+                onChange={(e) => setCustomEnd(e.target.value)}
+                aria-label="End date"
+              />
+            </>
+          )}
+          {!isViewer ? (
+            <Link href="/analytics" className="btn btn-primary btn-sm">
+              Full analytics →
+            </Link>
+          ) : null}
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -395,7 +565,14 @@ export function DashboardClient({ meRole }: { meRole: string }) {
         <KpiCard
           label="Delivery rate"
           value={formatPct(delivery?.deliveryRate)}
-          hint={`${delivery?.delivered ?? 0} delivered / ${delivery?.sent ?? 0} sent`}
+          hint={
+            <>
+              {delivery?.delivered ?? 0} delivered / {delivery?.sent ?? 0} sent
+              {delivery?.failed && delivery.failed > 0 ? (
+                <span className="ml-1.5 text-error">{" · "}{delivery.failed.toLocaleString()} failed</span>
+              ) : null}
+            </>
+          }
         />
         <KpiCard
           label="Read rate"
@@ -404,203 +581,239 @@ export function DashboardClient({ meRole }: { meRole: string }) {
         />
       </div>
 
-      <div className="rounded-box border border-base-300 bg-base-100">
-        <div className="gap-3 p-4 sm:p-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-medium">Activity</span>
-            <span className="text-xs text-base-content/50">Daily volume</span>
+      <div className="rounded-box border border-base-300 bg-base-200">
+        <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3 sm:px-5">
+          <div className="flex items-baseline gap-3">
+            <span className="text-[13px] font-semibold tracking-[-0.01em]">Activity</span>
+            <span className="op-label">daily volume · sent vs inbound</span>
           </div>
+        </div>
+        <div className="flex flex-col gap-2 p-4 sm:p-5">
           <LineGraph points={timeSeries} />
-          {timeSeries.length > 0 ? (
-            <div className="flex flex-wrap justify-between gap-1 text-xs text-base-content/60">
-              {timeSeries.map((p) => (
-                <span key={p.date} className="min-w-0 flex-1 truncate text-center">
-                  {p.date.slice(5)}
-                </span>
-              ))}
-            </div>
-          ) : null}
         </div>
       </div>
 
       {!isViewer ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-box border border-base-300 bg-base-100">
-              <div className="gap-3 p-4 sm:p-5">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold">Needs attention</h3>
-                  <Link href="/inbox" className="btn btn-primary btn-sm">
-                    Open inbox
-                  </Link>
-                </div>
-                <p className="text-sm text-base-content/70">
-                  {openCount != null ? (
-                    <>
-                      <span className="font-semibold text-base-content">{openCount}</span> open
-                      conversation{openCount === 1 ? "" : "s"}
-                    </>
-                  ) : (
-                    "Conversation stats unavailable."
-                  )}
-                </p>
-                <div className="divider my-0" />
-                <div>
-                  <div className="mb-2 text-xs font-medium uppercase tracking-wide text-base-content/50">
-                    In-flight campaigns
-                  </div>
-                  {inFlightCampaigns.length === 0 ? (
-                    <p className="text-sm text-base-content/60">No active or paused campaigns.</p>
-                  ) : (
-                    <ul className="space-y-2">
-                      {inFlightCampaigns.map((c) => (
-                        <li
-                          key={c.id}
-                          className="flex flex-wrap items-center gap-2 text-sm"
-                        >
-                          <span className="truncate font-medium">{c.name}</span>
-                          <span
-                            className={`badge badge-sm ${statusBadgeClasses(
-                              campaignStatusTone(c.status)
-                            )}`}
-                          >
-                            {normalizeStatus(c.status)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <Link href="/campaigns" className="btn btn-ghost btn-sm mt-2 px-0">
-                    All campaigns →
-                  </Link>
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-box border border-base-300 bg-base-200">
+              <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3 sm:px-5">
+                <div className="flex items-baseline gap-3">
+                  <h3 className="text-[13px] font-semibold tracking-[-0.01em]">Operations</h3>
+                  <span className="op-label">live status</span>
                 </div>
               </div>
+              <Link
+                href="/inbox"
+                className="flex items-center justify-between border-b border-base-300 px-4 py-3 transition hover:bg-base-300/40 sm:px-5"
+              >
+                <span className="text-[12.5px] text-base-content/70">Open conversations</span>
+                <span className="font-mono-op text-[18px] font-semibold tabular-nums tracking-[-0.02em]">
+                  {openCount != null ? openCount : "—"}
+                </span>
+              </Link>
+              <Link
+                href="/campaigns"
+                className="flex items-center justify-between px-4 py-3 transition hover:bg-base-300/40 sm:px-5"
+              >
+                <span className="text-[12.5px] text-base-content/70">Active campaigns</span>
+                <span className="font-mono-op text-[18px] font-semibold tabular-nums tracking-[-0.02em]">
+                  {inFlightCampaigns.length}
+                </span>
+              </Link>
             </div>
 
-            <div className="rounded-box border border-base-300 bg-base-100">
-              <div className="gap-3 p-4 sm:p-5">
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold">Usage & limits</h3>
-                  <Link href="/usage" className="btn btn-ghost btn-sm">
-                    Details
-                  </Link>
+            <div className="rounded-box border border-base-300 bg-base-200">
+              <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3 sm:px-5">
+                <div className="flex items-baseline gap-3">
+                  <h3 className="text-[13px] font-semibold tracking-[-0.01em]">Usage &amp; limits</h3>
+                  <span className="op-label">current period</span>
                 </div>
-                {usageRows.length === 0 ? (
-                  <p className="text-sm text-base-content/60">
-                    Limits will appear here when your plan exposes quotas.
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {usageRows.map((row) => (
-                      <div key={row.title} className="space-y-1">
-                        <div className="flex justify-between text-xs text-base-content/70">
-                          <span>{row.title}</span>
-                          <span className="tabular-nums">
-                            {row.current} / {row.max}
-                          </span>
-                        </div>
-                        <progress
-                          className="progress progress-primary w-full"
-                          value={Math.min(100, Math.round((row.current / row.max) * 100))}
-                          max={100}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {recentCampaigns.length > 0 ? (
-            <div className="rounded-box border border-base-300 bg-base-100">
-              <div className="p-4 sm:p-5">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-base font-semibold">Recent campaigns</h3>
-                  <Link href="/campaigns" className="btn btn-ghost btn-xs">
-                    All campaigns
-                  </Link>
-                </div>
-                <ul className="space-y-3">
-                  {recentCampaigns.map((c) => {
-                    const rTone = campaignStatusTone(c.status);
-                    const latestRun = c.runs?.[0];
-                    const line = campaignRunSummaryLine(rTone, latestRun);
-                    return (
-                      <li key={c.id}>
-                        <Link
-                          href={`/campaigns?id=${c.id}`}
-                          className="group flex items-center justify-between gap-3 rounded-btn px-2 py-1.5 -mx-2 transition hover:bg-base-200"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <span className="text-sm font-medium truncate block group-hover:text-primary transition-colors">
-                              {c.name}
-                            </span>
-                            <span className="text-xs text-base-content/60">
-                              {c.channel ?? "\u2014"}
-                              {line ? ` \u00b7 ${line}` : ""}
-                            </span>
-                          </div>
-                          <span
-                            className={`badge badge-sm shrink-0 ${statusBadgeClasses(rTone)}`}
-                          >
-                            {normalizeStatus(c.status)}
-                          </span>
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
-          ) : null}
-
-          {topCampaigns.length > 0 ? (
-            <div>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-base font-semibold">Top campaigns (period)</h3>
-                <Link href="/campaigns" className="btn btn-ghost btn-xs">
-                  Campaigns
+                <Link href="/usage" className="btn btn-ghost btn-sm">
+                  Details →
                 </Link>
               </div>
-              <div className="overflow-x-auto rounded-box border border-base-300">
-                <table className="table table-sm">
-                  <thead>
-                    <tr className="border-base-300">
-                      <th>Campaign</th>
-                      <th>Channel</th>
-                      <th className="text-right">Success</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {topCampaigns.map((c) => (
-                      <tr key={c.campaignId ?? c.campaignName} className="border-base-300">
-                        <td className="font-medium">{c.campaignName ?? c.campaignId ?? "—"}</td>
-                        <td className="text-base-content/70">{c.channel ?? "—"}</td>
-                        <td className="text-right tabular-nums">
-                          {c.totals?.successRate != null
-                            ? formatPct(c.totals.successRate)
-                            : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {usageRows.length === 0 ? (
+                <p className="px-4 py-4 text-[13px] text-base-content/55 sm:px-5">
+                  Limits will appear here when your plan exposes quotas.
+                </p>
+              ) : (
+                <div>
+                  {usageRows.map((row) => (
+                    <div
+                      key={row.title}
+                      className="border-b border-base-300 px-4 py-3 last:border-b-0 sm:px-5"
+                    >
+                      <QuotaBar
+                        current={row.current}
+                        max={row.max}
+                        label={row.title}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {(recentCampaigns.length > 0 || topCampaigns.length > 0 || channelMix.length > 0) ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {/* Campaigns — tabbed: Recent / Top */}
+              {(recentCampaigns.length > 0 || topCampaigns.length > 0) ? (
+                <div className="rounded-box border border-base-300 bg-base-200">
+                  <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-[13px] font-semibold tracking-[-0.01em]">Campaigns</h3>
+                      <div className="flex">
+                        {(["recent", "top"] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            className={`relative px-2.5 py-1 font-mono-op text-[10px] tracking-[0.08em] uppercase transition-colors ${
+                              campaignTab === t
+                                ? "text-primary after:absolute after:inset-x-0 after:-bottom-[13px] after:h-[2px] after:bg-primary"
+                                : "text-base-content/45 hover:text-base-content"
+                            }`}
+                            onClick={() => setCampaignTab(t)}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <Link href="/campaigns" className="btn btn-ghost btn-xs">All →</Link>
+                  </div>
+
+                  {campaignTab === "recent" ? (
+                    <ul>
+                      {recentCampaigns.map((c) => {
+                        const rTone = campaignStatusTone(c.status);
+                        const latestRun = c.runs?.[0];
+                        const line = campaignRunSummaryLine(rTone, latestRun);
+                        return (
+                          <li key={c.id} className="border-b border-base-300 last:border-b-0">
+                            <button
+                              type="button"
+                              onClick={() => showCampaignInPanel(c)}
+                              className="group flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-base-300/40"
+                            >
+                              <span className="font-mono-op w-[48px] shrink-0 text-[10px] tracking-wider text-base-content/40">
+                                {c.id.slice(0, 6).toUpperCase()}
+                              </span>
+                              <div className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-medium transition-colors group-hover:text-primary">
+                                  {c.name}
+                                </span>
+                                <span className="font-mono-op mt-0.5 block text-[10px] tracking-[0.04em] text-base-content/45">
+                                  {(c.channel ?? "—").toLowerCase()}
+                                  {line ? ` · ${line}` : ""}
+                                </span>
+                              </div>
+                              <StatusTag tone={toneToTagTone(rTone)} className="shrink-0">
+                                {normalizeStatus(c.status)}
+                              </StatusTag>
+                            </button>
+                          </li>
+                        );
+                      })}
+                      {recentCampaigns.length === 0 ? (
+                        <p className="px-4 py-4 text-[13px] text-base-content/55">No recent campaigns.</p>
+                      ) : null}
+                    </ul>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-[12.5px]">
+                        <thead>
+                          <tr className="border-b border-base-300 bg-base-100">
+                            <th className="op-label px-3 py-2.5 text-left font-medium">#</th>
+                            <th className="op-label px-3 py-2.5 text-left font-medium">Campaign</th>
+                            <th className="op-label px-3 py-2.5 text-left font-medium">Ch</th>
+                            <th className="op-label px-3 py-2.5 text-right font-medium">Success</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {topCampaigns.map((c, i) => {
+                            const rate = c.totals?.successRate;
+                            const pct = rate != null ? (rate <= 1 ? rate * 100 : rate) : null;
+                            const rateColor =
+                              pct == null ? "text-base-content/50" :
+                              pct >= 95   ? "text-success" :
+                              pct >= 85   ? "text-warning" :
+                                            "text-error";
+                            return (
+                              <tr
+                                key={c.campaignId ?? c.campaignName}
+                                className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0"
+                              >
+                                <td className="font-mono-op px-3 py-3 text-[10px] tabular-nums text-base-content/40">
+                                  {String(i + 1).padStart(2, "0")}
+                                </td>
+                                <td className="px-3 py-3 font-medium">
+                                  {c.campaignName ?? c.campaignId ?? "—"}
+                                </td>
+                                <td className="font-mono-op px-3 py-3 text-[11px] text-base-content/55">
+                                  {(c.channel ?? "—").toLowerCase()}
+                                </td>
+                                <td className={`font-mono-op px-3 py-3 text-right font-semibold tabular-nums ${rateColor}`}>
+                                  {rate != null ? formatPct(rate) : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          {topCampaigns.length === 0 ? (
+                            <tr>
+                              <td colSpan={4} className="px-3 py-4 text-center text-[13px] text-base-content/55">
+                                No campaign data for this period.
+                              </td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Channel mix */}
+              {channelMix.length > 0 ? (
+                <div className="rounded-box border border-base-300 bg-base-200">
+                  <div className="border-b border-base-300 px-4 py-3">
+                    <div className="flex items-baseline gap-3">
+                      <h3 className="text-[13px] font-semibold tracking-[-0.01em]">Channel mix</h3>
+                      <span className="op-label">volume distribution</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-3 px-4 py-3">
+                    {(() => {
+                      const maxTotal = Math.max(...channelMix.map((c) => c.total), 1);
+                      const grandTotal = channelMix.reduce((a, c) => a + c.total, 0);
+                      return channelMix.map((ch) => {
+                        const pct = grandTotal > 0 ? Math.round((ch.total / grandTotal) * 100) : 0;
+                        const barWidth = Math.max(2, Math.round((ch.total / maxTotal) * 100));
+                        return (
+                          <div key={ch.channel}>
+                            <div className="mb-1 flex items-baseline justify-between">
+                              <span className="text-[12.5px] font-medium text-base-content">{ch.channel}</span>
+                              <span className="font-mono-op text-[11px] tabular-nums text-base-content/55">
+                                {ch.total.toLocaleString()} · {pct}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-sm bg-base-300">
+                              <div
+                                className="h-full bg-primary transition-[width] duration-300"
+                                style={{ width: `${barWidth}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            <Link href="/people/contacts" className="btn btn-sm btn-ghost">
-              People
-            </Link>
-            <Link href="/templates" className="btn btn-sm btn-ghost">
-              Templates
-            </Link>
-            <Link href="/settings/integrations" className="btn btn-sm btn-ghost">
-              Integrations
-            </Link>
-          </div>
         </>
       ) : null}
     </div>

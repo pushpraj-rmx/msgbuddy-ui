@@ -156,6 +156,8 @@ export const endpoints = {
       `${P}/channel-templates/${id}/versions/${version}/reject`,
     archive: (id: string, version: number) =>
       `${P}/channel-templates/${id}/versions/${version}/archive`,
+    submitAndSync: (id: string, version: number) =>
+      `${P}/channel-templates/${id}/versions/${version}/submit-and-sync`,
     sync: (id: string, version: number) =>
       `${P}/channel-templates/${id}/versions/${version}/sync`,
     refreshProvider: (id: string) => `${P}/channel-templates/${id}/provider/refresh`,
@@ -287,6 +289,7 @@ export const endpoints = {
     subscribe: `${P}/billing/subscribe`,
     cancel: `${P}/billing/cancel`,
     subscription: `${P}/billing/subscription`,
+    syncPlanLimits: `${P}/billing/sync-plan-limits`,
   },
   feedback: {
     list: `${P}/feedback`,

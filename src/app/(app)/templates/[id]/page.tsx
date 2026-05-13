@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { TemplateDetailClient } from "@/components/templates/TemplateDetailClient";
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
@@ -18,12 +19,7 @@ export default async function TemplateDetailPage({
   }
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Message</h1>
-        <p className="text-sm text-base-content/60">
-          Configure channels and manage channel-specific versions.
-        </p>
-      </div>
+      <PageHeader title="Message" description="Configure channels and manage channel-specific versions." />
       <TemplateDetailClient
         key={me.workspace.id}
         templateId={id}

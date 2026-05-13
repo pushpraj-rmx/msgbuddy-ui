@@ -16,6 +16,7 @@ import {
   WHATSAPP_TEMPLATE_LANGUAGE_OPTIONS,
 } from "@/lib/whatsapp-template-languages";
 import { getApiError } from "@/lib/api-error";
+import { WhatsAppTemplatePreview } from "@/components/templates/WhatsAppTemplatePreview";
 
 const BODY_MAX = 1024;
 const FOOTER_MAX = 60;
@@ -28,70 +29,6 @@ function charCounterClass(current: number, max: number): string {
   return "text-base-content/50";
 }
 
-/** Replace {{N}}/{{name}} placeholders with highlighted spans for preview. */
-function renderPreviewBody(text: string): React.ReactNode {
-  const parts = text.split(/(\{\{[^}]+\}\})/g);
-  return parts.map((part, i) =>
-    /^\{\{[^}]+\}\}$/.test(part) ? (
-      <span key={i} className="bg-primary/15 text-primary rounded px-0.5 font-mono text-xs">
-        {part}
-      </span>
-    ) : (
-      part
-    )
-  );
-}
-
-function WhatsAppBubblePreview({
-  headerType,
-  headerContent,
-  body,
-  footer,
-  buttons,
-}: {
-  headerType: string;
-  headerContent: string;
-  body: string;
-  footer: string;
-  buttons: Array<{ type: string; text: string }>;
-}) {
-  return (
-    <div className="flex justify-center py-2">
-      <div className="w-full max-w-xs bg-success/15 rounded-box shadow-md p-3 space-y-2 text-sm text-base-content">
-        {headerType !== "NONE" && (
-          <div className="rounded-box bg-black/10 dark:bg-white/10 px-2 py-1.5 text-xs font-medium text-center">
-            {headerType === "TEXT" ? (
-              <span>{headerContent || <span className="opacity-50 italic">Header text</span>}</span>
-            ) : (
-              <span className="opacity-70 uppercase tracking-wide">{headerType}</span>
-            )}
-          </div>
-        )}
-        <div className="whitespace-pre-wrap break-words leading-snug">
-          {body ? renderPreviewBody(body) : <span className="opacity-40 italic">Message body…</span>}
-        </div>
-        {footer && (
-          <div className="text-xs opacity-60 border-t border-black/10 dark:border-white/10 pt-1.5">
-            {footer}
-          </div>
-        )}
-        {buttons.length > 0 && (
-          <div className="border-t border-black/10 dark:border-white/10 pt-2 space-y-1.5">
-            {buttons.map((btn, i) => (
-              <div
-                key={i}
-                className="text-center text-success text-xs font-semibold py-1 rounded bg-white/60 dark:bg-white/10"
-              >
-                {btn.type === "URL" ? "🔗 " : btn.type === "PHONE_NUMBER" ? "📞 " : ""}
-                {btn.text || "(button)"}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 const HEADER_TYPES: TemplateHeaderType[] = [
   "NONE",
@@ -219,7 +156,7 @@ function safeParseCarouselCards(raw: string): TemplateCarouselCard[] | null {
   }
 }
 
-function starterCarouselCards(count = 3): TemplateCarouselCard[] {
+function starterCarouselCards(count = 2): TemplateCarouselCard[] {
   return Array.from({ length: count }, (_, i) => ({
     headerFormat: "IMAGE",
     headerHandle: "",
@@ -241,7 +178,7 @@ export function ChannelTemplateVersionEditor({
   channelCategory?: TemplateCategory | null;
   onAutoSwitchCategoryToMarketing?: () => void;
 }) {
-  const editable = version.status === "DRAFT" && !version.isLocked;
+  const editable = !version.isLocked && !version.archivedAt;
   const updateMutation = useUpdateChannelTemplateVersion();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -347,11 +284,12 @@ export function ChannelTemplateVersionEditor({
   ]);
 
   // Meta restriction: carousel templates cannot be UTILITY. Auto switch category to MARKETING.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- callback ref intentionally excluded to prevent infinite loop
   useEffect(() => {
     if (layoutType !== "CAROUSEL") return;
     if (channelCategory !== "UTILITY") return;
     onAutoSwitchCategoryToMarketing?.();
-  }, [layoutType, channelCategory, onAutoSwitchCategoryToMarketing]);
+  }, [layoutType, channelCategory]);
 
   /** Ensure each card index has button row state (avoids unstable fallbacks on every render). */
   useEffect(() => {
@@ -771,16 +709,14 @@ export function ChannelTemplateVersionEditor({
     ].filter((x) => x.value != null);
 
     return (
-      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
+      <div className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <div className="text-sm font-medium text-base-content/80">
-              Version snapshot (read-only)
-            </div>
-            <p className="text-xs text-base-content/60">
+            <span className="op-label text-warning">read-only</span>
+            <p className="mt-1 text-[13px] text-base-content/70">
               {version.isLocked
-                ? "This version is locked."
-                : "Only draft versions can be edited in the UI."}
+                ? "🔒 This version is locked after internal approval. Content cannot be changed."
+                : `This version is in "${version.status}" status. Only draft versions can be edited.`}
             </p>
           </div>
           {onCopyAsNewDraft && (
@@ -904,7 +840,9 @@ export function ChannelTemplateVersionEditor({
   );
 
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-5">
+    <div className="flex gap-5">
+    {/* Left: form */}
+    <div className="card bg-base-100 border border-base-300 p-4 space-y-5 min-w-0 flex-1">
 
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -923,7 +861,7 @@ export function ChannelTemplateVersionEditor({
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="btn btn-ghost btn-xs"
+            className="btn btn-ghost btn-xs lg:hidden"
             onClick={() => setShowPreview((p) => !p)}
           >
             {showPreview ? "Hide preview" : "Show preview"}
@@ -933,19 +871,21 @@ export function ChannelTemplateVersionEditor({
       </div>
 
       {formError && (
-        <div role="alert" className="alert alert-error text-sm py-2">
-          <span>{formError}</span>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[13px] text-base-content">{formError}</p>
         </div>
       )}
       {saveOk && !formError && (
-        <div role="status" className="alert alert-success text-sm py-2">
-          <span>{saveOk}</span>
+        <div role="status" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-success">saved</span>
+          <p className="text-[13px] text-base-content">{saveOk}</p>
         </div>
       )}
 
       {/* ── Section 1: Structure ── */}
       <div className="space-y-3">
-        <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">Structure</div>
+        <div className="op-label">Structure</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="form-control w-full">
             <span className="label-text text-xs">Layout</span>
@@ -977,12 +917,12 @@ export function ChannelTemplateVersionEditor({
         </div>
       </div>
 
-      <div className="divider my-0" />
+      <div className="my-2 border-t border-base-300" />
 
       {/* ── Section 2: Message (Standard layout) ── */}
       {layoutType === "STANDARD" && (
         <div className="space-y-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">Message</div>
+          <div className="op-label">Message</div>
 
           {/* Header */}
           <div className="space-y-2">
@@ -991,7 +931,13 @@ export function ChannelTemplateVersionEditor({
               <select
                 className="select select-bordered select-sm w-full max-w-xs"
                 value={headerType}
-                onChange={(e) => setHeaderType(e.target.value as TemplateHeaderType)}
+                onChange={(e) => {
+                  const next = e.target.value as TemplateHeaderType;
+                  if (next !== headerType) {
+                    setHeaderContent("");
+                  }
+                  setHeaderType(next);
+                }}
               >
                 {HEADER_TYPES.map((h) => (
                   <option key={h} value={h}>{h}</option>
@@ -1020,27 +966,42 @@ export function ChannelTemplateVersionEditor({
 
             {(headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT") && (
               <div className="space-y-2">
-                <span className="label-text text-xs">
-                  Header media — upload or paste asset handle
-                </span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    className="file-input file-input-bordered file-input-sm max-w-full"
-                    accept={mediaAccept}
-                    onChange={onUploadMedia}
-                    disabled={uploadBusy}
-                  />
-                  {uploadBusy && <span className="loading loading-spinner loading-sm" />}
-                </div>
-                <input
-                  type="text"
-                  className="input input-bordered input-sm w-full font-mono text-xs"
-                  value={headerContent}
-                  onChange={(e) => setHeaderContent(e.target.value)}
-                  placeholder="Asset handle from upload"
-                />
+                {headerContent ? (
+                  <div className="relative overflow-hidden rounded-box border border-base-300 bg-base-200/50 aspect-video max-h-[140px]">
+                    {headerType === "IMAGE" ? (
+                      // eslint-disable-next-line @next/next/no-img-element -- dynamic user content
+                      <img
+                        src={headerContent}
+                        alt="Header preview"
+                        className="h-full w-full object-cover"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-xs text-base-content/50">
+                        {headerType === "VIDEO" ? "Video uploaded" : "Document uploaded"}
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs absolute top-1 right-1 bg-base-100/80 text-error/70"
+                      onClick={() => setHeaderContent("")}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={fileRef}
+                      type="file"
+                      className="file-input file-input-bordered file-input-sm max-w-full"
+                      accept={mediaAccept}
+                      onChange={onUploadMedia}
+                      disabled={uploadBusy}
+                    />
+                    {uploadBusy && <span className="loading loading-spinner loading-sm" />}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1289,7 +1250,7 @@ export function ChannelTemplateVersionEditor({
       {/* ── Section 2: Message (Carousel layout) ── */}
       {layoutType === "CAROUSEL" && (
         <div className="space-y-4">
-          <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">Message</div>
+          <div className="op-label">Message</div>
 
           {/* Body (carousel has a main body too) */}
           <label className="form-control w-full">
@@ -1318,7 +1279,7 @@ export function ChannelTemplateVersionEditor({
                 type="button"
                 className="btn btn-outline btn-sm"
                 onClick={() => {
-                  const starter = starterCarouselCards(3);
+                  const starter = starterCarouselCards(2);
                   setCarouselCards(starter);
                   const br: Record<number, CarouselButtonRow[]> = {};
                   for (let i = 0; i < starter.length; i++) {
@@ -1328,14 +1289,17 @@ export function ChannelTemplateVersionEditor({
                   setCarouselJson(JSON.stringify(starter, null, 2));
                 }}
               >
-                Starter 3 cards
+                Starter 2 cards
               </button>
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
+                disabled={carouselCards.length >= 10}
+                title={carouselCards.length >= 10 ? "Maximum 10 cards (Meta limit)" : undefined}
                 onClick={() => {
                   setCarouselCards((prev) => {
                     const nextIndex = prev.length;
+                    const inheritFormat = prev.length > 0 ? prev[0].headerFormat : "IMAGE";
                     setCarouselButtonRowsByIndex((b) => ({
                       ...b,
                       [nextIndex]: [defaultCarouselButtonRow()],
@@ -1344,7 +1308,7 @@ export function ChannelTemplateVersionEditor({
                     return [
                       ...prev,
                       {
-                        headerFormat: "IMAGE",
+                        headerFormat: inheritFormat,
                         headerHandle: "",
                         body: "",
                         buttons: [{ type: "QUICK_REPLY", text: "Learn more" }],
@@ -1360,7 +1324,7 @@ export function ChannelTemplateVersionEditor({
 
           {carouselCards.length === 0 ? (
             <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-4 text-sm text-base-content/60">
-              No cards yet. Click <span className="font-medium">Starter 3 cards</span> or{" "}
+              No cards yet. Click <span className="font-medium">Starter 2 cards</span> or{" "}
               <span className="font-medium">Add card</span>.
             </div>
           ) : (
@@ -1375,7 +1339,7 @@ export function ChannelTemplateVersionEditor({
                 return (
                   <div
                     key={idx}
-                    className="rounded-box border border-base-300 bg-base-100 p-3 space-y-3"
+                    className="card bg-base-100 border border-base-300 p-3 space-y-3"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="text-sm font-medium">Card {idx + 1}</div>
@@ -1417,72 +1381,88 @@ export function ChannelTemplateVersionEditor({
                           value={card.headerFormat}
                           onChange={(e) => {
                             const v = e.target.value as "IMAGE" | "VIDEO";
+                            // Meta requires all cards to share the same header format
                             setCarouselCards((prev) =>
-                              prev.map((c, i) =>
-                                i === idx ? { ...c, headerFormat: v } : c
-                              )
+                              prev.map((c) => ({ ...c, headerFormat: v, headerHandle: "" }))
                             );
                           }}
                         >
                           <option value="IMAGE">IMAGE</option>
                           <option value="VIDEO">VIDEO</option>
                         </select>
+                        {idx === 0 && (
+                          <span className="text-[10px] text-base-content/40 mt-1">Applies to all cards</span>
+                        )}
                       </label>
 
-                      <label className="form-control w-full">
-                        <span className="label-text text-xs">Header handle</span>
-                        <input
-                          type="text"
-                          className="input input-bordered input-sm w-full font-mono text-xs"
-                          value={card.headerHandle}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setCarouselCards((prev) =>
-                              prev.map((c, i) =>
-                                i === idx ? { ...c, headerHandle: v } : c
-                              )
-                            );
-                          }}
-                          placeholder="Upload to get handle, or paste existing"
-                        />
-                      </label>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        type="file"
-                        className="file-input file-input-bordered file-input-sm max-w-full"
-                        accept={accept}
-                        disabled={Boolean(carouselUploadBusyByIndex[idx])}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          setCarouselUploadBusyByIndex((prev) => ({
-                            ...prev,
-                            [idx]: true,
-                          }));
-                          setFormError(null);
-                          try {
-                            const { assetHandle } = await mediaApi.uploadForTemplate(file);
-                            setCarouselCards((prev) =>
-                              prev.map((c, i) =>
-                                i === idx ? { ...c, headerHandle: assetHandle } : c
+                    {/* Header media */}
+                    <div className="space-y-2">
+                      {card.headerHandle ? (
+                        <div className="relative overflow-hidden rounded-box border border-base-300 bg-base-200/50 aspect-video max-h-[120px]">
+                          {card.headerFormat === "IMAGE" ? (
+                            // eslint-disable-next-line @next/next/no-img-element -- dynamic user content
+                            <img
+                              src={card.headerHandle}
+                              alt={`Card ${idx + 1} header`}
+                              className="h-full w-full object-cover"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-xs text-base-content/50">
+                              Video uploaded
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-xs absolute top-1 right-1 bg-base-100/80 text-error/70"
+                            onClick={() =>
+                              setCarouselCards((prev) =>
+                                prev.map((c, i) => (i === idx ? { ...c, headerHandle: "" } : c))
                               )
-                            );
-                          } catch (err) {
-                            setFormError(getApiError(err));
-                          } finally {
-                            setCarouselUploadBusyByIndex((prev) => ({
-                              ...prev,
-                              [idx]: false,
-                            }));
-                            e.target.value = "";
-                          }
-                        }}
-                        title="Upload header media for this card"
-                      />
-                      {carouselUploadBusyByIndex[idx] && (
-                        <span className="loading loading-spinner loading-sm" />
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex cursor-pointer items-center gap-2">
+                          <input
+                            type="file"
+                            className="file-input file-input-bordered file-input-sm max-w-full"
+                            accept={accept}
+                            disabled={Boolean(carouselUploadBusyByIndex[idx])}
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              setCarouselUploadBusyByIndex((prev) => ({
+                                ...prev,
+                                [idx]: true,
+                              }));
+                              setFormError(null);
+                              try {
+                                const { assetHandle } = await mediaApi.uploadForTemplate(file);
+                                setCarouselCards((prev) =>
+                                  prev.map((c, i) =>
+                                    i === idx ? { ...c, headerHandle: assetHandle } : c
+                                  )
+                                );
+                              } catch (err) {
+                                setFormError(getApiError(err));
+                              } finally {
+                                setCarouselUploadBusyByIndex((prev) => ({
+                                  ...prev,
+                                  [idx]: false,
+                                }));
+                                e.target.value = "";
+                              }
+                            }}
+                          />
+                          {carouselUploadBusyByIndex[idx] && (
+                            <span className="loading loading-spinner loading-sm" />
+                          )}
+                        </label>
                       )}
                     </div>
 
@@ -1692,12 +1672,12 @@ export function ChannelTemplateVersionEditor({
         </div>
       )}
 
-      <div className="divider my-0" />
+      <div className="my-2 border-t border-base-300" />
 
       {/* ── Section 3: Advanced settings ── */}
       <details className="group">
         <summary className="cursor-pointer list-none">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-base-content/40 hover:text-base-content/60 select-none">
+          <div className="flex items-center gap-2 op-label hover:text-base-content/60 select-none">
             <span>Advanced</span>
             <svg className="w-3 h-3 transition-transform group-open:rotate-90" viewBox="0 0 6 10" fill="currentColor">
               <path d="M1 1l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
@@ -1742,7 +1722,7 @@ export function ChannelTemplateVersionEditor({
             </summary>
             <div className="mt-2 space-y-1">
               <p className="text-xs text-base-content/50">
-                Optional JSON array of variable metadata (e.g. display names for campaign variable pickers). Most templates don't need this — leave blank unless you know what it does.
+                Optional JSON array of variable metadata (e.g. display names for campaign variable pickers). Most templates don&apos;t need this — leave blank unless you know what it does.
               </p>
               <textarea
                 className="textarea textarea-bordered w-full min-h-[80px] font-mono text-xs"
@@ -1755,55 +1735,33 @@ export function ChannelTemplateVersionEditor({
         </div>
       </details>
 
-      {/* WhatsApp bubble preview */}
+      {/* Mobile-only preview toggle */}
       {showPreview && (
-        <div className="rounded-box border border-base-300 bg-base-200/50 p-3 space-y-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-base-content/40">
-            Preview
-          </div>
-          {layoutType === "STANDARD" ? (
-            <WhatsAppBubblePreview
-              headerType={headerType}
-              headerContent={headerContent}
-              body={body}
-              footer={footer}
-              buttons={
-                standardButtonRows
-                  ? standardButtonRows.map((r) => ({ type: r.type, text: r.text }))
-                  : []
-              }
-            />
-          ) : (
-            <div className="space-y-3">
-              {body.trim() && (
-                <div className="text-xs text-base-content/60 italic">
-                  Carousel intro: {renderPreviewBody(body)}
-                </div>
-              )}
-              {carouselCards.length === 0 ? (
-                <div className="text-xs text-base-content/50">No carousel cards yet.</div>
-              ) : (
-                <div className="flex gap-3 overflow-x-auto pb-1">
-                  {carouselCards.map((card, idx) => (
-                    <div key={idx} className="min-w-[200px] max-w-[220px]">
-                      <WhatsAppBubblePreview
-                        headerType={card.headerFormat ?? "IMAGE"}
-                        headerContent={card.headerHandle ?? ""}
-                        body={card.body ?? ""}
-                        footer=""
-                        buttons={
-                          (carouselButtonRowsByIndex[idx] ?? []).map((r) => ({
-                            type: r.type,
-                            text: r.text,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        <div className="rounded-box border border-base-300 bg-base-200/50 p-3 space-y-2 lg:hidden">
+          <div className="op-label">Preview</div>
+          <WhatsAppTemplatePreview
+            headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"}
+            headerContent={headerContent}
+            body={body}
+            footer={footer}
+            buttons={
+              standardButtonRows
+                ? standardButtonRows.map((r) => ({ type: r.type, text: r.text }))
+                : []
+            }
+            layoutType={layoutType as "STANDARD" | "CAROUSEL"}
+            carouselCards={
+              carouselCards.map((card, idx) => ({
+                headerFormat: (card.headerFormat ?? "IMAGE") as "IMAGE" | "VIDEO",
+                headerHandle: card.headerHandle,
+                body: card.body,
+                buttons: (carouselButtonRowsByIndex[idx] ?? []).map((r) => ({
+                  type: r.type,
+                  text: r.text,
+                })),
+              }))
+            }
+          />
         </div>
       )}
 
@@ -1811,6 +1769,37 @@ export function ChannelTemplateVersionEditor({
       <div className="flex justify-end pt-1">
         {SaveButton}
       </div>
+    </div>
+
+    {/* Right: sticky preview (desktop) */}
+    <aside className="hidden lg:block w-72 shrink-0">
+      <div className="sticky top-4 space-y-2">
+        <div className="op-label">Preview</div>
+        <WhatsAppTemplatePreview
+          headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"}
+          headerContent={headerContent}
+          body={body}
+          footer={footer}
+          buttons={
+            standardButtonRows
+              ? standardButtonRows.map((r) => ({ type: r.type, text: r.text }))
+              : []
+          }
+          layoutType={layoutType as "STANDARD" | "CAROUSEL"}
+          carouselCards={
+            carouselCards.map((card, idx) => ({
+              headerFormat: (card.headerFormat ?? "IMAGE") as "IMAGE" | "VIDEO",
+              headerHandle: card.headerHandle,
+              body: card.body,
+              buttons: (carouselButtonRowsByIndex[idx] ?? []).map((r) => ({
+                type: r.type,
+                text: r.text,
+              })),
+            }))
+          }
+        />
+      </div>
+    </aside>
     </div>
   );
 }

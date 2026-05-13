@@ -7,6 +7,7 @@ import type { CreateFeedbackPayload } from "@/lib/api";
 import type { FeedbackAttachment, FeedbackType, FeedbackPriority } from "@/lib/types";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { useScreenRecorder } from "@/hooks/use-screen-recorder";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 const PRIORITIES: { value: FeedbackPriority; label: string }[] = [
   { value: "LOW", label: "Low" },
@@ -175,13 +176,16 @@ export function FeedbackFormModal({ initialType = "BUG", onClose }: FeedbackForm
           {/* Priority (bugs only) */}
           {type === "BUG" && (
             <div>
-              <label className="text-sm font-medium block mb-1">Priority</label>
+              <label className="text-sm font-medium mb-1 flex items-center gap-1.5">
+                Priority
+                <InfoTip tip="LOW = minor annoyance · MEDIUM = notable issue · HIGH = significantly impacts workflow · CRITICAL = app is broken or data at risk" />
+              </label>
               <div className="join">
                 {PRIORITIES.map((p) => (
                   <button
                     key={p.value}
                     type="button"
-                    className={`btn btn-xs join-item ${priority === p.value ? "btn-primary" : "btn-outline"}`}
+                    className={`btn btn-xs join-item ${priority === p.value ? "btn-primary" : ""}`}
                     onClick={() => setPriority(p.value)}
                   >
                     {p.label}
@@ -257,6 +261,7 @@ export function FeedbackFormModal({ initialType = "BUG", onClose }: FeedbackForm
                     style={{ width: 72, height: 72 }}
                   >
                     {att.mimeType.startsWith("image/") ? (
+// eslint-disable-next-line @next/next/no-img-element -- dynamic user content, dimensions unknown
                       <img
                         src={att.url}
                         alt={att.name}

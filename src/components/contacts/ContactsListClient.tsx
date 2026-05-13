@@ -7,11 +7,20 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Eye } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eye, Search, Upload, Download, RefreshCw, UserPlus, Tag, Trash2, Copy, MessageSquare, Columns3, Check, Minus, LayoutGrid, Settings2 } from "lucide-react";
+import { TagsPanelContent } from "./TagsPanelContent";
+import { SegmentsPanelContent } from "./SegmentsPanelContent";
+import {
+  flexRender,
+  getCoreRowModel,
+  useReactTable,
+  type ColumnDef,
+  type VisibilityState,
+} from "@tanstack/react-table";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
-import { contactsApi, type ContactsListSort, tagsApi } from "@/lib/api";
+import { contactsApi, type ContactsListSort, tagsApi, segmentsApi, customFieldsApi } from "@/lib/api";
 import { getApiError, getApiErrorStatus, getApiErrorData } from "@/lib/api-error";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
@@ -20,8 +29,11 @@ import {
   isContactUpdated,
   parseWorkspaceSseEvent,
 } from "@/lib/sseEvents";
-import type { Contact } from "@/lib/types";
+import type { Contact, CustomFieldDef } from "@/lib/types";
+import { formatRelativeTime } from "@/lib/format";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
+import { InfoTip } from "@/components/ui/InfoTip";
+import { KpiCard } from "@/components/ui/KpiCard";
 import { ContactDetailPanelContent } from "./ContactDetailDrawer";
 import { ContactFormModal } from "./ContactFormModal";
 import { DuplicatesModal } from "./DuplicatesModal";
@@ -31,8 +43,9 @@ const CONTACTS_LIST_QUERY_KEY = (
   segmentId: string | null,
   search: string,
   sortKey: SortKey,
-  sortDir: SortDir
-) => ["contacts", "list", segmentId ?? "all", search, sortKey, sortDir] as const;
+  sortDir: SortDir,
+  tagIds: string[] = [],
+) => ["contacts", "list", segmentId ?? "all", search, sortKey, sortDir, tagIds.join(",") || "no-tags"] as const;
 const LIST_PAGE_SIZE = 50;
 
 const SERVER_SORT_KEYS: SortKey[] = [
@@ -89,6 +102,28 @@ function sortContacts(
     const cmp = aStr.localeCompare(bStr, undefined, { numeric: true });
     return sortDir === "asc" ? cmp : -cmp;
   });
+}
+
+function formatFieldValue(value: string | undefined, def: CustomFieldDef) {
+  if (!value) return "—";
+  switch (def.type) {
+    case "BOOLEAN":
+      return value === "true" ? <Check className="h-3.5 w-3.5 text-success" /> : <Minus className="h-3.5 w-3.5 text-base-content/30" />;
+    case "DATE":
+      try {
+        return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+      } catch {
+        return value;
+      }
+    case "URL":
+      return (
+        <span className="truncate max-w-[120px] inline-block align-bottom text-primary/80" title={value}>
+          {value.replace(/^https?:\/\//, "")}
+        </span>
+      );
+    default:
+      return value;
+  }
 }
 
 function toCsvCell(value: string | number | boolean | null | undefined): string {
@@ -152,15 +187,48 @@ export function ContactsListClient({
     imported: number;
     failed: number;
   } | null>(null);
+  const [localSegmentId, setLocalSegmentId] = useState<string | null>(null);
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [visibleFieldIds, setVisibleFieldIds] = useState<Set<string>>(new Set());
+  const [tagsDropdownOpen, setTagsDropdownOpen] = useState(false);
   const canCreateContacts = roleHasWorkspacePermission(meRole, "contacts.create");
   const canImportContacts = roleHasWorkspacePermission(meRole, "contacts.import");
   const canExportContacts = roleHasWorkspacePermission(meRole, "contacts.export");
-  const canManageTags = roleHasWorkspacePermission(meRole, "contacts.create");
   const canFindDuplicates = roleHasWorkspacePermission(meRole, "contacts.create");
   const canDeleteContacts = roleHasWorkspacePermission(meRole, "contacts.delete");
 
+  const showManagePanel = useCallback(() => {
+    setSelectedContactId(null);
+    setSelectedContactRow(null);
+    setRightPanelContent({
+      source: "contacts-manage",
+      title: "Manage",
+      openAfter: true,
+      tabs: [
+        {
+          key: "tags",
+          label: "Tags",
+          content: <TagsPanelContent canManage={canCreateContacts} />,
+        },
+        {
+          key: "segments",
+          label: "Segments",
+          content: (
+            <SegmentsPanelContent
+              canManage={canCreateContacts}
+              onSelectSegment={(id) => {
+                setLocalSegmentId(id);
+              }}
+            />
+          ),
+        },
+      ],
+      defaultTab: "tags",
+    });
+  }, [canCreateContacts, setRightPanelContent]);
+
   const debouncedSearch = useDebouncedValue(searchInput, 300);
-  const segmentId = selectedSegmentId ?? null;
+  const segmentId = localSegmentId ?? selectedSegmentId ?? null;
   const searchParam = debouncedSearch.trim() || "";
 
   const useServerSortForList = isServerSort(sortKey);
@@ -168,7 +236,7 @@ export function ContactsListClient({
   const listOrder = useServerSortForList ? sortDir : "asc";
 
   const infiniteQuery = useInfiniteQuery({
-    queryKey: CONTACTS_LIST_QUERY_KEY(segmentId, searchParam, sortKey, sortDir),
+    queryKey: CONTACTS_LIST_QUERY_KEY(segmentId, searchParam, sortKey, sortDir, filterTagIds),
     queryFn: async ({ pageParam }) =>
       contactsApi.list({
         limit: LIST_PAGE_SIZE,
@@ -179,6 +247,7 @@ export function ContactsListClient({
         order: listOrder,
         includeTotal: true,
         include: "tags,customFields",
+        tagIds: filterTagIds.length ? filterTagIds.join(",") : undefined,
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -217,6 +286,21 @@ export function ContactsListClient({
     queryFn: () => tagsApi.list(),
   });
 
+  const { data: allSegments = [] } = useQuery({
+    queryKey: ["segments"],
+    queryFn: () => segmentsApi.list(),
+  });
+
+  const { data: customFieldDefs = [] } = useQuery({
+    queryKey: ["custom-field-definitions"],
+    queryFn: () => customFieldsApi.list(),
+  });
+
+  const visibleDefs = useMemo(
+    () => customFieldDefs.filter((d) => visibleFieldIds.has(d.id)),
+    [customFieldDefs, visibleFieldIds]
+  );
+
   const invalidateContacts = () =>
     queryClient.invalidateQueries({ queryKey: ["contacts", "list"] });
   const invalidateSegmentPreview = () => invalidateContacts();
@@ -227,7 +311,15 @@ export function ContactsListClient({
 
   useEffect(() => {
     setDisplayPageIndex(0);
-  }, [debouncedSearch, sortKey, sortDir]);
+  }, [debouncedSearch, sortKey, sortDir, filterTagIds]);
+
+  // Auto-select first 2 custom field columns when definitions load
+  const fieldDefsInitRef = useRef(false);
+  useEffect(() => {
+    if (fieldDefsInitRef.current || customFieldDefs.length === 0) return;
+    fieldDefsInitRef.current = true;
+    setVisibleFieldIds(new Set(customFieldDefs.slice(0, 2).map((d) => d.id)));
+  }, [customFieldDefs]);
 
   useEffect(() => {
     if (!workspaceId?.trim()) return;
@@ -265,13 +357,13 @@ export function ContactsListClient({
 
   useEffect(() => {
     if (!selectedContactId || !selectedContactRow) {
-      clearRightPanelContent("contacts");
+      clearRightPanelContent("contacts-detail");
       return;
     }
     setRightPanelContent({
-      source: "contacts",
+      source: "contacts-detail",
       title: "Contact",
-      openAfter: isLgUp,
+      openAfter: true,
       content: (
         <ContactDetailPanelContent
           contactId={selectedContactId}
@@ -290,6 +382,7 @@ export function ContactsListClient({
         />
       ),
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: canCreateContacts/canDeleteContacts excluded to avoid re-rendering detail panel on permission load
   }, [
     clearRightPanelContent,
     selectedContactId,
@@ -299,7 +392,10 @@ export function ContactsListClient({
   ]);
 
   useEffect(() => {
-    return () => clearRightPanelContent("contacts");
+    return () => {
+      clearRightPanelContent("contacts-detail");
+      clearRightPanelContent("contacts-manage");
+    };
   }, [clearRightPanelContent]);
 
   const createMutation = useMutation({
@@ -412,6 +508,9 @@ export function ContactsListClient({
     },
     onError: (err) => setError(getApiError(err)),
   });
+
+  // Tag filtering is now server-side (tagIds param in API call).
+  // No client-side filtering needed.
 
   const sorted = useMemo(() => {
     if (useServerSortForList) return allLoadedContacts;
@@ -639,6 +738,220 @@ export function ContactsListClient({
     el.indeterminate = headerIndeterminate;
   }, [headerIndeterminate]);
 
+  // ── TanStack Table ──
+  // Column visibility — persisted to localStorage (swap to API when /user/preferences is built)
+  const COL_VIS_KEY = "contacts-column-visibility";
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    try {
+      const stored = localStorage.getItem(COL_VIS_KEY);
+      if (stored) return JSON.parse(stored) as VisibilityState;
+    } catch { /* ignore */ }
+    return {};
+  });
+  const handleColumnVisibilityChange = useCallback((updater: VisibilityState | ((prev: VisibilityState) => VisibilityState)) => {
+    setColumnVisibility((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      try { localStorage.setItem(COL_VIS_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+  const [colDropdownOpen, setColDropdownOpen] = useState(false);
+  const colDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!colDropdownOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!colDropdownRef.current?.contains(e.target as Node)) setColDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [colDropdownOpen]);
+
+  const [segDropdownOpen, setSegDropdownOpen] = useState(false);
+  const segDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!segDropdownOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!segDropdownRef.current?.contains(e.target as Node)) setSegDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [segDropdownOpen]);
+
+  type ContactRow = (typeof displayed)[number];
+  const tableColumns: ColumnDef<ContactRow>[] = useMemo(() => {
+    const cols: ColumnDef<ContactRow>[] = [
+      {
+        id: "select",
+        header: () => (
+          <input
+            ref={headerCheckboxRef}
+            type="checkbox"
+            className="checkbox checkbox-sm"
+            checked={displayed.length > 0 && selectedOnPageCount === displayed.length}
+            onChange={selectAllOnPage}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Select all on page"
+          />
+        ),
+        cell: ({ row }) => (
+          <input
+            type="checkbox"
+            className="checkbox checkbox-sm"
+            checked={selectedContactIds.has(row.original.id)}
+            onChange={() => toggleContactSelection(row.original.id)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Select ${("name" in row.original ? row.original.name : "") || "contact"}`}
+          />
+        ),
+        enableHiding: false,
+        size: 40,
+      },
+      {
+        accessorKey: "name",
+        header: "Summary",
+        cell: ({ row }) => {
+          const c = row.original;
+          const cName = "name" in c ? (c.name || "Unnamed") : "Unnamed";
+          const cDesignation = "designation" in c ? ((c as { designation?: string }).designation || "") : "";
+          return (
+            <div className="flex items-center gap-2.5">
+              <ContactAvatar name={c.name} phone={c.phone} avatarUrl={c.avatarUrl} size="sm" />
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-[13px] font-semibold text-base-content">{cName}</p>
+                  {"isBlocked" in c && c.isBlocked && <span className="op-tag op-tag-danger">Blocked</span>}
+                  {"isOptedOut" in c && c.isOptedOut && <span className="op-tag op-tag-warn">Opted out</span>}
+                </div>
+                {cDesignation && <p className="text-[11px] text-base-content/55">{cDesignation}</p>}
+              </div>
+            </div>
+          );
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: "email",
+        header: "Email",
+        cell: ({ row }) => {
+          const c = row.original;
+          return "email" in c ? (
+            <span className="text-[13px] text-base-content/80">
+              {c.email || "—"}
+              {"emailLabel" in c && c.emailLabel && <span className="ml-1 text-[11px] text-base-content/50">({c.emailLabel})</span>}
+            </span>
+          ) : <span className="text-base-content/40">—</span>;
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: "phone",
+        header: "Phone",
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <span className="font-mono-op text-[12px] tabular-nums text-base-content/85">
+              {c.phone}
+              {"phoneLabel" in c && c.phoneLabel && <span className="ml-1 font-sans text-[11px] text-base-content/50">({c.phoneLabel})</span>}
+            </span>
+          );
+        },
+        enableSorting: true,
+      },
+      {
+        id: "tags",
+        header: "Tags",
+        cell: ({ row }) => {
+          const tags = "tags" in row.original ? row.original.tags ?? [] : [];
+          return tags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {tags.slice(0, 3).map((tag) => <span key={tag.id} className="op-tag">{tag.name}</span>)}
+              {tags.length > 3 && <span className="op-tag">+{tags.length - 3}</span>}
+            </div>
+          ) : <span className="text-base-content/40">—</span>;
+        },
+      },
+      {
+        accessorKey: "lastMessageAt",
+        header: "Last active",
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <span className="font-mono-op text-[11px] tabular-nums text-base-content/55">
+              {"lastMessageAt" in c && c.lastMessageAt ? formatRelativeTime(c.lastMessageAt) : "—"}
+            </span>
+          );
+        },
+        enableSorting: true,
+      },
+    ];
+
+    // Dynamic custom field columns
+    for (const def of visibleDefs) {
+      cols.push({
+        id: `cf_${def.id}`,
+        header: def.label,
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <span className="text-[13px] text-base-content/80">
+              {formatFieldValue(
+                "customFields" in c ? (c as Contact).customFields?.[def.name] : undefined,
+                def
+              )}
+            </span>
+          );
+        },
+      });
+    }
+
+    // Actions column
+    cols.push({
+      id: "actions",
+      header: "",
+      enableHiding: false,
+      cell: ({ row }) => {
+        const c = row.original;
+        return (
+          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+            <div className="tooltip tooltip-left" data-tip="Send message">
+              <Link
+                href={`/inbox?contactId=${c.id}&focus=reply`}
+                className="btn btn-ghost btn-xs btn-square"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <MessageSquare className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <div className="tooltip tooltip-left" data-tip="Quick view">
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs btn-square"
+                onClick={() => openDrawer(c)}
+                aria-label="Quick view"
+              >
+                <Eye className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        );
+      },
+    });
+
+    return cols;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- callbacks are intentionally inline; column defs rebuild on data change which is correct
+  }, [displayed, selectedOnPageCount, selectedContactIds, visibleDefs]);
+
+  const contactsTable = useReactTable({
+    data: displayed,
+    columns: tableColumns,
+    getCoreRowModel: getCoreRowModel(),
+    state: { columnVisibility },
+    onColumnVisibilityChange: handleColumnVisibilityChange,
+    manualSorting: true,
+    manualPagination: true,
+    getRowId: (row) => row.id,
+  });
+
   const PaginationBar = () =>
     !loadingList && (totalCount > 0 || totalFiltered > 0) ? (
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-box border border-base-300 bg-base-200 px-3 py-2">
@@ -674,7 +987,7 @@ export function ContactsListClient({
     <div className="grid grid-cols-1 gap-4">
       <div className="space-y-4 min-w-0">
       {bulkSseNotice ? (
-        <div role="status" className="alert alert-success alert-soft text-sm">
+        <div role="status" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-3 py-2 text-sm">
           <span>
             Contacts updated from import: {bulkSseNotice.imported} imported
             {bulkSseNotice.failed > 0
@@ -693,165 +1006,278 @@ export function ContactsListClient({
         </div>
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-box border border-base-300 bg-base-100 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-base-content/60">
-            Total contacts
-          </p>
-          <p className="mt-2 text-3xl font-semibold text-base-content">
-            {contactStats.total.toLocaleString()}
-          </p>
-        </div>
-        <div className="rounded-box border border-base-300 bg-base-100 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-base-content/60">
-            Active this week
-          </p>
-          <p className="mt-2 text-3xl font-semibold text-base-content">
-            {contactStats.activeLastWeek.toLocaleString()}
-          </p>
-        </div>
-        <div className="rounded-box border border-base-300 bg-base-100 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-base-content/60">
-            New this week
-          </p>
-          <p className="mt-2 text-3xl font-semibold text-base-content">
-            +{contactStats.recentlyAdded.toLocaleString()}
-          </p>
-        </div>
-        <div className="rounded-box border border-base-300 bg-base-100 p-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-base-content/60">
-            Profile health
-          </p>
-          <p className="mt-2 text-3xl font-semibold text-base-content">
-            {contactStats.healthPct}%
-          </p>
-        </div>
+        <KpiCard label="Total contacts" value={contactStats.total.toLocaleString()} />
+        <KpiCard label="Active this week" value={contactStats.activeLastWeek.toLocaleString()} />
+        <KpiCard label="New this week" value={`+${contactStats.recentlyAdded.toLocaleString()}`} />
+        <KpiCard label="Profile health" value={`${contactStats.healthPct}%`} hint={<>Contacts with name + phone or email <InfoTip tip="Percentage of contacts with both a name and phone number or email filled in" /></>} />
       </div>
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+      <div className="rounded-box border border-base-300 bg-base-200 px-4 py-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-base-content/40" />
           <input
             type="text"
             placeholder="Search contacts…"
-            className="input input-bordered input-sm w-full"
+            className="input input-bordered input-sm w-full pl-8"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-1.5">
           {canImportContacts ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setImporting(true)}
-            >
-              Import
-            </button>
-          ) : null}
-          {canExportContacts ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={handleExport}
-              disabled={exporting}
-            >
-              {exporting ? (
-                <span className="loading loading-spinner loading-sm" />
-              ) : selectedContactIds.size > 0 ? (
-                `Export selected (${selectedContactIds.size})`
-              ) : (
-                "Export"
-              )}
-            </button>
-          ) : null}
-          {canFindDuplicates ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setDuplicatesOpen(true)}
-            >
-              Find duplicates
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => invalidateContacts()}
-            disabled={loadingList}
-          >
-            {loadingList ? (
-              <span className="loading loading-spinner loading-sm" />
-            ) : (
-              "Refresh"
-            )}
-          </button>
-          {selectedContactIds.size > 0 && (
-            <>
+            <div className="tooltip tooltip-bottom" data-tip="Import contacts">
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => setBulkTagOpen(true)}
-                disabled={bulkAssignTagMutation.isPending}
+                className="btn btn-ghost btn-sm btn-square"
+                onClick={() => setImporting(true)}
               >
-                Add tag to {selectedContactIds.size} selected
+                <Upload className="h-4 w-4" />
               </button>
-              {canDeleteContacts ? (
+            </div>
+          ) : null}
+          {canExportContacts ? (
+            <div className="tooltip tooltip-bottom" data-tip={selectedContactIds.size > 0 ? `Export ${selectedContactIds.size} selected` : "Export all"}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-square"
+                onClick={handleExport}
+                disabled={exporting}
+              >
+                {exporting ? (
+                  <span className="loading loading-spinner loading-xs" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          ) : null}
+          {canFindDuplicates ? (
+            <div className="tooltip tooltip-bottom" data-tip="Find duplicate contacts">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-square"
+                onClick={() => setDuplicatesOpen(true)}
+              >
+                <Copy className="h-4 w-4" />
+              </button>
+            </div>
+          ) : null}
+          <div className="tooltip tooltip-bottom" data-tip="Refresh list">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-square"
+              onClick={() => invalidateContacts()}
+              disabled={loadingList}
+            >
+              {loadingList ? (
+                <span className="loading loading-spinner loading-xs" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+          {/* Manage tags & segments */}
+          <div className="tooltip tooltip-bottom" data-tip="Manage tags & segments">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-square"
+              onClick={showManagePanel}
+            >
+              <Settings2 className="h-4 w-4" />
+            </button>
+          </div>
+          {/* Column visibility toggle */}
+          <div className="relative" ref={colDropdownRef}>
+            <div className="tooltip tooltip-bottom" data-tip="Toggle columns">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-square"
+                onClick={() => setColDropdownOpen((v) => !v)}
+              >
+                <Columns3 className="h-4 w-4" />
+              </button>
+            </div>
+            {colDropdownOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-box border border-base-300 bg-base-200 p-2 shadow-lg">
+                <div className="mb-1.5 flex items-center justify-between px-2">
+                  <span className="op-label">Columns</span>
+                  <span className="font-mono-op text-[9px] tracking-[0.08em] text-primary">saved</span>
+                </div>
+                {contactsTable.getAllLeafColumns()
+                  .filter((col) => col.getCanHide())
+                  .map((col) => (
+                    <label key={col.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-base-300/40">
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-xs"
+                        checked={col.getIsVisible()}
+                        onChange={col.getToggleVisibilityHandler()}
+                      />
+                      {typeof col.columnDef.header === "string" ? col.columnDef.header : col.id.replace("cf_", "")}
+                    </label>
+                  ))}
+                <div className="mt-1.5 border-t border-base-300 pt-1.5">
+                  <button
+                    type="button"
+                    className="w-full rounded-md px-2 py-1.5 text-left text-[12px] text-base-content/60 hover:bg-base-300/40 hover:text-base-content"
+                    onClick={() => {
+                      handleColumnVisibilityChange({});
+                    }}
+                  >
+                    Reset to default
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          {selectedContactIds.size > 0 && (
+            <>
+              <div className="mx-1 h-5 w-px bg-base-300" />
+              <div className="tooltip tooltip-bottom" data-tip={`Tag ${selectedContactIds.size} selected`}>
                 <button
                   type="button"
-                  className="btn btn-outline btn-sm text-error border-error/40 hover:border-error"
-                  onClick={() => setBulkDeleteOpen(true)}
-                  disabled={bulkDeleteMutation.isPending}
+                  className="btn btn-ghost btn-sm gap-1"
+                  onClick={() => setBulkTagOpen(true)}
+                  disabled={bulkAssignTagMutation.isPending}
                 >
-                  Delete selected ({selectedContactIds.size})
+                  <Tag className="h-3.5 w-3.5" />
+                  <span className="font-mono-op text-[10px] tabular-nums">{selectedContactIds.size}</span>
                 </button>
+              </div>
+              {canDeleteContacts ? (
+                <div className="tooltip tooltip-bottom" data-tip={`Delete ${selectedContactIds.size} selected`}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm gap-1 text-error/70 hover:text-error"
+                    onClick={() => setBulkDeleteOpen(true)}
+                    disabled={bulkDeleteMutation.isPending}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="font-mono-op text-[10px] tabular-nums">{selectedContactIds.size}</span>
+                  </button>
+                </div>
               ) : null}
             </>
           )}
-          {canManageTags ? (
-            <Link href="/people/tags" className="btn btn-ghost btn-sm">
-              Manage tags
-            </Link>
-          ) : null}
           {canCreateContacts ? (
             <button
               type="button"
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm gap-1"
               onClick={() => setCreating(true)}
             >
-              Add Person
+              <UserPlus className="h-3.5 w-3.5" /> Add contact
             </button>
           ) : null}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <select
-            className="select select-bordered select-sm"
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as SortKey)}
-            aria-label="Sort by"
-          >
-            <option value="name">Sort: Name</option>
-            <option value="lastMessageAt">Sort: Last active</option>
-            <option value="createdAt">Sort: Recently added</option>
-            <option value="updatedAt">Sort: Recently updated</option>
-            <option value="email">Sort: Email</option>
-            <option value="phone">Sort: Phone</option>
-            <option value="isBlocked">Sort: Blocked</option>
-            <option value="isOptedOut">Sort: Opted out</option>
-          </select>
-          <select
-            className="select select-bordered select-sm"
-            value={sortDir}
-            onChange={(e) => setSortDir(e.target.value as SortDir)}
-            aria-label="Sort direction"
-          >
-            <option value="asc">Asc</option>
-            <option value="desc">Desc</option>
-          </select>
+          {/* Segment picker — dropdown like column toggle */}
+          <div className="relative" ref={segDropdownRef}>
+            <div className="tooltip tooltip-bottom" data-tip="Filter by segment">
+              <button
+                type="button"
+                className={`btn btn-ghost btn-sm gap-1 ${segmentId ? "text-primary" : ""}`}
+                onClick={() => setSegDropdownOpen((v) => !v)}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                {segmentId ? allSegments.find((s) => s.id === segmentId)?.name ?? "Segment" : "Segments"}
+              </button>
+            </div>
+            {segDropdownOpen && (
+              <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-box border border-base-300 bg-base-200 p-2 shadow-lg">
+                <span className="op-label mb-1.5 block px-2">Segments</span>
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-base-300/40">
+                  <input
+                    type="radio"
+                    name="segment"
+                    className="radio radio-xs radio-primary"
+                    checked={!segmentId}
+                    onChange={() => { setLocalSegmentId(null); setSegDropdownOpen(false); }}
+                  />
+                  All contacts
+                </label>
+                {allSegments.map((seg) => (
+                  <label key={seg.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-base-300/40">
+                    <input
+                      type="radio"
+                      name="segment"
+                      className="radio radio-xs radio-primary"
+                      checked={segmentId === seg.id}
+                      onChange={() => { setLocalSegmentId(seg.id); setSegDropdownOpen(false); }}
+                    />
+                    <span className="flex-1 truncate">{seg.name}</span>
+                    {seg.contactCount != null ? (
+                      <span className="font-mono-op text-[10px] tabular-nums text-base-content/40">{seg.contactCount}</span>
+                    ) : null}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Tags filter dropdown */}
+          {allTags.length > 0 && (
+            <div className="dropdown">
+              <div className="tooltip tooltip-bottom" data-tip="Filter by tags">
+                <button
+                  type="button"
+                  className={`btn btn-ghost btn-sm gap-1 ${filterTagIds.length > 0 ? "text-primary" : ""}`}
+                  onClick={() => setTagsDropdownOpen((v) => !v)}
+                >
+                  <Tag className="h-3.5 w-3.5" />
+                  Tags
+                  {filterTagIds.length > 0 && (
+                    <span className="font-mono-op text-[10px] tabular-nums">{filterTagIds.length}</span>
+                  )}
+                </button>
+              </div>
+              {tagsDropdownOpen && (
+                <div className="dropdown-content z-20 mt-1 w-64 rounded-box border border-base-300 bg-base-100 p-2 shadow-sm">
+                  <div className="flex items-center justify-between px-2 pb-1.5">
+                    <p className="text-xs font-medium text-base-content/50">Filter by tags</p>
+                    {filterTagIds.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs gap-1 text-base-content/50"
+                        onClick={() => setFilterTagIds([])}
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 px-1">
+                    {allTags.map((tag) => {
+                      const active = filterTagIds.includes(tag.id);
+                      return (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          className={`op-tag cursor-pointer transition-colors ${active ? "border-primary bg-primary/10 text-primary" : ""}`}
+                          style={!active && tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
+                          onClick={() =>
+                            setFilterTagIds((prev) =>
+                              prev.includes(tag.id)
+                                ? prev.filter((id) => id !== tag.id)
+                                : [...prev, tag.id]
+                            )
+                          }
+                        >
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
+
       </div>
       </div>
 
       {error && (
-        <div role="alert" className="alert alert-error alert-dash">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-5 w-5 shrink-0"
@@ -880,7 +1306,7 @@ export function ContactsListClient({
       )}
 
       {conflictContact && (
-        <div role="alert" className="alert alert-warning alert-dash">
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-5 w-5 shrink-0"
@@ -932,9 +1358,9 @@ export function ContactsListClient({
       {!loadingList && sorted.length === 0 && (
         <div className="rounded-box border border-base-300 bg-base-200 p-8 text-center">
           <p className="text-sm text-base-content/70">
-            {searchParam
+            {searchParam || filterTagIds.length > 0
               ? "No contacts match the current search/filter combination."
-              : selectedSegmentId
+              : segmentId
                 ? "No contacts in this segment. Try another list or add contacts."
                 : "No contacts yet. Add your first contact to get started."}
           </p>
@@ -955,14 +1381,18 @@ export function ContactsListClient({
       {!loadingList && (totalCount > 0 || totalFiltered > 0) && <PaginationBar />}
 
       {loadingList && sorted.length === 0 && (
-        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+        <div className="overflow-x-auto card bg-base-100 border border-base-300">
           <table className="table table-sm">
             <thead>
               <tr>
                 <th>Summary</th>
                 <th>Email Address</th>
                 <th>Phone Number</th>
-                <th>Location / Tags</th>
+                <th>Tags</th>
+                <th>Last active</th>
+                {visibleDefs.map((def) => (
+                  <th key={def.id}>{def.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -980,6 +1410,10 @@ export function ContactsListClient({
                   <td><div className="skeleton h-4 w-28" /></td>
                   <td><div className="skeleton h-4 w-24" /></td>
                   <td><div className="skeleton h-6 w-20" /></td>
+                  <td><div className="skeleton h-4 w-16" /></td>
+                  {visibleDefs.map((def) => (
+                    <td key={def.id}><div className="skeleton h-4 w-20" /></td>
+                  ))}
                 </tr>
               ))}
             </tbody>
@@ -988,188 +1422,61 @@ export function ContactsListClient({
       )}
 
       {!loadingList && sorted.length > 0 && (
-        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-          <table className="table table-sm [&_td]:px-2 [&_td]:py-2 [&_th]:px-2 [&_th]:py-2">
-            <thead className="bg-base-200/70">
-              <tr>
-                <th className="w-0 p-2" onClick={(e) => e.stopPropagation()}>
-                  <input
-                    ref={headerCheckboxRef}
-                    type="checkbox"
-                    className="checkbox checkbox-sm"
-                    checked={
-                      displayed.length > 0 &&
-                      selectedOnPageCount === displayed.length
-                    }
-                    onChange={selectAllOnPage}
-                    onClick={(e) => e.stopPropagation()}
-                    aria-label="Select all on page"
-                  />
-                </th>
-                <th className="text-xs font-medium text-base-content/60">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-base-content/70 hover:text-base-content"
-                    onClick={() => handleSort("name")}
-                  >
-                    Summary{" "}
-                    {sortKey === "name"
-                      ? sortDir === "asc"
-                        ? "↑"
-                        : "↓"
-                      : ""}
-                  </button>
-                </th>
-                <th className="text-xs font-medium text-base-content/60">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-base-content/70 hover:text-base-content"
-                    onClick={() => handleSort("email")}
-                  >
-                    Email Address{" "}
-                    {sortKey === "email"
-                      ? sortDir === "asc"
-                        ? "↑"
-                        : "↓"
-                      : ""}
-                  </button>
-                </th>
-                <th className="text-xs font-medium text-base-content/60">
-                  <button
-                    type="button"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-base-content/70 hover:text-base-content"
-                    onClick={() => handleSort("phone")}
-                  >
-                    Phone Number{" "}
-                    {sortKey === "phone"
-                      ? sortDir === "asc"
-                        ? "↑"
-                        : "↓"
-                      : ""}
-                  </button>
-                </th>
-                <th className="text-xs font-medium text-base-content/60">Location / Tags</th>
-                <th className="text-xs font-medium text-base-content/60">Actions</th>
-              </tr>
+        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              {contactsTable.getHeaderGroups().map((hg) => (
+                <tr key={hg.id} className="border-b border-base-300 bg-base-100">
+                  {hg.headers.map((h) => {
+                    const sortable = ["name", "email", "phone", "lastMessageAt"].includes(h.id);
+                    const sortId = h.id === "name" ? "name" : h.id === "email" ? "email" : h.id === "phone" ? "phone" : h.id === "lastMessageAt" ? "lastMessageAt" : null;
+                    return (
+                      <th
+                        key={h.id}
+                        className={`${h.id === "select" ? "w-0 px-3 py-2.5" : "op-label px-3 py-2.5 text-left font-medium"} ${sortable ? "cursor-pointer select-none hover:text-base-content" : ""}`}
+                        onClick={(e) => {
+                          if (h.id === "select") { e.stopPropagation(); return; }
+                          if (sortId) handleSort(sortId);
+                        }}
+                      >
+                        {h.id === "select" ? (
+                          flexRender(h.column.columnDef.header, h.getContext())
+                        ) : (
+                          <>
+                            {flexRender(h.column.columnDef.header, h.getContext())}
+                            {sortId && sortKey === sortId && (
+                              <span className="ml-1">{sortDir === "asc" ? "↑" : "↓"}</span>
+                            )}
+                          </>
+                        )}
+                      </th>
+                    );
+                  })}
+                </tr>
+              ))}
             </thead>
             <tbody>
-              {displayed.map((contact) => {
-                const tags =
-                  "tags" in contact ? contact.tags ?? [] : [];
-                const name =
-                  "name" in contact ? (contact.name || "Unnamed") : "Unnamed";
-                const email =
-                  "email" in contact ? (contact.email || "") : "";
-                const designation =
-                  "designation" in contact ? ((contact as { designation?: string }).designation || "") : "";
-                const isActiveRow = selectedContactId === contact.id;
+              {contactsTable.getRowModel().rows.map((row) => {
+                const isActiveRow = selectedContactId === row.original.id;
                 return (
                   <tr
-                    key={contact.id}
-                    className={`h-14 cursor-pointer border-b border-base-300/50 transition-all duration-150 ${
+                    key={row.id}
+                    className={`h-14 cursor-pointer border-b border-base-300/50 transition-colors ${
                       isActiveRow
-                        ? "bg-primary/10 ring-1 ring-inset ring-primary/25"
-                        : "hover:bg-base-200/55"
+                        ? "bg-base-200 [&>td:first-child]:border-l-2 [&>td:first-child]:border-l-primary"
+                        : "hover:bg-base-200/55 [&>td:first-child]:border-l-2 [&>td:first-child]:border-l-transparent"
                     }`}
-                    onClick={() => openDrawer(contact)}
+                    onClick={() => openDrawer(row.original)}
                   >
-                    <td
-                      className="p-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <input
-                        type="checkbox"
-                        className="checkbox checkbox-sm"
-                        checked={selectedContactIds.has(contact.id)}
-                        onChange={() => toggleContactSelection(contact.id)}
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label={`Select ${name}`}
-                      />
-                    </td>
-                    <td className="align-middle">
-                      <div className="flex items-center gap-2.5">
-                        <ContactAvatar
-                          name={contact.name}
-                          phone={contact.phone}
-                          avatarUrl={contact.avatarUrl}
-                          size="sm"
-                        />
-                        <div>
-                          <p className="text-sm font-semibold text-base-content">{name}</p>
-                          {designation && (
-                            <p className="text-xs text-base-content/55">
-                              {designation}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="align-middle text-sm text-base-content/80">
-                      {"email" in contact ? (
-                        <>
-                          {contact.email || "—"}
-                          {"emailLabel" in contact &&
-                            contact.emailLabel && (
-                              <span className="ml-1 text-base-content/50 text-xs">
-                                ({contact.emailLabel})
-                              </span>
-                            )}
-                        </>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="align-middle text-sm text-base-content/85">
-                      {contact.phone}
-                      {"phoneLabel" in contact && contact.phoneLabel && (
-                        <span className="ml-1 text-base-content/50 text-xs">
-                          ({contact.phoneLabel})
-                        </span>
-                      )}
-                    </td>
-                    <td className="align-middle">
-                      {tags.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {tags.slice(0, 3).map((tag) => (
-                            <span
-                              key={tag.id}
-                              className="badge badge-outline badge-xs"
-                            >
-                              {tag.name}
-                            </span>
-                          ))}
-                          {tags.length > 3 && (
-                            <span className="badge badge-outline badge-xs">
-                              +{tags.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="p-1" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1">
-                        <Link
-                          href={`/inbox?contactId=${contact.id}&focus=reply`}
-                          className="btn btn-ghost btn-xs px-2.5"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                          }}
-                        >
-                          Message
-                        </Link>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs btn-square"
-                          onClick={() => openDrawer(contact)}
-                          aria-label="Quick view"
-                          title="Quick view"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
+                    {row.getVisibleCells().map((cell) => (
+                      <td
+                        key={cell.id}
+                        className={`px-3 align-middle ${cell.column.id === "select" ? "p-2" : ""}`}
+                        onClick={cell.column.id === "select" ? (e) => e.stopPropagation() : undefined}
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
                 );
               })}

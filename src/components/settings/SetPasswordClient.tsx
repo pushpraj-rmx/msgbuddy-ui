@@ -47,16 +47,19 @@ export function SetPasswordClient() {
         ← Settings
       </Link>
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4 sm:p-6">
+      <div className="card bg-base-100 border border-base-300 p-4 sm:p-6">
         <form onSubmit={onSubmit} className="mx-auto max-w-md space-y-3">
           {error ? <ErrorState message={error} /> : null}
           {ok ? (
             <div
               role="status"
-              className="rounded-box border border-success/30 bg-success/10 px-3 py-2 text-sm text-success"
+              className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-4 py-3"
             >
-              Password saved. You can now sign in with email and password on any
-              device. Other sessions were signed out; you stay signed in here.
+              <span className="op-label mb-1 block text-success">password saved</span>
+              <p className="text-[13px] text-base-content">
+                You can now sign in with email and password on any device. Other
+                sessions were signed out; you stay signed in here.
+              </p>
             </div>
           ) : null}
           <label className="form-control w-full">

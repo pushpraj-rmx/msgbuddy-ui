@@ -32,7 +32,7 @@ export function SegmentPreviewModal({
         </div>
 
         {error ? (
-          <div role="alert" className="alert alert-error alert-soft mt-4">
+          <div role="alert" className="mt-4 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
             <span className="text-sm">
               {error instanceof Error ? error.message : "Failed to load preview"}
             </span>
@@ -60,7 +60,7 @@ export function SegmentPreviewModal({
           </button>
         </div>
 
-        <div className="mt-4 overflow-x-auto rounded-box border border-base-300 bg-base-100">
+        <div className="mt-4 overflow-x-auto card bg-base-100 border border-base-300">
           <table className="table table-sm">
             <thead>
               <tr>

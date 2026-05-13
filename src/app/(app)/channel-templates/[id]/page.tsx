@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import { ChannelTemplateDetailClient } from "@/components/templates/ChannelTemplateDetailClient";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default async function ChannelTemplatePage({
   params,
@@ -20,17 +20,10 @@ export default async function ChannelTemplatePage({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">WhatsApp template</h1>
-          <p className="text-sm text-base-content/60">
-            Manage versions, approval, and activation.
-          </p>
-        </div>
-        <Link href="/templates" className="btn btn-ghost btn-sm">
-          Back to messages
-        </Link>
-      </div>
+      <PageHeader
+        title="WhatsApp template"
+        description="Manage versions, approval, and activation."
+      />
 
       <ChannelTemplateDetailClient
         key={me.workspace.id}

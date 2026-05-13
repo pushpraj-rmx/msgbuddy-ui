@@ -34,7 +34,7 @@ export function EmailSetupPanel({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
+    <div className="card bg-base-100 border border-base-300 p-4 space-y-2">
       <h3 className="text-sm font-semibold">Email setup</h3>
       <textarea
         className="textarea textarea-bordered w-full min-h-28 font-mono text-xs"
@@ -42,7 +42,7 @@ export function EmailSetupPanel({ onDone }: { onDone: () => void }) {
         onChange={(e) => setPayloadText(e.target.value)}
       />
       {error ? (
-        <div role="alert" className="alert alert-error alert-soft py-2 text-sm">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
           {error}
         </div>
       ) : null}

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { ContactDetailClient } from "@/components/contacts/ContactDetailClient";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import type { Contact } from "@/lib/types";
@@ -24,12 +25,7 @@ export default async function PeopleContactDetailPage({
   }
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Contact</h1>
-        <p className="text-sm text-base-content/60">
-          View and edit contact details, tags, notes, and activity.
-        </p>
-      </div>
+      <PageHeader title="Contact" description="View and edit contact details, tags, notes, and activity." />
       <ContactDetailClient
         initialContact={contact}
         currentUserId={me.user.id}

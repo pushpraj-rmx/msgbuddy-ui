@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import { CircleUser, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical } from "lucide-react";
+import { CircleUser, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical, Phone, Mail, Search as SearchIcon, Image as ImageIcon, StickyNote, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -228,6 +228,31 @@ export function InboxClient({
   const [assigneeFilter, setAssigneeFilter] = useState<string | null>(null);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [listSearch, setListSearch] = useState("");
+
+  // Filter chip strip scroll arrows
+  const chipStripRef = useRef<HTMLDivElement>(null);
+  const [chipCanScrollLeft, setChipCanScrollLeft] = useState(false);
+  const [chipCanScrollRight, setChipCanScrollRight] = useState(false);
+  const updateChipScroll = useCallback(() => {
+    const el = chipStripRef.current;
+    if (!el) return;
+    setChipCanScrollLeft(el.scrollLeft > 2);
+    setChipCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 2);
+  }, []);
+  useEffect(() => {
+    const el = chipStripRef.current;
+    if (!el) return;
+    updateChipScroll();
+    el.addEventListener("scroll", updateChipScroll, { passive: true });
+    const ro = new ResizeObserver(updateChipScroll);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", updateChipScroll); ro.disconnect(); };
+  }, [updateChipScroll]);
+  const scrollChips = useCallback((dir: "left" | "right") => {
+    const el = chipStripRef.current;
+    if (!el) return;
+    el.scrollBy({ left: dir === "left" ? -160 : 160, behavior: "smooth" });
+  }, []);
   const [showTagPanel, setShowTagPanel] = useState(false);
   const [tags, setTags] = useState<Tag[]>([]);
   const [conversations, setConversations] =
@@ -390,16 +415,6 @@ export function InboxClient({
   );
 
   const isAgentRole = !canManageConversations && canSendMessages;
-
-  const canSendInThisConversation = useMemo(() => {
-    if (!canSendMessages) return false;
-    if (!selectedConversation) return true;
-    if (canManageConversations) return true;
-    const convMode = selectedConversation.mode ?? "solo";
-    if (convMode === "collaborative" || convMode === "queue") return true;
-    const assignedTo = selectedConversation.assignedUserId;
-    return !assignedTo || assignedTo === currentUserId;
-  }, [canSendMessages, canManageConversations, selectedConversation, currentUserId]);
 
   const showTakeOverNotice = useMemo(() => {
     if (!isAgentRole) return false;
@@ -707,6 +722,7 @@ export function InboxClient({
       return [];
     });
     if (fileInputRef.current) fileInputRef.current.value = "";
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: mediaUpload excluded to prevent cleanup loop
   }, [selectedId, clearPendingMediaPreview]);
 
   useEffect(() => {
@@ -803,38 +819,13 @@ export function InboxClient({
     try {
       const res = await templatesApi.list({
         isActive: true,
+        hasWhatsAppSendableVersion: true,
         limit: 50,
         sortBy: "updatedAt",
         sortOrder: "desc",
       });
-      const candidates = (res.items ?? [])
-        .filter((t) => t.isActive)
-        .filter((t) =>
-          (t.channelTemplates ?? []).some((ct) => ct.channel === "WHATSAPP")
-        );
 
-      // List rows often omit or differ on `channelTemplates[].providerStatus`.
-      // Same source of truth as send: `/channel-templates/:id/state` → latestSendableVersion.
-      const approved = await Promise.all(
-        candidates.map(async (t) => {
-          const wa = (t.channelTemplates ?? []).find(
-            (ct) => ct.channel === "WHATSAPP"
-          );
-          if (!wa?.id) return null;
-          try {
-            const state = await channelTemplatesApi.state(wa.id);
-            const v = state.latestSendableVersion;
-            if (v?.status === "PROVIDER_APPROVED") return t;
-          } catch {
-            return null;
-          }
-          return null;
-        })
-      );
-
-      setTemplateOptions(
-        approved.filter((t): t is Template => t != null)
-      );
+      setTemplateOptions(res.items ?? []);
     } catch (error: unknown) {
       setTemplatesError(
         extractApiErrorMessage(error) || "Failed to load templates."
@@ -962,6 +953,7 @@ export function InboxClient({
       prev.forEach((img) => URL.revokeObjectURL(img.previewUrl));
       return [];
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: mediaUpload.cancel is unstable method ref
   }, [useTemplateSend, clearPendingMediaPreview, mediaUpload.cancel]);
 
   const fetchConversations = useCallback(async (
@@ -1476,6 +1468,7 @@ export function InboxClient({
       if (retryTimer) clearTimeout(retryTimer);
       source?.close();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: refreshConversationById excluded to prevent SSE re-subscribe on every conversation change
   }, [fetchConversations, fetchMessages, selectedId, status, workspaceId]);
 
   useEffect(() => {
@@ -2102,44 +2095,71 @@ export function InboxClient({
           description="Contact details appear when you open a conversation."
         />
       ) : (
-        <div className="rounded-none bg-base-100 p-4 space-y-6">
-          <div className="space-y-2">
-            <p className="text-xs text-base-content/55">Name</p>
-            <p className="text-sm text-base-content">
+        <div className="flex flex-col">
+          {/* Hero */}
+          <div className="op-grain relative flex flex-col items-center gap-2 border-b border-base-300 bg-base-200 px-4 py-5">
+            <ContactAvatar
+              name={contactForDetails.name}
+              phone={contactForDetails.phone}
+              size="lg"
+            />
+            <h3 className="text-[16px] font-semibold tracking-[-0.02em]">
               {contactForDetails.name || "Unknown"}
-            </p>
+            </h3>
+            {contactForDetails.status ? (
+              <span className="op-tag">{contactForDetails.status}</span>
+            ) : null}
+            {selectedConversation?.contactId ? (
+              <a
+                href={`/people/contacts/${selectedConversation.contactId}`}
+                className="mt-1 flex items-center gap-1 text-[11px] text-primary hover:underline"
+                title="Open full contact page"
+              >
+                <ExternalLink className="h-3 w-3" /> Full profile
+              </a>
+            ) : null}
           </div>
-          <div className="space-y-2">
-            <p className="text-xs text-base-content/55">Phone</p>
-            <p className="text-sm text-base-content">
-              {contactForDetails.phone || "—"}
-            </p>
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs text-base-content/55">Email</p>
-            <p className="text-sm text-base-content">
-              {contactForDetails.email || "—"}
-            </p>
-          </div>
-          <div className="space-y-2">
-            <p className="text-xs text-base-content/55">Status</p>
-            <p className="text-sm text-base-content">
-              {contactForDetails.status}
-            </p>
+          {/* Contact info */}
+          <div className="border-b border-base-300 px-4 py-3">
+            <div className="flex items-start gap-3 py-1.5">
+              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
+                <Phone className="h-3 w-3" />
+              </div>
+              <p className="font-mono-op text-[13px] tabular-nums text-base-content">
+                {contactForDetails.phone || "—"}
+              </p>
+            </div>
+            {contactForDetails.email ? (
+              <div className="flex items-start gap-3 py-1.5">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
+                  <Mail className="h-3 w-3" />
+                </div>
+                <a
+                  href={`mailto:${contactForDetails.email}`}
+                  className="text-[13px] text-base-content hover:text-primary transition-colors"
+                >
+                  {contactForDetails.email}
+                </a>
+              </div>
+            ) : null}
           </div>
         </div>
       ),
-    [contactForDetails]
+    [contactForDetails, selectedConversation?.contactId]
   );
 
   const rightPanelContent = useMemo(
     () => (
-      <div className="space-y-3">
+      <div className="flex flex-col">
         {contactDetailsEl}
         {selectedConversation ? (
           <>
-            <div className="rounded-none bg-base-100 p-3 space-y-2">
-              <h3 className="text-sm font-medium">Message search</h3>
+            {/* Message search */}
+            <div className="border-b border-base-300 px-4 py-3">
+              <div className="mb-2 flex items-center gap-2">
+                <SearchIcon className="h-3.5 w-3.5 text-base-content/40" />
+                <span className="op-label">Message search</span>
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   className="input input-bordered input-sm w-full"
@@ -2149,7 +2169,7 @@ export function InboxClient({
                 />
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline"
+                  className="btn btn-sm btn-primary"
                   onClick={runMessageSearch}
                   disabled={messageSearchBusy || !messageSearchQuery.trim()}
                 >
@@ -2157,14 +2177,14 @@ export function InboxClient({
                 </button>
               </div>
               {messageSearchResult ? (
-                <div className="rounded-none p-2 text-xs space-y-1">
-                  <div className="font-mono text-base-content/70">
-                    {messageSearchResult.id}
-                  </div>
-                  <div className="line-clamp-2">{messageSearchResult.text || "—"}</div>
-                  <div className="flex items-center gap-2">
+                <div className="mt-2 rounded-md border border-base-300 bg-base-200 p-2.5 text-[12px]">
+                  <p className="font-mono-op text-[10px] tracking-wider text-base-content/50">
+                    {messageSearchResult.id.slice(0, 12).toUpperCase()}
+                  </p>
+                  <p className="mt-1 line-clamp-2 text-base-content/80">{messageSearchResult.text || "—"}</p>
+                  <div className="mt-2 flex items-center gap-2">
                     <select
-                      className="select select-bordered select-xs"
+                      className="select select-bordered select-xs font-mono-op"
                       value={String(messageSearchResult.status || "SENT").toUpperCase()}
                       onChange={async (event) => {
                         try {
@@ -2209,16 +2229,28 @@ export function InboxClient({
                         });
                       }}
                     >
-                      Refresh thread
+                      Refresh
                     </button>
                   </div>
                 </div>
               ) : null}
             </div>
 
-            <InternalNotesPanel conversationId={selectedConversation.id} />
-            <div className="rounded-none bg-base-100 p-3 space-y-2">
-              <h3 className="text-sm font-medium">Shared Media</h3>
+            {/* Internal notes */}
+            <div className="border-b border-base-300">
+              <div className="flex items-center gap-2 px-4 pt-3 pb-1">
+                <StickyNote className="h-3.5 w-3.5 text-base-content/40" />
+                <span className="op-label">Notes</span>
+              </div>
+              <InternalNotesPanel conversationId={selectedConversation.id} />
+            </div>
+
+            {/* Shared media */}
+            <div className="px-4 py-3">
+              <div className="mb-2 flex items-center gap-2">
+                <ImageIcon className="h-3.5 w-3.5 text-base-content/40" />
+                <span className="op-label">Shared media</span>
+              </div>
               <MediaGallery conversationId={selectedConversation.id} />
             </div>
           </>
@@ -2227,7 +2259,6 @@ export function InboxClient({
     ),
     [
       contactDetailsEl,
-      conversationActionBusy,
       fetchMessages,
       messageSearchBusy,
       messageSearchQuery,
@@ -2335,18 +2366,33 @@ export function InboxClient({
                 </div>
 
                 {/* Filter chip strip */}
-                <div className="flex items-center gap-0">
-                  {/* Scrollable chips with right-fade */}
-                  <div className="relative min-w-0 flex-1">
-                    <div className="flex items-center gap-1 overflow-x-auto px-2 pb-1 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="relative flex items-center">
+                  {/* Left arrow + fade */}
+                  {chipCanScrollLeft ? (
+                    <div className="absolute inset-y-0 left-0 z-10 flex items-center">
+                      <div className="flex h-full items-center bg-gradient-to-r from-base-100 via-base-100 to-transparent pl-0.5 pr-3">
+                        <button
+                          type="button"
+                          className="flex h-6 w-6 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content"
+                          onClick={() => scrollChips("left")}
+                          aria-label="Scroll filters left"
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {/* Scrollable chips */}
+                  <div className="min-w-0 flex-1">
+                    <div ref={chipStripRef} className="flex items-center gap-1 overflow-x-auto px-2 pb-1 pt-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       {/* Status chips — not shown in contactsQueue mode */}
                       {mode !== "contactsQueue" && STATUS_TABS.map((tab) => (
                         <button
                           key={tab}
                           type="button"
                           onClick={() => setStatus(tab)}
-                          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${status === tab
-                            ? "border-primary bg-primary text-primary-content"
+                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${status === tab
+                            ? "border-primary bg-primary/10 text-primary"
                             : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                             }`}
                         >
@@ -2359,8 +2405,8 @@ export function InboxClient({
                           key={f}
                           type="button"
                           onClick={() => setQueueFilter(queueFilter === f ? "all" : f)}
-                          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${queueFilter === f
-                            ? "border-primary bg-primary text-primary-content"
+                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${queueFilter === f
+                            ? "border-primary bg-primary/10 text-primary"
                             : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                             }`}
                         >
@@ -2373,8 +2419,8 @@ export function InboxClient({
                           key={ch.value}
                           type="button"
                           onClick={() => setChannelFilter(channelFilter === ch.value ? null : ch.value)}
-                          className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${channelFilter === ch.value
-                            ? "border-primary bg-primary text-primary-content"
+                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${channelFilter === ch.value
+                            ? "border-primary bg-primary/10 text-primary"
                             : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                             }`}
                         >
@@ -2385,8 +2431,8 @@ export function InboxClient({
                       <button
                         type="button"
                         onClick={() => setAssigneeFilter(assigneeFilter === currentUserId ? null : currentUserId)}
-                        className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${assigneeFilter === currentUserId
-                          ? "border-primary bg-primary text-primary-content"
+                        className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${assigneeFilter === currentUserId
+                          ? "border-primary bg-primary/10 text-primary"
                           : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                           }`}
                       >
@@ -2396,17 +2442,30 @@ export function InboxClient({
                       <button
                         type="button"
                         onClick={() => setAssigneeFilter(assigneeFilter === "__unassigned__" ? null : "__unassigned__")}
-                        className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${assigneeFilter === "__unassigned__"
-                          ? "border-primary bg-primary text-primary-content"
+                        className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${assigneeFilter === "__unassigned__"
+                          ? "border-primary bg-primary/10 text-primary"
                           : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                           }`}
                       >
                         Unassigned
                       </button>
                     </div>
-                    {/* Right fade to signal more chips */}
-                    <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-base-100 to-transparent" />
                   </div>
+                  {/* Right arrow + fade */}
+                  {chipCanScrollRight ? (
+                    <div className="absolute inset-y-0 right-0 z-10 flex items-center">
+                      <div className="flex h-full items-center bg-gradient-to-l from-base-100 via-base-100 to-transparent pl-3 pr-0.5">
+                        <button
+                          type="button"
+                          className="flex h-6 w-6 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/60 transition-colors hover:bg-base-300 hover:text-base-content"
+                          onClick={() => scrollChips("right")}
+                          aria-label="Scroll filters right"
+                        >
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {/* Filter icon for tags */}
                   <button
@@ -2440,8 +2499,8 @@ export function InboxClient({
                                   : [...prev, tag.id]
                               )
                             }
-                            className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs transition-colors ${tagFilter.includes(tag.id)
-                              ? "border-primary bg-primary text-primary-content"
+                            className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${tagFilter.includes(tag.id)
+                              ? "border-primary bg-primary/10 text-primary"
                               : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                               }`}
                             style={
@@ -2543,7 +2602,7 @@ export function InboxClient({
                                 {title}
                               </span>
                               {hasUnread ? (
-                                <span className="badge badge-primary badge-xs shrink-0">
+                                <span className="font-mono-op flex min-w-[18px] shrink-0 items-center justify-center rounded-[3px] bg-primary px-1 text-[10px] font-semibold leading-[16px] text-primary-content tabular-nums">
                                   {conversation.unreadCount}
                                 </span>
                               ) : null}
@@ -2582,7 +2641,7 @@ export function InboxClient({
                   <>
                     <ul className="space-y-2">
                       {starredMessages.map((msg) => (
-                        <li key={msg.id} className="rounded-box border border-base-300 bg-base-100 p-3">
+                        <li key={msg.id} className="card bg-base-100 border border-base-300 p-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-xs font-medium text-base-content/70">
@@ -2618,7 +2677,7 @@ export function InboxClient({
                   <>
                     <ul className="space-y-2">
                       {scheduledMessages.map((msg) => (
-                        <li key={msg.id} className="rounded-box border border-base-300 bg-base-100 p-3">
+                        <li key={msg.id} className="card bg-base-100 border border-base-300 p-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-xs font-medium text-base-content/70">
@@ -3037,7 +3096,7 @@ export function InboxClient({
                         </div>
                       ) : null}
                       {policyError ? (
-                        <div role="alert" className="alert alert-warning alert-soft py-2 text-sm">
+                        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
                           {policyError}
                         </div>
                       ) : null}
@@ -3050,9 +3109,7 @@ export function InboxClient({
                           }
                           {...(freeChatPolicyTip ? { "data-tip": freeChatPolicyTip } : {})}
                         >
-                          <span className="badge badge-warning badge-outline badge-sm shrink-0">
-                            Templates only
-                          </span>
+                          <span className="op-tag op-tag-warn shrink-0">Templates only</span>
                           <span className="truncate text-[10px] text-base-content/55">
                             Outside 24h window
                           </span>
@@ -3106,7 +3163,7 @@ export function InboxClient({
                           className={`space-y-2 ${!templateOnlyMode ? "rounded-none bg-base-100 p-3" : ""}`}
                         >
                           {templatesError ? (
-                            <div role="alert" className="alert alert-warning alert-soft py-2 text-sm">
+                            <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
                               {templatesError}
                             </div>
                           ) : null}
@@ -3163,7 +3220,7 @@ export function InboxClient({
                                 ) : !inboxTemplateVersionDetail ? (
                                   <div
                                     role="alert"
-                                    className="alert alert-warning alert-soft py-2 text-sm"
+                                    className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm"
                                   >
                                     Could not load template details. Try re-selecting the
                                     template.
@@ -3219,13 +3276,9 @@ export function InboxClient({
                                             }}
                                           />
                                           {templateHeaderMediaId ? (
-                                            <span className="badge badge-success badge-outline">
-                                              Ready
-                                            </span>
+                                            <span className="op-tag op-tag-ok">Ready</span>
                                           ) : (
-                                            <span className="text-xs text-warning">
-                                              Required
-                                            </span>
+                                            <span className="op-tag op-tag-warn">Required</span>
                                           )}
                                         </div>
                                       </div>
@@ -3309,7 +3362,7 @@ export function InboxClient({
                                     {templateBindingError ? (
                                       <div
                                         role="alert"
-                                        className="alert alert-error text-sm py-2"
+                                        className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm"
                                       >
                                         {templateBindingError}
                                       </div>
@@ -3371,7 +3424,7 @@ export function InboxClient({
                     </div>
                   ) : null}
                   {mediaUpload.error ? (
-                    <div role="alert" className="alert alert-warning alert-soft text-sm py-2">
+                    <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
                       {mediaUpload.error}
                     </div>
                   ) : null}
@@ -3513,7 +3566,7 @@ export function InboxClient({
                     {showEmojiPicker && (
                       <div
                         ref={emojiPickerRef}
-                        className="absolute bottom-full left-0 z-50 mb-2"
+                        className="emoji-mart-scope absolute bottom-full left-0 z-50 mb-2"
                       >
                         <Picker
                           data={emojiData}
@@ -3846,7 +3899,7 @@ export function InboxClient({
           </label>
 
           {startChatError ? (
-            <div role="alert" className="alert alert-warning alert-soft mb-3 text-sm">
+            <div role="alert" className="mb-3 rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
               {startChatError}
             </div>
           ) : null}

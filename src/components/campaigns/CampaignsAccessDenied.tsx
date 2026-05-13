@@ -16,7 +16,7 @@ export function CampaignsAccessDenied({
   const mailto = `mailto:?subject=${subject}&body=${body}`;
 
   return (
-    <div className="mx-auto max-w-md space-y-6 rounded-box border border-base-300 bg-base-100 px-6 py-8 text-center">
+    <div className="mx-auto max-w-md space-y-6 card bg-base-100 border border-base-300 px-6 py-8 text-center">
       <div className="space-y-2">
         <h2 className="text-lg font-semibold text-base-content">
           No access to campaigns

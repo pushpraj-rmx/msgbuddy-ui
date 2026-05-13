@@ -18,7 +18,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(String.fromCharCode(...new Uint8Array(buffer)));
 }
 
-async function doSubscribe(workspaceId: string): Promise<void> {
+async function doSubscribe(): Promise<void> {
   const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   if (!vapidKey) return;
 
@@ -59,6 +59,7 @@ export function usePushSubscription(workspaceId: string) {
   const [permission, setPermission] = useState<NotificationPermission>("default");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR hydration guard: Notification.permission unavailable during SSR
     setPermission(getInitialPermission());
   }, []);
 
@@ -72,7 +73,7 @@ export function usePushSubscription(workspaceId: string) {
     ) {
       return;
     }
-    doSubscribe(workspaceId).catch(console.error);
+    doSubscribe().catch(console.error);
   }, [workspaceId, permission]);
 
   // Ask for permission then subscribe — call this from a user gesture
@@ -82,9 +83,9 @@ export function usePushSubscription(workspaceId: string) {
     const result = await Notification.requestPermission();
     setPermission(result);
     if (result === "granted") {
-      await doSubscribe(workspaceId);
+      await doSubscribe();
     }
-  }, [workspaceId]);
+  }, []);
 
   return { permission, requestAndSubscribe };
 }

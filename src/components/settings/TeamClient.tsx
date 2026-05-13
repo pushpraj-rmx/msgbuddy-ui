@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useRouter } from "next/navigation";
 import { workspaceApi, type WorkspaceMemberResponseDto } from "@/lib/api";
 import {
@@ -9,6 +10,7 @@ import {
   workspaceRolePermissionSummary,
 } from "@/lib/workspace-role-permissions";
 import type { WorkspaceRole } from "@/lib/types";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 type MemberRow = {
   id: string;
@@ -69,6 +71,7 @@ export function TeamClient({
 
   const [inviteUserId, setInviteUserId] = useState("");
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("AGENT");
+  const [confirmRemove, setConfirmRemove] = useState<{ userId: string; rowId: string } | null>(null);
 
   const sorted = useMemo(() => {
     const copy = [...members];
@@ -126,8 +129,6 @@ export function TeamClient({
 
   const onRemove = async (targetUserId: string, rowId: string) => {
     if (!canManage || !targetUserId) return;
-    const ok = window.confirm("Remove this member from the workspace?");
-    if (!ok) return;
     setBusyId(rowId);
     setError(null);
     try {
@@ -142,45 +143,37 @@ export function TeamClient({
   };
 
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-4">
+    <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
       {error ? (
-        <div role="alert" className="alert alert-error alert-soft">
-          <span className="text-sm">{error}</span>
+        <div role="alert" className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-100 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[13px]">{error}</p>
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h2 className="text-base font-medium">Members</h2>
-          <p className="text-sm text-base-content/70">
-            Add members by <span className="font-mono">userId</span> (backend expects
-            <span className="font-mono"> AddMemberDto.userId</span>).
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <label className="form-control w-full sm:w-64">
-            <div className="label">
-              <span className="label-text">User ID</span>
-            </div>
+      {canManage && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="form-control flex-1 min-w-[180px] max-w-xs">
+            <span className="op-label mb-1 flex items-center gap-1.5">
+              User ID
+              <InfoTip tip="Find user IDs in Platform → Users, or ask the user for their account email" />
+            </span>
             <input
-              className="input input-bordered w-full"
+              className="input input-bordered input-sm w-full font-mono"
               placeholder="clx_user_123"
               value={inviteUserId}
               onChange={(e) => setInviteUserId(e.target.value)}
-              disabled={!canManage || inviteBusy}
+              disabled={inviteBusy}
             />
           </label>
 
-          <label className="form-control w-full sm:w-40">
-            <div className="label">
-              <span className="label-text">Role</span>
-            </div>
+          <label className="form-control w-28">
+            <span className="op-label mb-1">Role</span>
             <select
-              className="select select-bordered w-full"
+              className="select select-bordered select-sm w-full"
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value as WorkspaceRole)}
-              disabled={!canManage || inviteBusy}
+              disabled={inviteBusy}
             >
               {ROLES.map((r) => (
                 <option key={r} value={r}>
@@ -192,26 +185,33 @@ export function TeamClient({
 
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-primary btn-sm"
             onClick={onInvite}
-            disabled={!canManage || inviteBusy || !inviteUserId.trim()}
+            disabled={inviteBusy || !inviteUserId.trim()}
           >
-            {inviteBusy ? "Adding..." : "Add member"}
+            {inviteBusy ? (
+              <>
+                <span className="loading loading-spinner loading-xs" />
+                Adding…
+              </>
+            ) : (
+              "Add"
+            )}
           </button>
         </div>
-      </div>
+      )}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr>
-              <th className="text-xs font-medium text-base-content/60">User</th>
-              <th className="text-xs font-medium text-base-content/60">Role</th>
-              <th className="text-xs font-medium text-base-content/60 min-w-[12rem] max-w-[18rem]">
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">User</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Role</th>
+              <th className="op-label min-w-[12rem] max-w-[18rem] px-3 py-2.5 text-left font-medium">
                 Permissions
               </th>
-              <th className="text-xs font-medium text-base-content/60">Status</th>
-              <th className="text-right text-xs font-medium text-base-content/60">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Status</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium">
                 Actions
               </th>
             </tr>
@@ -229,29 +229,18 @@ export function TeamClient({
                 canManage && !isSelf && role !== "OWNER" && !!targetUserId;
 
               return (
-                <tr key={member.id}>
-                  <td className="text-sm">
-                    <div className="flex flex-col">
-                      <span className="font-medium">
-                        {member.user?.email || member.user?.name || "Unknown"}
-                      </span>
-                      <span className="text-xs text-base-content/60">
-                        memberId: <span className="font-mono">{member.id}</span>
-                        {member.user?.id ? (
-                          <>
-                            {" "}
-                            · userId:{" "}
-                            <span className="font-mono">{member.user.id}</span>
-                          </>
-                        ) : null}
-                      </span>
-                    </div>
+                <tr key={member.id} className="border-b border-base-300 last:border-b-0">
+                  <td className="px-3 py-2.5 align-top">
+                    <span className="text-[13px] font-medium block">
+                      {member.user?.email || member.user?.name || "Unknown"}
+                    </span>
+                    {isSelf && <span className="op-tag op-tag-info ml-1">you</span>}
                   </td>
 
-                  <td className="text-sm">
+                  <td className="px-3 py-2.5 align-top">
                     {canManage ? (
                       <select
-                        className="select select-bordered select-sm w-36"
+                        className="select select-bordered select-xs w-28"
                         value={ROLES.includes(role as WorkspaceRole) ? role : "AGENT"}
                         onChange={(e) =>
                           onChangeRole(
@@ -269,13 +258,13 @@ export function TeamClient({
                         ))}
                       </select>
                     ) : (
-                      <span className="badge badge-ghost">{member.role}</span>
+                      <span className="op-tag">{member.role}</span>
                     )}
                   </td>
 
-                  <td className="text-sm align-top">
+                  <td className="px-3 py-2.5 align-top min-w-[12rem] max-w-[18rem]">
                     <p
-                      className="text-xs leading-snug text-base-content/80 line-clamp-3"
+                      className="text-[11px] leading-snug text-base-content/55 line-clamp-2"
                       title={
                         rolePermissions.length
                           ? rolePermissions.join("\n")
@@ -286,23 +275,25 @@ export function TeamClient({
                     </p>
                   </td>
 
-                  <td className="text-sm">
+                  <td className="px-3 py-2.5 align-top">
                     {member.isActive === false ? (
-                      <span className="badge badge-warning badge-soft">inactive</span>
+                      <span className="op-tag op-tag-warn">inactive</span>
                     ) : (
-                      <span className="badge badge-success badge-soft">active</span>
+                      <span className="op-tag op-tag-ok">active</span>
                     )}
                   </td>
 
-                  <td className="text-right">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      onClick={() => onRemove(targetUserId, member.id)}
-                      disabled={!canRemove || isBusy}
-                    >
-                      {isBusy ? "Working..." : "Remove"}
-                    </button>
+                  <td className="px-3 py-2.5 text-right align-top">
+                    {canRemove ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs text-error/70 hover:text-error"
+                        onClick={() => setConfirmRemove({ userId: targetUserId, rowId: member.id })}
+                        disabled={isBusy}
+                      >
+                        {isBusy ? <span className="loading loading-spinner loading-xs" /> : "Remove"}
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               );
@@ -310,6 +301,21 @@ export function TeamClient({
           </tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={confirmRemove !== null}
+        title="Remove member"
+        description="Remove this member from the workspace?"
+        confirmLabel="Remove"
+        tone="danger"
+        onConfirm={() => {
+          if (confirmRemove) {
+            onRemove(confirmRemove.userId, confirmRemove.rowId);
+          }
+          setConfirmRemove(null);
+        }}
+        onClose={() => setConfirmRemove(null)}
+      />
     </div>
   );
 }

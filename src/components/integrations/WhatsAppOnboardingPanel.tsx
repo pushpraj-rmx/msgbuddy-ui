@@ -222,12 +222,12 @@ export function WhatsAppOnboardingPanel({
         ) : (
           <>
             {onboardingQuery.isError && !showRegister ? (
-              <div role="alert" className="alert alert-warning alert-soft">
+              <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
                 <span>{getErrorMessage(onboardingQuery.error)}</span>
               </div>
             ) : null}
             {onboardingQuery.isError && showRegister ? (
-              <div role="alert" className="alert alert-warning alert-soft text-sm">
+              <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
                 <span>
                   Could not load live onboarding status ({getErrorMessage(onboardingQuery.error)}).
                   You can still complete registration if your number is pending.
@@ -239,26 +239,26 @@ export function WhatsAppOnboardingPanel({
               <>
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-base-content/60">Phase</span>
-              <span className="badge badge-outline">{phase ?? "—"}</span>
+              <span className="op-tag">{phase ?? "—"}</span>
               {registrationPending === true ? (
-                <span className="badge badge-warning badge-outline">Registration pending</span>
+                <span className="op-tag op-tag-warn">Registration pending</span>
               ) : null}
               {metaPhoneStatus ? (
-                <span className="badge badge-ghost">Meta phone: {metaPhoneStatus}</span>
+                <span className="op-tag">Meta phone: {metaPhoneStatus}</span>
               ) : null}
               {metaVerificationBadge ? (
-                <span className="badge badge-ghost">Meta verification: {metaVerificationBadge}</span>
+                <span className="op-tag">Meta verification: {metaVerificationBadge}</span>
               ) : null}
             </div>
 
             {localError ? (
-              <div role="alert" className="alert alert-error alert-soft text-sm">
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
                 <span>{localError}</span>
               </div>
             ) : null}
 
             {isFailed ? (
-              <div role="alert" className="alert alert-warning alert-soft">
+              <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
                 <span>
                   Onboarding failed. Fix the issue in Meta Business Manager if needed, then try
                   again with the correct two-step PIN below.
@@ -423,7 +423,7 @@ export function WhatsAppOnboardingPanel({
 
             {showComplete ? (
               <div className="space-y-2">
-                <div role="alert" className="alert alert-success alert-soft">
+                <div role="alert" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-4 py-3">
                   <span>This number completed Meta verification for Cloud API.</span>
                 </div>
                 <button

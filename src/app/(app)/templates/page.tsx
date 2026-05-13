@@ -16,7 +16,7 @@ export default async function TemplatesPage() {
           title="Templates"
           description="Create and manage message templates."
         />
-        <div role="alert" className="alert alert-warning">
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <span>You don&apos;t have permission to view templates.</span>
         </div>
       </PageContainer>
@@ -29,7 +29,7 @@ export default async function TemplatesPage() {
         title="Templates"
         description="Create and manage message templates. Search, filter, sort, and preview on demand."
       />
-      <TemplatesClient meRole={String(me.role)} />
+      <TemplatesClient meRole={String(me.role)} workspaceId={me.workspace.id} />
     </PageContainer>
   );
 }

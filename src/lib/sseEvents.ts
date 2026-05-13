@@ -12,6 +12,7 @@ export const SseWireType = {
   conversationPresenceUpdated: "conversation.presence.updated",
   contactUpdated: "contact.updated",
   contactBulkUpdated: "contact.bulk_updated",
+  channelTemplateStatusChanged: "channel_template.status.changed",
   channelTemplateCategoryPending: "channel_template.category.pending",
   whatsappAccountRestriction: "whatsapp.account.restriction",
   notificationCreated: "notification.created",
@@ -151,6 +152,13 @@ export function isContactBulkUpdated(type: string): boolean {
   return (
     type === SseWireType.contactBulkUpdated ||
     type === "CONTACT_BULK_UPDATED"
+  );
+}
+
+export function isChannelTemplateStatusChanged(type: string): boolean {
+  return (
+    type === SseWireType.channelTemplateStatusChanged ||
+    type === "CHANNEL_TEMPLATE_STATUS_CHANGED"
   );
 }
 

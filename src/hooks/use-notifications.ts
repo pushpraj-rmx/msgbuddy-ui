@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useMutation,
   useQuery,
@@ -95,56 +95,97 @@ export function useNotifications(options?: {
   };
 }
 
-export function useNotificationSSE(workspaceId: string | null | undefined) {
+export type SseConnectionState = "connecting" | "live" | "reconnecting" | "offline";
+
+export function useNotificationSSE(workspaceId: string | null | undefined): {
+  connectionState: SseConnectionState;
+} {
   const queryClient = useQueryClient();
-  /** Dedupe SSE replays/reconnects so unread count is not incremented twice for the same id. */
   const seenNotificationIdsRef = useRef<Set<string>>(new Set());
+  const [connectionState, setConnectionState] = useState<SseConnectionState>("connecting");
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryDelayRef = useRef(1000);
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync connection state when workspaceId becomes null
+      setConnectionState("offline");
+      return;
+    }
 
+    let cancelled = false;
     seenNotificationIdsRef.current = new Set();
+    retryDelayRef.current = 1000;
 
-    const es = new EventSource(`/api/sse/workspace/${workspaceId}`);
+    function connect() {
+      if (cancelled) return;
+      setConnectionState("connecting");
 
-    es.onmessage = (event) => {
-      const parsed = parseWorkspaceSseEvent(event.data);
-      if (!parsed || !isNotificationCreated(parsed.type)) return;
+      const es = new EventSource(`/api/sse/workspace/${workspaceId}`);
 
-      const payload = parsed.data;
-      const notification = normalizeNotification(
-        (payload as Record<string, unknown>).notification
-      );
-      if (!notification) return;
+      es.onopen = () => {
+        if (cancelled) { es.close(); return; }
+        setConnectionState("live");
+        retryDelayRef.current = 1000; // reset backoff on successful connect
+      };
 
-      if (seenNotificationIdsRef.current.has(notification.id)) {
-        return;
-      }
-      seenNotificationIdsRef.current.add(notification.id);
+      es.onmessage = (event) => {
+        const parsed = parseWorkspaceSseEvent(event.data);
+        if (!parsed || !isNotificationCreated(parsed.type)) return;
 
-      queryClient.setQueryData<{ count: number }>(
-        notificationQueryKeys.unreadCount(),
-        (current) => ({ count: (current?.count ?? 0) + 1 })
-      );
+        const payload = parsed.data;
+        const notification = normalizeNotification(
+          (payload as Record<string, unknown>).notification
+        );
+        if (!notification) return;
 
-      queryClient.setQueriesData<NotificationsListResponse>(
-        { queryKey: [...notificationQueryKeys.all, "list"] as QueryKey },
-        (current) => {
-          if (!current) return current;
-          const existingIdx = current.items.findIndex((it) => it.id === notification.id);
-          if (existingIdx >= 0) return current;
+        if (seenNotificationIdsRef.current.has(notification.id)) return;
+        seenNotificationIdsRef.current.add(notification.id);
 
-          return {
-            ...current,
-            total: current.total + 1,
-            items: [notification, ...current.items].slice(0, current.limit),
-          };
-        }
-      );
-    };
+        queryClient.setQueryData<{ count: number }>(
+          notificationQueryKeys.unreadCount(),
+          (current) => ({ count: (current?.count ?? 0) + 1 })
+        );
+
+        queryClient.setQueriesData<NotificationsListResponse>(
+          { queryKey: [...notificationQueryKeys.all, "list"] as QueryKey },
+          (current) => {
+            if (!current) return current;
+            const existingIdx = current.items.findIndex((it) => it.id === notification.id);
+            if (existingIdx >= 0) return current;
+            return {
+              ...current,
+              total: current.total + 1,
+              items: [notification, ...current.items].slice(0, current.limit),
+            };
+          }
+        );
+      };
+
+      es.onerror = () => {
+        es.close();
+        if (cancelled) return;
+        setConnectionState("reconnecting");
+        const delay = Math.min(retryDelayRef.current, 30_000);
+        retryDelayRef.current = delay * 1.5; // exponential backoff
+        retryRef.current = setTimeout(connect, delay);
+      };
+
+      // Cleanup for this specific EventSource
+      return () => {
+        es.close();
+      };
+    }
+
+    const closeEs = connect();
 
     return () => {
-      es.close();
+      cancelled = true;
+      closeEs?.();
+      if (retryRef.current) clearTimeout(retryRef.current);
+      setConnectionState("offline");
     };
   }, [workspaceId, queryClient]);
+
+  return { connectionState };
 }

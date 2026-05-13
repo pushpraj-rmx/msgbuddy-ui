@@ -24,25 +24,30 @@ export function TrialBanner({ workspace }: { workspace: Workspace }) {
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 px-4 py-2 text-sm ${
+      className={`flex items-center justify-between gap-3 border-b px-4 py-2 text-[13px] ${
         urgent
-          ? "bg-warning/15 text-warning-content"
-          : "bg-primary/10 text-primary-content"
+          ? "border-warning/40 bg-warning/10 text-base-content"
+          : "border-base-300 bg-base-200 text-base-content"
       }`}
     >
-      <p>
-        {days === 0 ? (
-          <span className="font-medium">
-            Your Growth trial expires today.
-          </span>
-        ) : (
-          <>
-            <span className="font-medium">{days} day{days !== 1 ? "s" : ""}</span>{" "}
-            left in your Growth trial.
-          </>
-        )}{" "}
-        Upgrade to keep all features.
-      </p>
+      <div className="flex items-center gap-2.5">
+        <span
+          className={`op-label ${urgent ? "text-warning" : "text-primary"}`}
+        >
+          {urgent ? "trial · ending" : "trial"}
+        </span>
+        <p className="text-base-content/85">
+          {days === 0 ? (
+            <span className="font-semibold">Your Growth trial expires today.</span>
+          ) : (
+            <>
+              <span className="font-mono-op font-semibold tabular-nums">{days}</span>{" "}
+              day{days !== 1 ? "s" : ""} left in your Growth trial.
+            </>
+          )}{" "}
+          <span className="text-base-content/60">Upgrade to keep all features (auto-downgrades to Free after expiry).</span>
+        </p>
+      </div>
       <div className="flex items-center gap-2">
         <Link
           href="/billing#plans"

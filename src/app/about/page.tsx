@@ -3,37 +3,31 @@ import { MarketingPageShell } from "@/components/marketing/MarketingPageShell";
 export default async function AboutPage() {
   return (
     <MarketingPageShell>
-      <div className="space-y-8">
-        <div className="space-y-3">
-          <span className="badge badge-primary badge-outline">About</span>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+      <div className="space-y-10 py-10">
+        <div className="space-y-4">
+          <span className="op-section-title">About</span>
+          <h1 className="text-[36px] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[44px]">
             Built for teams that run on conversations
           </h1>
-          <p className="max-w-3xl text-base-content/80">
+          <p className="max-w-3xl text-[15px] text-base-content/70">
             MsgBuddy helps operators, support teams, and marketers coordinate
             high-quality WhatsApp communication from a single workspace.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-box border border-base-300 bg-base-200 p-5">
-            <p className="text-sm font-medium">Mission</p>
-            <p className="mt-2 text-sm text-base-content/70">
-              Make business messaging clear, reliable, and measurable.
-            </p>
-          </div>
-          <div className="rounded-box border border-base-300 bg-base-200 p-5">
-            <p className="text-sm font-medium">Approach</p>
-            <p className="mt-2 text-sm text-base-content/70">
-              Focus on practical workflows and operational visibility.
-            </p>
-          </div>
-          <div className="rounded-box border border-base-300 bg-base-200 p-5">
-            <p className="text-sm font-medium">Product</p>
-            <p className="mt-2 text-sm text-base-content/70">
-              Inbox, contacts, campaigns, templates, and analytics in one app.
-            </p>
-          </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {[
+            { label: "Mission",  body: "Make business messaging clear, reliable, and measurable." },
+            { label: "Approach", body: "Focus on practical workflows and operational visibility." },
+            { label: "Product",  body: "Inbox, contacts, campaigns, templates, and analytics in one app." },
+          ].map((item) => (
+            <div key={item.label} className="op-grain relative rounded-box border border-base-300 bg-base-200 p-6">
+              <span className="op-label">{item.label}</span>
+              <p className="mt-3 text-[14px] leading-relaxed text-base-content/75">
+                {item.body}
+              </p>
+            </div>
+          ))}
         </div>
       </div>
     </MarketingPageShell>

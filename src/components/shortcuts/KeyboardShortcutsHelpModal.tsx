@@ -36,9 +36,10 @@ export function KeyboardShortcutsHelpModal({
       <div className="modal-box max-h-[min(85dvh,32rem)] max-w-lg overflow-y-auto">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold">Keyboard shortcuts</h2>
-            <p className="mt-1 text-sm text-base-content/65">
-              Press <kbd className="kbd kbd-sm">?</kbd> anytime outside of text fields to
+            <span className="op-label mb-1 block">reference</span>
+            <h2 className="text-[17px] font-semibold tracking-[-0.015em]">Keyboard shortcuts</h2>
+            <p className="mt-1.5 text-[12.5px] text-base-content/65">
+              Press <span className="op-kbd">?</span> anytime outside of text fields to
               open this dialog.
             </p>
           </div>
@@ -53,21 +54,21 @@ export function KeyboardShortcutsHelpModal({
           </form>
         </div>
 
-        <div className="overflow-hidden rounded-box border border-base-300">
-          <table className="table table-sm">
+        <div className="overflow-hidden rounded-box border border-base-300 bg-base-200">
+          <table className="w-full text-[12.5px]">
             <thead>
-              <tr className="border-b border-base-300 bg-base-200/60">
-                <th className="w-[36%]">Shortcut</th>
-                <th>Action</th>
+              <tr className="border-b border-base-300 bg-base-100">
+                <th className="op-label w-[36%] px-3 py-2.5 text-left font-medium">Shortcut</th>
+                <th className="op-label px-3 py-2.5 text-left font-medium">Action</th>
               </tr>
             </thead>
             <tbody>
               {KEYBOARD_SHORTCUTS_CATALOG.map((row, idx) => (
-                <tr key={idx} className="border-base-300">
-                  <td className="align-top font-mono text-sm whitespace-nowrap">
-                    <kbd className="kbd kbd-sm">{row.keys}</kbd>
+                <tr key={idx} className="border-b border-base-300 last:border-b-0">
+                  <td className="whitespace-nowrap px-3 py-2.5 align-top">
+                    <span className="op-kbd">{row.keys}</span>
                   </td>
-                  <td className="text-sm text-base-content/90">{row.description}</td>
+                  <td className="px-3 py-2.5 text-base-content/85">{row.description}</td>
                 </tr>
               ))}
             </tbody>

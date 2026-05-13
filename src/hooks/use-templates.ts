@@ -36,6 +36,7 @@ export const channelTemplateKeys = {
 export type TemplatesListParams = {
   q?: string;
   isActive?: boolean;
+  hasWhatsAppSendableVersion?: boolean;
   page?: number;
   limit?: number;
   sortBy?: string;

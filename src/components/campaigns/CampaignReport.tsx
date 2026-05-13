@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { analyticsApi, campaignsApi } from "@/lib/api";
 import { getApiError } from "@/lib/api-error";
+import { StatusTag } from "@/components/ui/StatusTag";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 // ========== Types ==========
 
@@ -81,10 +83,12 @@ function Stat({
   label,
   value,
   accent,
+  hint,
 }: {
   label: string;
   value: string | number;
   accent?: "success" | "error" | "warning" | "info";
+  hint?: string;
 }) {
   const cls =
     accent === "success"
@@ -97,11 +101,12 @@ function Stat({
             ? "text-info"
             : "text-base-content";
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-base-content/55">
+    <div className="rounded-box border border-base-300 bg-base-200 px-4 py-3">
+      <p className="op-label flex items-center gap-1.5">
         {label}
+        {hint ? <InfoTip tip={hint} /> : null}
       </p>
-      <p className={`mt-1 text-2xl font-semibold tabular-nums ${cls}`}>{value}</p>
+      <p className={`mt-1 font-mono-op text-[22px] font-semibold tabular-nums ${cls}`}>{value}</p>
     </div>
   );
 }
@@ -350,7 +355,7 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
 
   if (error) {
     return (
-      <div role="alert" className="alert alert-warning">
+      <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
         <span>{error}</span>
         <button type="button" className="btn btn-sm" onClick={() => void fetchReport()}>
           Retry
@@ -367,13 +372,13 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
       <section className="space-y-3">
         <SectionHeader title="Summary" description="Overall campaign performance" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Total contacts" value={summary?.totalContacts.toLocaleString() ?? 0} />
-          <Stat label="Sent" value={summary?.sent.toLocaleString() ?? 0} />
-          <Stat label="Delivered" value={summary?.delivered.toLocaleString() ?? 0} accent="success" />
-          <Stat label="Read" value={summary?.read.toLocaleString() ?? 0} accent="info" />
-          <Stat label="Failed" value={summary?.failed.toLocaleString() ?? 0} accent={summary && summary.failed > 0 ? "error" : undefined} />
-          <Stat label="Skipped" value={summary?.skipped.toLocaleString() ?? 0} accent={summary && summary.skipped > 0 ? "warning" : undefined} />
-          <Stat label="Replied" value={summary?.replied.toLocaleString() ?? 0} accent="success" />
+          <Stat label="Total contacts" value={summary?.totalContacts.toLocaleString() ?? 0} hint="Total recipients targeted by this campaign" />
+          <Stat label="Sent" value={summary?.sent.toLocaleString() ?? 0} hint="Messages submitted to the channel provider" />
+          <Stat label="Delivered" value={summary?.delivered.toLocaleString() ?? 0} accent="success" hint="Accepted and delivered to the recipient's device" />
+          <Stat label="Read" value={summary?.read.toLocaleString() ?? 0} accent="info" hint="Opened by the recipient (WhatsApp read receipts)" />
+          <Stat label="Failed" value={summary?.failed.toLocaleString() ?? 0} accent={summary && summary.failed > 0 ? "error" : undefined} hint="Messages that could not be delivered" />
+          <Stat label="Skipped" value={summary?.skipped.toLocaleString() ?? 0} accent={summary && summary.skipped > 0 ? "warning" : undefined} hint="Contacts excluded by policy or opt-out" />
+          <Stat label="Replied" value={summary?.replied.toLocaleString() ?? 0} accent="success" hint="Recipients who sent a response" />
         </div>
       </section>
 
@@ -383,7 +388,7 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
       {funnel.length > 0 ? (
         <section className="space-y-3">
           <SectionHeader title="Funnel" description="Message delivery progression" />
-          <div className="rounded-box border border-base-300 bg-base-100 p-4">
+          <div className="card bg-base-100 border border-base-300 p-4">
             <FunnelChart stages={funnel} />
           </div>
         </section>
@@ -396,9 +401,9 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
         <section className="space-y-3">
           <SectionHeader title="Engagement" />
           <div className="grid gap-3 sm:grid-cols-3">
-            <Stat label="Delivery rate" value={`${engagement.deliveryRate}%`} accent="success" />
-            <Stat label="Read rate" value={`${engagement.readRate}%`} accent="info" />
-            <Stat label="Reply rate" value={`${engagement.replyRate}%`} accent="success" />
+            <Stat label="Delivery rate" value={`${engagement.deliveryRate}%`} accent="success" hint="Delivered ÷ sent × 100" />
+            <Stat label="Read rate" value={`${engagement.readRate}%`} accent="info" hint="Read ÷ delivered × 100 (WhatsApp only)" />
+            <Stat label="Reply rate" value={`${engagement.replyRate}%`} accent="success" hint="Replied ÷ delivered × 100" />
           </div>
         </section>
       ) : null}
@@ -438,7 +443,7 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
       {timeline.length > 0 ? (
         <section className="space-y-3">
           <SectionHeader title="Timeline" description="Messages and replies over time" />
-          <div className="rounded-box border border-base-300 bg-base-100 p-4">
+          <div className="card bg-base-100 border border-base-300 p-4">
             <TimelineChart points={timeline} />
           </div>
         </section>
@@ -526,14 +531,14 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
               </thead>
               <tbody>
                 {runs.map((run) => {
-                  const statusTone =
+                  const statusOpTone: "success" | "danger" | "running" | "neutral" =
                     run.status === "COMPLETED"
-                      ? "badge-success"
+                      ? "success"
                       : run.status === "FAILED"
-                        ? "badge-error"
+                        ? "danger"
                         : run.status === "RUNNING"
-                          ? "badge-info"
-                          : "badge-neutral";
+                          ? "running"
+                          : "neutral";
                   const dur =
                     run.durationMinutes != null
                       ? run.durationMinutes < 1
@@ -543,7 +548,7 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
                   return (
                     <tr key={run.runId} className="border-base-300">
                       <td className="font-medium">#{run.runNumber}</td>
-                      <td><span className={`badge badge-xs ${statusTone}`}>{run.status}</span></td>
+                      <td><StatusTag tone={statusOpTone}>{run.status}</StatusTag></td>
                       <td className="text-right tabular-nums">{run.totalJobs.toLocaleString()}</td>
                       <td className="text-right tabular-nums">{run.completedJobs.toLocaleString()}</td>
                       <td className="text-right tabular-nums">{run.failedJobs.toLocaleString()}</td>
@@ -622,25 +627,25 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
                 </tr>
               ) : null}
               {contacts.map((c) => {
-                const jobTone =
+                const jobOpTone: "success" | "danger" | "warning" | "neutral" =
                   c.jobStatus === "COMPLETED"
-                    ? "badge-success"
+                    ? "success"
                     : c.jobStatus === "FAILED"
-                      ? "badge-error"
+                      ? "danger"
                       : c.jobStatus === "SKIPPED"
-                        ? "badge-warning"
-                        : "badge-neutral";
+                        ? "warning"
+                        : "neutral";
                 const msgStatus = c.message?.status;
-                const msgTone =
+                const msgOpTone: "info" | "success" | "danger" | "neutral" | null =
                   msgStatus === "READ"
-                    ? "badge-info"
+                    ? "info"
                     : msgStatus === "DELIVERED"
-                      ? "badge-success"
+                      ? "success"
                       : msgStatus === "FAILED"
-                        ? "badge-error"
+                        ? "danger"
                         : msgStatus
-                          ? "badge-neutral"
-                          : "";
+                          ? "neutral"
+                          : null;
                 return (
                   <tr key={c.jobId} className="border-base-300 align-top">
                     <td>
@@ -659,11 +664,11 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
                       ) : null}
                     </td>
                     <td>
-                      <span className={`badge badge-xs ${jobTone}`}>{c.jobStatus}</span>
+                      <StatusTag tone={jobOpTone}>{c.jobStatus}</StatusTag>
                     </td>
                     <td>
-                      {msgStatus ? (
-                        <span className={`badge badge-xs ${msgTone}`}>{msgStatus}</span>
+                      {msgOpTone && msgStatus ? (
+                        <StatusTag tone={msgOpTone}>{msgStatus}</StatusTag>
                       ) : (
                         <span className="text-xs text-base-content/40">{"\u2014"}</span>
                       )}

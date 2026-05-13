@@ -2,6 +2,7 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useState } from "react";
+import type { ChannelTemplateVersion } from "@/lib/types";
 import {
   type CampaignStatusTone,
   formatCampaignHeroTitle,
@@ -13,10 +14,11 @@ import {
   showResume,
   showStart,
   showStopCampaign,
-  statusBadgeClasses,
   statusHeroClasses,
 } from "@/lib/campaignUi";
 import { CampaignReport } from "./CampaignReport";
+import { StatusTag } from "@/components/ui/StatusTag";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export type Campaign = {
   id: string;
@@ -24,6 +26,7 @@ export type Campaign = {
   status: string;
   channel: string;
   channelTemplateVersionId?: string;
+  channelTemplateVersion?: ChannelTemplateVersion | null;
   templateBindings?: Record<string, unknown> | null;
   scheduledAt?: string | null;
   timezone?: string;
@@ -121,14 +124,14 @@ function RunsTable({ runs }: { runs: Record<string, unknown>[] }) {
         <tbody>
           {runs.map((run, i) => {
             const status = String(run.status ?? "\u2014");
-            const statusTone =
+            const statusOpTone: "success" | "danger" | "running" | "neutral" =
               status === "COMPLETED"
-                ? "badge-success"
+                ? "success"
                 : status === "FAILED"
-                  ? "badge-error"
+                  ? "danger"
                   : status === "RUNNING"
-                    ? "badge-info"
-                    : "badge-neutral";
+                    ? "running"
+                    : "neutral";
             const dur =
               typeof run.durationMinutes === "number"
                 ? run.durationMinutes < 1
@@ -145,9 +148,7 @@ function RunsTable({ runs }: { runs: Record<string, unknown>[] }) {
                   #{String(run.runNumber ?? i + 1)}
                 </td>
                 <td>
-                  <span className={`badge badge-xs ${statusTone}`}>
-                    {status}
-                  </span>
+                  <StatusTag tone={statusOpTone}>{status}</StatusTag>
                 </td>
                 <td className="text-right tabular-nums">
                   {typeof run.totalJobs === "number"
@@ -268,8 +269,8 @@ function MetricCard({
           ? "text-error"
           : "text-base-content";
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 px-4 py-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-base-content/55">
+    <div className="card bg-base-100 border border-base-300 px-4 py-3">
+      <p className="op-label">
         {label}
       </p>
       <p className={`mt-1 text-2xl font-semibold tabular-nums ${valueClass}`}>
@@ -363,6 +364,7 @@ export function CampaignDetailView({
     statusNorm === "DRAFT" || statusNorm === "SCHEDULED";
 
   const [activeTab, setActiveTab] = useState<"overview" | "report">("overview");
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [planAt, setPlanAt] = useState(() =>
     isoToDatetimeLocalValue(selectedCampaign.scheduledAt)
   );
@@ -371,8 +373,10 @@ export function CampaignDetailView({
   );
 
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- syncs derived state when selected campaign changes; component doesn't remount */
     setPlanAt(isoToDatetimeLocalValue(selectedCampaign.scheduledAt));
     setPlanTz(selectedCampaign.timezone ?? "UTC");
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [
     selectedCampaign.id,
     selectedCampaign.scheduledAt,
@@ -380,6 +384,7 @@ export function CampaignDetailView({
   ]);
 
   return (
+    <>
           <div className="flex flex-col gap-6">
             {/* Tabs */}
             <div role="tablist" className="tabs tabs-bordered">
@@ -425,11 +430,16 @@ export function CampaignDetailView({
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span
-                        className={`badge ${statusBadgeClasses(tone)} gap-1 border-0 px-3 text-sm`}
+                      <StatusTag
+                        tone={
+                          tone === "success" ? "success" :
+                          tone === "running" ? "running" :
+                          tone === "warning" ? "warning" :
+                          tone === "danger"  ? "danger"  : "neutral"
+                        }
                       >
                         {statusLabel}
-                      </span>
+                      </StatusTag>
                       {tone === "running" || progressLoading ? (
                         <span className="loading loading-spinner loading-md text-info" />
                       ) : null}
@@ -464,33 +474,26 @@ export function CampaignDetailView({
                 </div>
 
                 {progressBarPercent != null && progressBarCaption ? (
-                  <div className="mt-6">
+                  <div className="mt-6 max-w-2xl">
                     <p className="mb-2 text-sm font-medium text-base-content/80">
                       {progressBarCaption}
                     </p>
-                    <progress
-                      className="progress progress-primary h-5 w-full max-w-2xl"
-                      value={progressBarPercent}
-                      max={100}
-                    />
+                    <div className="h-2 w-full overflow-hidden rounded-sm bg-base-300">
+                      <div
+                        className="h-full bg-primary transition-[width] duration-300"
+                        style={{ width: `${Math.min(100, Math.max(0, progressBarPercent))}%` }}
+                      />
+                    </div>
+                    <div className="font-mono-op mt-1.5 text-[10px] tracking-[0.04em] text-base-content/45 tabular-nums">
+                      {Math.round(progressBarPercent)}%
+                    </div>
                   </div>
                 ) : null}
               </div>
 
-              {selectedCampaign.templateBindings &&
-              typeof selectedCampaign.templateBindings === "object" ? (
-                <div className="rounded-box border border-base-300 bg-base-100 px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
-                    Template setup
-                  </p>
-                  <pre className="mt-2 max-h-40 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 font-mono text-xs text-base-content/80">
-                    {JSON.stringify(selectedCampaign.templateBindings, null, 2)}
-                  </pre>
-                </div>
-              ) : null}
 
               {canEditSchedule ? (
-                <div className="rounded-box border border-base-300 bg-base-100 px-4 py-4">
+                <div className="card bg-base-100 border border-base-300 px-4 py-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
                     Planned send
                   </p>
@@ -631,15 +634,7 @@ export function CampaignDetailView({
                   <button
                     type="button"
                     className="btn btn-ghost btn-error gap-1"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete campaign "${selectedCampaign.name}"?`
-                        )
-                      ) {
-                        void handleAction("delete");
-                      }
-                    }}
+                    onClick={() => setShowDeleteConfirm(true)}
                     disabled={loading}
                   >
                     <span aria-hidden>🗑</span> Delete
@@ -674,7 +669,7 @@ export function CampaignDetailView({
                   </p>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {showStopCampaign(selectedCampaign.status) ? (
-                      <div className="flex flex-col gap-2 rounded-box border border-base-300 bg-base-100 p-4">
+                      <div className="flex flex-col gap-2 card bg-base-100 border border-base-300 p-4">
                         <p className="text-sm font-semibold text-base-content">
                           Cancel campaign
                         </p>
@@ -693,7 +688,7 @@ export function CampaignDetailView({
                       </div>
                     ) : null}
                     {showDrainQueue(selectedCampaign.status) ? (
-                      <div className="flex flex-col gap-2 rounded-box border border-base-300 bg-base-100 p-4">
+                      <div className="flex flex-col gap-2 card bg-base-100 border border-base-300 p-4">
                         <p className="text-sm font-semibold text-base-content">
                           Clear send queue
                         </p>
@@ -743,7 +738,7 @@ export function CampaignDetailView({
               </div>
 
               <div className="grid gap-4 lg:grid-cols-[300px_1fr]">
-                <div className="rounded-box border border-base-300 bg-base-100 p-2">
+                <div className="card bg-base-100 border border-base-300 p-2">
                   {runsLoading ? (
                     <div className="flex justify-center py-4">
                       <span className="loading loading-spinner loading-sm" />
@@ -774,7 +769,7 @@ export function CampaignDetailView({
                   )}
                 </div>
 
-                <div className="rounded-box border border-base-300 bg-base-100 p-3">
+                <div className="card bg-base-100 border border-base-300 p-3">
                   <h3 className="mb-2 text-sm font-medium">Run jobs</h3>
                   {runJobsLoading ? (
                     <div className="flex justify-center py-4">
@@ -796,23 +791,21 @@ export function CampaignDetailView({
                             const isPolicyBlocked =
                               (j.lastError || "").includes("Cannot send MARKETING template") ||
                               (j.lastError || "").includes("Meta policy");
-                            const tone =
+                            const opTone: "danger" | "warning" | "neutral" | "success" =
                               status === "FAILED"
-                                ? "badge-error"
+                                ? "danger"
                                 : status === "SKIPPED"
                                   ? isPolicyBlocked
-                                    ? "badge-warning"
-                                    : "badge-neutral"
+                                    ? "warning"
+                                    : "neutral"
                                   : status === "COMPLETED"
-                                    ? "badge-success"
-                                    : "badge-ghost";
+                                    ? "success"
+                                    : "neutral";
 
                             return (
                               <tr key={j.id} className="align-top">
                                 <td>
-                                  <span className={`badge badge-sm ${tone}`}>
-                                    {status}
-                                  </span>
+                                  <StatusTag tone={opTone}>{status}</StatusTag>
                                 </td>
                                 <td className="font-mono text-xs">
                                   {j.contactId}
@@ -868,7 +861,7 @@ export function CampaignDetailView({
               </div>
 
               {reportError ? (
-                <div role="alert" className="alert alert-warning">
+                <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
                   <span>{reportError}</span>
                 </div>
               ) : null}
@@ -931,7 +924,7 @@ export function CampaignDetailView({
                   ) : null}
 
                   {Object.keys(reportMetrics.extras).length > 0 ? (
-                    <div className="rounded-box border border-base-300 bg-base-100 p-4">
+                    <div className="card bg-base-100 border border-base-300 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <button
                           type="button"
@@ -964,6 +957,17 @@ export function CampaignDetailView({
           </>
             )}
           </div>
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title="Delete campaign"
+        description={`Permanently delete "${selectedCampaign.name}"? This cannot be undone.`}
+        confirmLabel="Delete"
+        tone="danger"
+        loading={loading}
+        onConfirm={() => { void handleAction("delete"); setShowDeleteConfirm(false); }}
+        onClose={() => setShowDeleteConfirm(false)}
+      />
+    </>
   );
 }
 

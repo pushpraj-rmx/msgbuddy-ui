@@ -197,7 +197,6 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                   onClick={() => setLightboxOpen(true)}
                   aria-label="Play video"
                 >
-                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
                   <video
                     src={resolvedMediaUrl}
                     muted
@@ -205,8 +204,8 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                     className="max-h-64 max-w-full object-contain"
                     onError={() => setVideoBroken(true)}
                   />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-black/55 text-white">
+                  <div className="absolute inset-0 flex items-center justify-center bg-base-content/25">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-base-content/55 text-base-100">
                       <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5 translate-x-0.5">
                         <path d="M8 5v14l11-7z" />
                       </svg>
@@ -561,14 +560,14 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                     </span>
                   ) : null}
                   {failedAtLabel ? (
-                    <span className="text-base-content/60">{failedAtLabel}</span>
+                    <span className="font-mono-op tabular-nums text-base-content/60">{failedAtLabel}</span>
                   ) : null}
                 </div>
               </details>
             ) : (
               <div
                 role="alert"
-                className="alert alert-error alert-soft text-sm py-2"
+                className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm"
               >
                 <div className="flex flex-col gap-1 text-left">
                   <span>
@@ -598,7 +597,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                     </span>
                   ) : null}
                   {failedAtLabel ? (
-                    <span className="text-xs text-base-content/60">
+                    <span className="font-mono-op text-[11px] tabular-nums text-base-content/60">
                       {failedAtLabel}
                     </span>
                   ) : null}
@@ -607,7 +606,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
             )}
           </div>
         ) : null}
-        <div className="chat-footer mt-1 text-xs text-base-content/55">
+        <div className="chat-footer font-mono-op mt-1 text-[10px] tracking-[0.04em] text-base-content/45 tabular-nums">
           {formatDeliveryStatusLabel(message)}
         </div>
       </div>

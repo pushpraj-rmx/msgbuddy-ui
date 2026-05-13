@@ -152,7 +152,7 @@ export function DuplicatesModal({
               );
             })()}
             {error && (
-              <div role="alert" className="alert alert-error alert-dash text-sm">
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
                 <span>{error}</span>
                 <button
                   type="button"

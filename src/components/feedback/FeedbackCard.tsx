@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { feedbackApi } from "@/lib/api";
 import type { FeedbackReport } from "@/lib/types";
+import { StatusTag } from "@/components/ui/StatusTag";
 
 function stripHtml(html: string): string {
   return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -18,13 +19,13 @@ function formatRelative(iso: string): string {
   return fmt.format(-Math.round(diffSec / 86400), "day");
 }
 
-const STATUS_CLASS: Record<string, string> = {
-  OPEN: "badge-neutral",
-  IN_REVIEW: "badge-info",
-  PLANNED: "badge-secondary",
-  IN_PROGRESS: "badge-warning",
-  DONE: "badge-success",
-  WONT_FIX: "badge-ghost",
+const STATUS_TONE: Record<string, "neutral" | "info" | "warning" | "success" | "danger"> = {
+  OPEN: "neutral",
+  IN_REVIEW: "info",
+  PLANNED: "info",
+  IN_PROGRESS: "warning",
+  DONE: "success",
+  WONT_FIX: "neutral",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -36,11 +37,11 @@ const STATUS_LABEL: Record<string, string> = {
   WONT_FIX: "Won't Fix",
 };
 
-const PRIORITY_CLASS: Record<string, string> = {
-  LOW: "badge-ghost",
-  MEDIUM: "badge-info",
-  HIGH: "badge-warning",
-  CRITICAL: "badge-error",
+const PRIORITY_TONE: Record<string, "neutral" | "info" | "warning" | "danger"> = {
+  LOW: "neutral",
+  MEDIUM: "info",
+  HIGH: "warning",
+  CRITICAL: "danger",
 };
 
 interface FeedbackCardProps {
@@ -77,23 +78,21 @@ export function FeedbackCard({ report, onClick, isOwn }: FeedbackCardProps) {
 
   return (
     <article
-      className="card border border-base-300 bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+      className="rounded-box border border-base-300 bg-base-100 transition-colors hover:border-base-content/20 cursor-pointer"
       onClick={onClick}
     >
       <div className="card-body gap-2 p-4">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span
-            className={`badge badge-sm ${report.type === "BUG" ? "badge-error" : "badge-info"}`}
-          >
+          <StatusTag tone={report.type === "BUG" ? "danger" : "info"}>
             {report.type === "BUG" ? "Bug" : "Feature"}
-          </span>
-          <span className={`badge badge-sm ${STATUS_CLASS[report.status] ?? "badge-neutral"}`}>
+          </StatusTag>
+          <StatusTag tone={STATUS_TONE[report.status] ?? "neutral"}>
             {STATUS_LABEL[report.status] ?? report.status}
-          </span>
+          </StatusTag>
           {report.type === "BUG" && (
-            <span className={`badge badge-sm ${PRIORITY_CLASS[report.priority] ?? "badge-ghost"}`}>
+            <StatusTag tone={PRIORITY_TONE[report.priority] ?? "neutral"}>
               {report.priority.charAt(0) + report.priority.slice(1).toLowerCase()}
-            </span>
+            </StatusTag>
           )}
         </div>
 
@@ -104,7 +103,7 @@ export function FeedbackCard({ report, onClick, isOwn }: FeedbackCardProps) {
         )}
 
         <div className="flex items-center justify-between mt-1">
-          <span className="text-xs text-base-content/50">
+          <span className="font-mono-op text-[11px] tabular-nums text-base-content/50">
             {report.submittedBy ? `${report.submittedBy} · ` : ""}
             {formatRelative(report.createdAt)}
           </span>
@@ -118,9 +117,9 @@ export function FeedbackCard({ report, onClick, isOwn }: FeedbackCardProps) {
                 if (!isOwn) toggleVote.mutate();
               }}
               disabled={toggleVote.isPending || isOwn}
-              title={isOwn ? "Can't vote on your own report" : undefined}
+              title={isOwn ? "Can't vote on your own report" : report.hasVoted ? "Remove vote" : "Vote for this feature request"}
             >
-              ▲ {report.voteCount}
+              ▲ Vote · {report.voteCount}
             </button>
           )}
         </div>

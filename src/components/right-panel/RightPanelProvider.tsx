@@ -20,19 +20,33 @@ function readStoredPaneOpen(): boolean {
   } catch {
     // ignore
   }
-  return true;
+  return false;
 }
+
+/** A single tab inside the panel. */
+export type PanelTab = {
+  key: string;
+  label: string;
+  content: ReactNode;
+};
 
 type RightPanelState = {
   title?: string;
-  content: ReactNode;
+  content?: ReactNode;
   source?: string;
+  tabs?: PanelTab[];
+  defaultTab?: string;
 };
 
 type SetRightPanelInput = {
   title?: string;
-  content: ReactNode;
+  /** Flat content — mutually exclusive with `tabs`. */
+  content?: ReactNode;
   source?: string;
+  /** Tabbed content — mutually exclusive with `content`. */
+  tabs?: PanelTab[];
+  /** Initial active tab key when using tabs. Defaults to first tab. */
+  defaultTab?: string;
   /**
    * When true, opens the panel after setting content (e.g. user selected an item with details).
    * Omit or false when only syncing placeholder/updated content without a new selection.
@@ -48,6 +62,9 @@ type RightPanelContextValue = {
   panel: RightPanelState | null;
   setContent: (input: SetRightPanelInput) => void;
   clearContent: (source?: string) => void;
+  /** Currently active tab key (when panel uses tabs). */
+  activeTab: string;
+  setActiveTab: (key: string) => void;
 };
 
 const RightPanelContext = createContext<RightPanelContextValue | null>(null);
@@ -55,25 +72,14 @@ const RightPanelContext = createContext<RightPanelContextValue | null>(null);
 export function RightPanelProvider({ children }: { children: ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [panel, setPanel] = useState<RightPanelState | null>(null);
+  const [activeTab, setActiveTab] = useState("");
 
+  // Restore desktop preference on mount (mobile starts closed; opens via setContent or toggle)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const lg = window.matchMedia(LG_MEDIA_QUERY).matches;
-    setIsOpen(lg && readStoredPaneOpen());
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia(LG_MEDIA_QUERY);
-    const onChange = () => {
-      if (!mq.matches) {
-        setIsOpen(false);
-        return;
-      }
-      setIsOpen(readStoredPaneOpen());
-    };
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR hydration guard: reads localStorage after mount
+    if (lg) setIsOpen(readStoredPaneOpen());
   }, []);
 
   const persistOpen = useCallback((next: boolean) => {
@@ -108,7 +114,11 @@ export function RightPanelProvider({ children }: { children: ReactNode }) {
         title: input.title,
         content: input.content,
         source: input.source,
+        tabs: input.tabs,
+        defaultTab: input.defaultTab,
       });
+      // Reset tab to default when content changes
+      setActiveTab(input.defaultTab ?? input.tabs?.[0]?.key ?? "");
       if (input.openAfter === true) {
         setIsOpen(true);
         persistOpen(true);
@@ -134,8 +144,10 @@ export function RightPanelProvider({ children }: { children: ReactNode }) {
       panel,
       setContent,
       clearContent,
+      activeTab,
+      setActiveTab,
     }),
-    [clearContent, close, isOpen, open, panel, setContent, toggle]
+    [activeTab, clearContent, close, isOpen, open, panel, setContent, toggle]
   );
 
   return (

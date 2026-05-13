@@ -1,24 +1,117 @@
 "use client";
 
-import { useEffect } from "react";
-import { X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { X, ArrowLeft, PanelRight } from "lucide-react";
 import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "./useRightPanel";
+import { SHORTCUT_EVENTS } from "@/lib/shortcuts";
+
+const PANEL_WIDTH_KEY = "global-details-pane-width";
+const DEFAULT_WIDTH = 420; // px — roughly 28vw at 1500px
+const MIN_WIDTH = 280;
+const MAX_WIDTH_RATIO = 0.5; // max 50vw
+
+function readStoredWidth(): number {
+  try {
+    const raw = localStorage.getItem(PANEL_WIDTH_KEY);
+    if (raw) {
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= MIN_WIDTH) return n;
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_WIDTH;
+}
+
+function persistWidth(w: number) {
+  try { localStorage.setItem(PANEL_WIDTH_KEY, String(Math.round(w))); } catch { /* ignore */ }
+}
 
 /**
- * Details pane beside main content (lg+ only). Smaller viewports hide the pane;
- * preference is still stored for when the window is wide enough again.
+ * Details pane:
+ * - Desktop (lg+): inline resizable panel beside main content
+ * - Mobile: full-screen overlay sliding in from right with back button
+ *
+ * Features:
+ * - Empty state when no content is selected (desktop only)
+ * - Fade-in animation when content changes
+ * - Tabs support (rendered below header if panel.tabs is provided)
+ * - Drag-to-resize handle on left edge (desktop only)
+ * - Keyboard shortcut: `.` toggles panel
  */
 export function GlobalRightPanel() {
-  const { isOpen, close, panel } = useRightPanel();
+  const { isOpen, close, toggle, panel, activeTab, setActiveTab } = useRightPanel();
   const isLgUp = useMediaQuery(LG_MEDIA_QUERY);
 
-  /** Only pages that call `setContent` register details; avoid an empty strip elsewhere. */
-  const detailsContent = panel?.content;
-  const hasDetails = Boolean(detailsContent);
+  // Resize state (desktop only)
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_WIDTH);
+  const isDragging = useRef(false);
+  const dragStartX = useRef(0);
+  const dragStartWidth = useRef(0);
 
+  // Restore width from localStorage on mount
   useEffect(() => {
-    if (!isOpen || !isLgUp || !hasDetails) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR hydration guard: localStorage unavailable during SSR
+    setPanelWidth(readStoredWidth());
+  }, []);
+
+  const onDragStart = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    isDragging.current = true;
+    dragStartX.current = e.clientX;
+    dragStartWidth.current = panelWidth;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, [panelWidth]);
+
+  const onDragMove = useCallback((e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    const maxW = window.innerWidth * MAX_WIDTH_RATIO;
+    const delta = dragStartX.current - e.clientX; // dragging left = wider
+    const next = Math.min(maxW, Math.max(MIN_WIDTH, dragStartWidth.current + delta));
+    setPanelWidth(next);
+  }, []);
+
+  const onDragEnd = useCallback(() => {
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    setPanelWidth((w) => { persistWidth(w); return w; });
+  }, []);
+
+  // Double-click handle resets to default
+  const onDoubleClick = useCallback(() => {
+    setPanelWidth(DEFAULT_WIDTH);
+    persistWidth(DEFAULT_WIDTH);
+  }, []);
+
+  // Listen for keyboard shortcut to toggle panel
+  useEffect(() => {
+    const onToggle = () => toggle();
+    window.addEventListener(SHORTCUT_EVENTS.TOGGLE_DETAILS_PANEL, onToggle);
+    return () => window.removeEventListener(SHORTCUT_EVENTS.TOGGLE_DETAILS_PANEL, onToggle);
+  }, [toggle]);
+
+  const detailsContent = panel?.content;
+  const tabs = panel?.tabs;
+  const hasDetails = Boolean(detailsContent) || Boolean(tabs?.length);
+
+  // Resolve which content to render: tabs content (by active key) or flat content
+  const renderedContent = useMemo(() => {
+    if (tabs?.length) {
+      const match = tabs.find((t) => t.key === activeTab) ?? tabs[0];
+      return match?.content ?? null;
+    }
+    return detailsContent ?? null;
+  }, [tabs, activeTab, detailsContent]);
+
+  // Key for fade animation — changes when source or title changes
+  const contentKey = `${panel?.source ?? ""}-${panel?.title ?? ""}`;
+
+  // ESC closes the panel
+  useEffect(() => {
+    if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.preventDefault();
@@ -26,229 +119,142 @@ export function GlobalRightPanel() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, isLgUp, hasDetails, close]);
+  }, [isOpen, close]);
 
-  if (!isOpen || !isLgUp || !hasDetails || !panel) return null;
+  // Lock body scroll when mobile overlay is open
+  useEffect(() => {
+    if (!isOpen || !hasDetails || isLgUp) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [isOpen, hasDetails, isLgUp]);
 
-  return (
-    <aside
-      aria-label={panel.title || "Details"}
-      className="flex h-full min-h-0 w-[clamp(18rem,28vw,32rem)] shrink-0 flex-col border-l border-base-300 bg-base-100 shadow-sm"
-    >
-      <div className="flex min-h-0 shrink-0 items-center justify-between gap-2 border-b border-base-300 px-3 py-2.5">
-        <h2 className="min-w-0 truncate text-sm font-medium text-base-content/90">
-          {panel.title || "Details"}
-        </h2>
+  // ── Tabs bar (shared between desktop + mobile) ──
+  const tabsBar = tabs?.length ? (
+    <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-base-300 px-4">
+      {tabs.map((tab) => (
         <button
+          key={tab.key}
           type="button"
-          className="btn btn-ghost btn-sm btn-square shrink-0"
-          onClick={close}
-          aria-label="Close details pane"
+          className={`relative whitespace-nowrap px-3 py-2 font-mono-op text-[10px] tracking-[0.08em] uppercase transition-colors ${
+            activeTab === tab.key
+              ? "text-primary after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-primary"
+              : "text-base-content/55 hover:text-base-content"
+          }`}
+          onClick={() => setActiveTab(tab.key)}
         >
-          <X className="h-5 w-5" />
+          {tab.label}
         </button>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3">
-        {detailsContent}
-      </div>
-    </aside>
-  );
+      ))}
+    </div>
+  ) : null;
+
+  // ── Desktop: inline resizable panel ──
+  if (isLgUp && isOpen) {
+    return (
+      <aside
+        aria-label={panel?.title || "Details"}
+        className="relative flex h-full min-h-0 shrink-0 flex-col border-l border-base-300 bg-base-100"
+        style={{ width: `${panelWidth}px` }}
+      >
+        {/* Resize handle */}
+        <div
+          className="absolute inset-y-0 -left-[3px] z-10 w-[6px] cursor-col-resize transition-colors hover:bg-primary/20 active:bg-primary/30"
+          onPointerDown={onDragStart}
+          onPointerMove={onDragMove}
+          onPointerUp={onDragEnd}
+          onPointerCancel={onDragEnd}
+          onDoubleClick={onDoubleClick}
+          title="Drag to resize · double-click to reset"
+          aria-hidden
+        />
+
+        {/* Header */}
+        <div className="flex min-h-15 shrink-0 items-center justify-between gap-2 border-b border-base-300 px-4">
+          <h2 className="op-label min-w-0 truncate text-base-content">
+            {panel?.title || "Details"}
+          </h2>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-square shrink-0"
+            onClick={close}
+            aria-label="Close details pane"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {tabsBar}
+
+        {/* Content or empty state */}
+        {hasDetails ? (
+          <div
+            key={contentKey}
+            className="min-h-0 flex-1 animate-[op-panel-fade-in_150ms_ease-out] overflow-y-auto overscroll-contain p-4"
+          >
+            {renderedContent}
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+            <PanelRight className="h-8 w-8 text-base-content/20" />
+            <span className="op-label">No selection</span>
+            <p className="text-[13px] text-base-content/55">
+              Select a contact, campaign, or template to see details here.
+            </p>
+          </div>
+        )}
+      </aside>
+    );
+  }
+
+  // ── Mobile: full-screen overlay (only when content exists) ──
+  if (!isLgUp && isOpen && hasDetails && panel) {
+    return (
+      <>
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 z-40 bg-base-content/40"
+          onClick={close}
+          aria-hidden
+        />
+
+        {/* Panel */}
+        <aside
+          aria-label={panel.title || "Details"}
+          className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-base-100 animate-[slideInRight_0.2s_ease-out]"
+          style={{
+            paddingTop: "env(safe-area-inset-top, 0px)",
+            paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          }}
+        >
+          <div className="flex min-h-15 shrink-0 items-center gap-2 border-b border-base-300 px-3">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-square shrink-0"
+              onClick={close}
+              aria-label="Back"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </button>
+            <h2 className="op-label min-w-0 flex-1 truncate text-base-content">
+              {panel.title || "Details"}
+            </h2>
+          </div>
+
+          {tabsBar}
+
+          <div
+            key={contentKey}
+            className="min-h-0 flex-1 animate-[op-panel-fade-in_150ms_ease-out] overflow-y-auto overscroll-contain p-4"
+          >
+            {renderedContent}
+          </div>
+        </aside>
+      </>
+    );
+  }
+
+  return null;
 }
-
-
-/*
-
-Short answer: **no, that’s too restrictive and will bite you later.**
-Long answer: you need **controlled flexibility**, not “only assigned agent = god mode.”
-
-Let’s break this like someone who’s actually going to build a serious CRM and not a college project.
-
----
-
-## 🔥 Core Principle
-
-**Ownership ≠ Exclusivity**
-
-Assigned agent = **primary handler**, not the **only human allowed to exist in that conversation**
-
-If you lock it too hard:
-
-* conversations stall when agent is busy/offline
-* supervisors can’t intervene in time
-* escalations become chaos
-* clients get ignored → business dies → everyone cries
-
----
-
-## 🧠 Recommended Model (Used in real CRMs)
-
-### 1. Assigned Agent
-
-* ✅ Can send messages
-* ✅ Gets all notifications
-* ✅ Owns SLA responsibility
-
----
-
-### 2. Other Agents
-
-* 👀 Can view conversation (based on permission)
-* ❌ Cannot send by default
-* ✅ Can request takeover OR be assigned
-
-Optional (advanced):
-
-* allow “reply if unassigned for X minutes”
-* or “reply if tagged”
-
----
-
-### 3. Supervisor
-
-* 👀 Full visibility
-* ✅ Can send messages (override)
-* ✅ Can reassign conversations
-* ✅ Can silently monitor
-
-This is critical. If supervisor can’t jump in, your system is basically decorative.
-
----
-
-### 4. Admin / Owner
-
-* 🧠 Full control (obviously)
-* ✅ Send messages
-* ✅ Force assign / unassign
-* ✅ Access everything
-
-If admin can’t intervene, congratulations, you’ve built a very secure but useless system.
-
----
-
-## ⚙️ Notifications Logic (this is where most people mess up)
-
-### Assigned Agent
-
-* 🔔 Always notified
-
-### Other Agents
-
-* 🔕 No notification by default
-* 🔔 Only if:
-
-  * tagged (`@agent`)
-  * conversation unassigned
-  * part of team queue
-
-### Supervisor/Admin
-
-* 🔔 Optional:
-
-  * all conversations
-  * only escalations
-  * only SLA breaches
-
-Make this configurable or you’ll have angry teams muting your product in 2 days.
-
----
-
-## 🧩 Real-World Patterns You Should Support
-
-### 1. Takeover Model
-
-* Agent clicks: **“Take Conversation”**
-* Now they become assigned agent
-
----
-
-### 2. Collaboration Mode
-
-* Multiple agents can reply
-* Used in sales / complex support
-
-(But log who sent what. Otherwise blame game begins.)
-
----
-
-### 3. Locked Mode (Strict)
-
-* Only assigned agent can reply
-* Used in compliance-heavy environments
-
----
-
-### 4. Queue-Based Model (like Intercom / Zendesk)
-
-* Conversations sit in queue
-* Any agent can pick them
-
----
-
-## 💣 My blunt take for MsgBuddy
-
-If you’re building this seriously:
-
-👉 Default mode:
-
-* Assigned agent = primary
-* Supervisor/Admin = override allowed
-* Others = view only
-
-👉 Add config:
-
-```
-conversation_mode:
-  - strict
-  - collaborative
-  - queue
-```
-
-👉 Add feature:
-
-* “Takeover”
-* “Reassign”
-* “Escalate”
-
----
-
-## 🧠 Architecture Hint (since you’re not here for basic advice)
-
-In your DB:
-
-```
-conversation:
-  assigned_agent_id
-  team_id
-  status
-  mode (strict | collaborative | queue)
-
-message:
-  sender_id
-  sender_role
-```
-
-And permission layer:
-
-```
-can_send_message(user, conversation):
-  if user.role in [ADMIN, OWNER]: return true
-  if user.role == SUPERVISOR: return true
-  if conversation.mode == "collaborative": return true
-  if user.id == conversation.assigned_agent_id: return true
-  return false
-```
-
----
-
-## Final reality check
-
-You’re not building WhatsApp clone.
-You’re building a **team coordination system disguised as chat**.
-
-If you design it like “only one person allowed,” you’ll recreate customer support hell in software form.
-
-Don’t do that.
-
-
-
-*/ 

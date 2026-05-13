@@ -132,6 +132,7 @@ export function AvatarCropUpload({
           title="Change photo"
         >
           {resolved ? (
+// eslint-disable-next-line @next/next/no-img-element -- dynamic user content, dimensions unknown
             <img src={resolved} alt="" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-lg font-semibold select-none">
@@ -139,8 +140,8 @@ export function AvatarCropUpload({
             </div>
           )}
           {/* Camera overlay */}
-          <div className="absolute inset-0 flex items-end justify-end p-1 opacity-0 hover:opacity-100 bg-black/30 transition-opacity rounded-box">
-            <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <div className="absolute inset-0 flex items-end justify-end p-1 opacity-0 hover:opacity-100 bg-base-content/30 transition-opacity rounded-box">
+            <svg className="h-4 w-4 text-base-100" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
@@ -174,15 +175,16 @@ export function AvatarCropUpload({
 
       {/* Crop modal */}
       {imageSrc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-          <div className="bg-base-100 rounded-box shadow-xl w-full max-w-sm mx-4 overflow-hidden">
-            <div className="px-4 pt-4 pb-2">
-              <h3 className="text-sm font-semibold">Crop photo</h3>
-              <p className="text-xs text-base-content/60 mt-0.5">Drag to reposition · Scroll to zoom</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-content/60">
+          <div className="w-full max-w-sm mx-4 overflow-hidden rounded-box border border-base-300 bg-base-200 shadow-lg">
+            <div className="border-b border-base-300 px-4 py-3">
+              <span className="op-label">Upload</span>
+              <h3 className="text-[15px] font-semibold tracking-[-0.015em]">Crop photo</h3>
+              <p className="font-mono-op mt-1 text-[10px] tracking-[0.04em] text-base-content/55">drag to reposition · scroll to zoom</p>
             </div>
 
             {/* Cropper container */}
-            <div className="relative h-72 bg-black">
+            <div className="relative h-72 bg-neutral">
               <Cropper
                 image={imageSrc}
                 crop={crop}

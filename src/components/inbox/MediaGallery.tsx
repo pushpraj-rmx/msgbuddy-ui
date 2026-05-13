@@ -10,11 +10,6 @@ interface MediaGalleryProps {
   conversationId: string;
 }
 
-function getMonthKey(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-}
-
 function isImageOrVideo(mime?: string | null): boolean {
   if (!mime) return false;
   return mime.startsWith("image/") || mime.startsWith("video/");
@@ -35,8 +30,9 @@ function MediaThumbnail({
       <button
         type="button"
         onClick={onClick}
-        className="aspect-square w-full cursor-pointer overflow-hidden rounded-lg bg-base-200 hover:opacity-85"
+        className="aspect-square w-full cursor-pointer overflow-hidden rounded-md border border-base-300 bg-base-200 hover:opacity-85"
       >
+        {/* eslint-disable-next-line @next/next/no-img-element -- dynamic user content */}
         <img
           src={item.mediaUrl ?? ""}
           alt=""
@@ -52,7 +48,7 @@ function MediaThumbnail({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 rounded-lg bg-base-200 p-2 text-left hover:bg-base-300"
+      className="flex items-center gap-2 rounded-md border border-base-300 bg-base-200 p-2 text-left hover:bg-base-300"
     >
       {isAudio ? (
         <FileAudio className="h-5 w-5 shrink-0 text-primary" />
@@ -116,8 +112,8 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
 
       {otherItems.length > 0 && (
         <>
-          {visualItems.length > 0 && <div className="divider my-1" />}
-          <span className="mb-1 block px-1 text-xs text-base-content/60">
+          {visualItems.length > 0 && <div className="my-2 border-t border-base-300" />}
+          <span className="op-label mb-1.5 block px-1">
             Documents &amp; Audio
           </span>
           <div className="flex flex-col gap-1">
@@ -141,7 +137,7 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
             <div className="tooltip tooltip-left absolute right-2 top-2 z-10" data-tip="Close">
               <button
                 type="button"
-                className="btn btn-ghost btn-sm btn-circle text-white"
+                className="btn btn-ghost btn-sm btn-circle text-neutral-content"
                 onClick={() => setLightbox(null)}
               >
                 <X className="h-5 w-5" />
@@ -154,6 +150,7 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
                 className="block max-h-[80vh] w-full"
               />
             ) : (
+              // eslint-disable-next-line @next/next/no-img-element -- dynamic user content
               <img
                 src={lightbox?.mediaUrl ?? ""}
                 alt=""

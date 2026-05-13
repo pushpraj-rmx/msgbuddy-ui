@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   useAssignChannelAccount,
   useChannelAccounts,
@@ -80,12 +81,16 @@ export function PlatformConsoleClient({
 
   return (
     <div className="space-y-4">
-      <div role="tablist" className="tabs tabs-box">
+      <div role="tablist" className="flex gap-1 border-b border-base-300 overflow-x-auto">
         {tabs.map((entry) => (
           <button
             key={entry.key}
             role="tab"
-            className={`tab ${tab === entry.key ? "tab-active" : ""}`}
+            className={`relative px-3 py-2 font-mono-op text-[11px] tracking-[0.08em] uppercase transition-colors whitespace-nowrap ${
+              tab === entry.key
+                ? "text-primary after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-primary"
+                : "text-base-content/55 hover:text-base-content"
+            }`}
             onClick={() => setTab(entry.key)}
           >
             {entry.label}
@@ -113,6 +118,7 @@ function WorkspacesTab() {
   const [offset, setOffset] = useState(0);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [suspendWorkspaceId, setSuspendWorkspaceId] = useState<string | null>(null);
 
   const list = usePlatformWorkspaces({
     search: search.trim() || undefined,
@@ -143,7 +149,7 @@ function WorkspacesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-box border border-base-300 bg-base-100">
+      <div className="card bg-base-100 border border-base-300">
         <div className="gap-3 p-4 sm:p-5">
           <h2 className="text-base font-semibold">Workspace Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -190,44 +196,42 @@ function WorkspacesTab() {
       </div>
 
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {mutationError && (
-        <div role="alert" className="alert alert-error">
-          <span>{mutationError}</span>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[13px] text-base-content">{mutationError}</p>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr>
-              <th>Name</th>
-              <th>Plan</th>
-              <th>Expiry</th>
-              <th>Numbers</th>
-              <th>Status</th>
-              <th>Suspended</th>
-              <th>Members</th>
-              <th>Messages</th>
-              <th></th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Name</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Plan</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Expiry</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Numbers</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Status</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Suspended</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium">Members</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium">Messages</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((workspace) => (
-              <tr key={workspace.id}>
-                <td>
+              <tr key={workspace.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="px-3 py-3">
                   <div className="font-medium">{workspace.name}</div>
-                  <div className="text-xs text-base-content/60">{workspace.slug}</div>
+                  <div className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50">{workspace.slug}</div>
                 </td>
-                <td>{workspace.plan || "-"}</td>
-                <td>{formatDate(workspace.planExpiresAt ?? null)}</td>
-                <td>
-                  <div className="text-xs text-base-content/70">
-                    {(numbersByWorkspaceId.get(workspace.id) ?? []).slice(0, 2).join(", ") ||
-                      "-"}
+                <td className="px-3 py-3 text-base-content/80">{workspace.plan || "—"}</td>
+                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(workspace.planExpiresAt ?? null)}</td>
+                <td className="px-3 py-3">
+                  <div className="font-mono-op text-[11px] text-base-content/70">
+                    {(numbersByWorkspaceId.get(workspace.id) ?? []).slice(0, 2).join(", ") || "—"}
                     {(numbersByWorkspaceId.get(workspace.id) ?? []).length > 2 && (
                       <span className="ml-1">
                         +{(numbersByWorkspaceId.get(workspace.id) ?? []).length - 2} more
@@ -235,12 +239,16 @@ function WorkspacesTab() {
                     )}
                   </div>
                 </td>
-                <td>{workspace.status}</td>
-                <td>{workspace.isSuspended ? "Yes" : "No"}</td>
-                <td>{workspace._count.workspaceMembers}</td>
-                <td>{workspace._count.messages}</td>
-                <td>
-                  <div className="flex flex-wrap gap-1">
+                <td className="px-3 py-3">
+                  <span className={`op-tag ${workspace.status === "ACTIVE" ? "op-tag-ok" : ""}`}>{workspace.status}</span>
+                </td>
+                <td className="px-3 py-3">
+                  {workspace.isSuspended ? <span className="op-tag op-tag-warn">Yes</span> : <span className="op-tag">No</span>}
+                </td>
+                <td className="font-mono-op px-3 py-3 text-right tabular-nums">{workspace._count.workspaceMembers}</td>
+                <td className="font-mono-op px-3 py-3 text-right tabular-nums">{workspace._count.messages.toLocaleString()}</td>
+                <td className="px-3 py-3 text-right">
+                  <div className="flex flex-wrap justify-end gap-1">
                     <button
                       className="btn btn-ghost btn-xs"
                       onClick={() => setSelectedWorkspaceId(workspace.id)}
@@ -249,7 +257,7 @@ function WorkspacesTab() {
                     </button>
                     {workspace.isSuspended ? (
                       <button
-                        className="btn btn-success btn-soft btn-xs"
+                        className="btn btn-xs"
                         disabled={reactivate.isPending}
                         onClick={() => {
                           setMutationError(null);
@@ -262,16 +270,9 @@ function WorkspacesTab() {
                       </button>
                     ) : (
                       <button
-                        className="btn btn-warning btn-soft btn-xs"
+                        className="btn btn-xs border-warning/40 text-warning hover:bg-warning/10"
                         disabled={suspend.isPending}
-                        onClick={() => {
-                          const reason = window.prompt("Suspend reason (optional)") ?? "";
-                          setMutationError(null);
-                          suspend.mutate(
-                            { id: workspace.id, reason: reason.trim() || undefined },
-                            { onError: (error) => setMutationError(getApiError(error)) }
-                          );
-                        }}
+                        onClick={() => setSuspendWorkspaceId(workspace.id)}
                       >
                         Suspend
                       </button>
@@ -282,7 +283,7 @@ function WorkspacesTab() {
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={9} className="text-center text-base-content/60">
+                <td colSpan={9} className="px-3 py-6 text-center text-[13px] text-base-content/55">
                   No workspaces found.
                 </td>
               </tr>
@@ -312,7 +313,7 @@ function WorkspacesTab() {
       </div>
 
       {selectedWorkspaceId && (
-        <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="card bg-base-100 border border-base-300">
           <div className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold">Workspace Inspection</h3>
@@ -325,9 +326,7 @@ function WorkspacesTab() {
             </div>
             {detail.isLoading && <span className="loading loading-spinner loading-sm" />}
             {detail.error && (
-              <div role="alert" className="alert alert-error">
-                <span>{getApiError(detail.error)}</span>
-              </div>
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(detail.error)}</p></div>
             )}
             {detail.data && (
               <div className="space-y-2 text-sm">
@@ -383,6 +382,28 @@ function WorkspacesTab() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={suspendWorkspaceId !== null}
+        title="Suspend workspace"
+        description="The workspace will be suspended immediately."
+        confirmLabel="Suspend"
+        tone="warning"
+        loading={suspend.isPending}
+        promptLabel="Reason (optional)"
+        promptPlaceholder="e.g. payment overdue"
+        onConfirm={(reason) => {
+          if (!suspendWorkspaceId) return;
+          setMutationError(null);
+          suspend.mutate(
+            { id: suspendWorkspaceId, reason: reason?.trim() || undefined },
+            {
+              onError: (error) => setMutationError(getApiError(error)),
+              onSettled: () => setSuspendWorkspaceId(null),
+            }
+          );
+        }}
+        onClose={() => setSuspendWorkspaceId(null)}
+      />
     </div>
   );
 }
@@ -408,7 +429,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-box border border-base-300 bg-base-100">
+      <div className="card bg-base-100 border border-base-300">
         <div className="gap-3 p-4 sm:p-5">
           <h2 className="text-base font-semibold">User Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -455,33 +476,34 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
       </div>
 
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {mutationError && (
-        <div role="alert" className="alert alert-error">
-          <span>{mutationError}</span>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[13px] text-base-content">{mutationError}</p>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr>
-              <th>Email</th>
-              <th>Platform Role</th>
-              <th>Memberships</th>
-              <th></th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Email</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Platform Role</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium">Memberships</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((user) => (
-              <tr key={user.id}>
-                <td>{user.email}</td>
-                <td>{user.platformRole}</td>
-                <td>{user.memberships?.length ?? 0}</td>
-                <td>
+              <tr key={user.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="px-3 py-3 font-medium">{user.email}</td>
+                <td className="px-3 py-3">
+                  <span className="op-tag">{user.platformRole}</span>
+                </td>
+                <td className="font-mono-op px-3 py-3 text-right tabular-nums">{user.memberships?.length ?? 0}</td>
+                <td className="px-3 py-3 text-right">
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => {
@@ -496,7 +518,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/60">
+                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
                   No users found.
                 </td>
               </tr>
@@ -526,7 +548,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
       </div>
 
       {selectedUserId && (
-        <div className="rounded-box border border-base-300 bg-base-100">
+        <div className="card bg-base-100 border border-base-300">
           <div className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
               <h3 className="text-base font-semibold">User Inspection</h3>
@@ -539,9 +561,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
             </div>
             {detail.isLoading && <span className="loading loading-spinner loading-sm" />}
             {detail.error && (
-              <div role="alert" className="alert alert-error">
-                <span>{getApiError(detail.error)}</span>
-              </div>
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(detail.error)}</p></div>
             )}
             {detail.data && (
               <div className="space-y-3">
@@ -562,7 +582,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
                         <div className="text-sm">
                           {membership.workspace?.name ?? membership.workspaceId}
                         </div>
-                        <div className="badge badge-ghost">{membership.role}</div>
+                        <span className="op-tag">{membership.role}</span>
                       </li>
                     ))}
                     {!detail.data.memberships?.length && (
@@ -628,7 +648,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
                     </button>
                   </div>
                 ) : (
-                  <div role="alert" className="alert alert-info alert-soft">
+                  <div role="alert" className="rounded-box border border-info/30 border-l-2 border-l-info bg-base-200 px-4 py-3">
                     <span>Role updates require SUPERADMIN.</span>
                   </div>
                 )}
@@ -658,7 +678,7 @@ function WebhookLogsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-box border border-base-300 bg-base-100">
+      <div className="card bg-base-100 border border-base-300">
         <div className="gap-3 p-4 sm:p-5">
           <h2 className="text-base font-semibold">Webhook Logs Filters</h2>
           <div className="grid gap-2 sm:grid-cols-4">
@@ -710,36 +730,36 @@ function WebhookLogsTab() {
         </div>
       </div>
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
       )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr>
-              <th>ID</th>
-              <th>Workspace</th>
-              <th>Provider</th>
-              <th>Event</th>
-              <th>Processed</th>
-              <th>Created</th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Workspace</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Provider</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Event</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Processed</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Created</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((row) => (
-              <tr key={row.id}>
-                <td className="max-w-48 truncate">{row.id}</td>
-                <td>{row.workspaceId}</td>
-                <td>{row.provider}</td>
-                <td>{row.eventType}</td>
-                <td>{row.processed ? "Yes" : "No"}</td>
-                <td>{formatDate(row.createdAt)}</td>
+              <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op px-3 py-3 text-[10px] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3"><span className="op-tag">{row.provider}</span></td>
+                <td className="px-3 py-3 font-medium">{row.eventType}</td>
+                <td className="px-3 py-3">
+                  {row.processed ? <span className="op-tag op-tag-ok">Yes</span> : <span className="op-tag op-tag-warn">No</span>}
+                </td>
+                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={6} className="text-center text-base-content/60">
+                <td colSpan={6} className="px-3 py-6 text-center text-[13px] text-base-content/55">
                   No webhook logs found.
                 </td>
               </tr>
@@ -773,7 +793,7 @@ function UsageEventsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-box border border-base-300 bg-base-100">
+      <div className="card bg-base-100 border border-base-300">
         <div className="gap-3 p-4 sm:p-5">
           <h2 className="text-base font-semibold">Usage Events Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -813,32 +833,30 @@ function UsageEventsTab() {
         </div>
       </div>
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
       )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr>
-              <th>ID</th>
-              <th>Workspace</th>
-              <th>Event Type</th>
-              <th>Created</th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Workspace</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Event Type</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Created</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((row) => (
-              <tr key={row.id}>
-                <td className="max-w-48 truncate">{row.id}</td>
-                <td>{row.workspaceId}</td>
-                <td>{row.eventType}</td>
-                <td>{formatDate(row.createdAt)}</td>
+              <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op px-3 py-3 text-[10px] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3 font-medium">{row.eventType}</td>
+                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/60">
+                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
                   No usage events found.
                 </td>
               </tr>
@@ -876,7 +894,7 @@ function AuditLogsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-box border border-base-300 bg-base-100">
+      <div className="card bg-base-100 border border-base-300">
         <div className="gap-3 p-4 sm:p-5">
           <h2 className="text-base font-semibold">Audit Logs Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -935,37 +953,35 @@ function AuditLogsTab() {
       </div>
 
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
       )}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
             <tr>
-              <th>Created</th>
-              <th>Action</th>
-              <th>Target</th>
-              <th>Actor</th>
-              <th>Request</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Created</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Action</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Target</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Actor</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Request</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((row) => (
-              <tr key={row.id}>
-                <td>{formatDate(row.createdAt)}</td>
-                <td className="max-w-48 truncate">{row.action}</td>
-                <td className="max-w-64 truncate">
+              <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
+                <td className="max-w-48 truncate px-3 py-3 font-medium">{row.action}</td>
+                <td className="font-mono-op max-w-64 truncate px-3 py-3 text-[11px] text-base-content/70">
                   {row.targetType}:{row.targetId}
                 </td>
-                <td className="max-w-48 truncate">{row.actorUserId}</td>
-                <td className="max-w-48 truncate">{row.requestId || "-"}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.actorUserId.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.requestId || "—"}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={5} className="text-center text-base-content/60">
+                <td colSpan={5} className="px-3 py-6 text-center text-[13px] text-base-content/55">
                   No audit logs found.
                 </td>
               </tr>
@@ -994,37 +1010,33 @@ function ChannelAccountsTab() {
   return (
     <div className="space-y-4">
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {errorMessage && (
-        <div role="alert" className="alert alert-error">
-          <span>{errorMessage}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{errorMessage}</p></div>
       )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr>
-              <th>Account</th>
-              <th>Provider</th>
-              <th>Assigned Workspace</th>
-              <th>Re-assign</th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Account</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Provider</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Assigned Workspace</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Re-assign</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.map((account) => (
-              <tr key={account.id}>
-                <td>
+              <tr key={account.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="px-3 py-3">
                   <div className="font-medium">{account.displayName || account.id}</div>
-                  <div className="text-xs text-base-content/60">
-                    {account.externalId || "-"}
+                  <div className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50">
+                    {account.externalId || "—"}
                   </div>
                 </td>
-                <td>{account.provider || account.channel || "-"}</td>
-                <td>{account.workspace?.name || account.workspaceId || "-"}</td>
-                <td>
+                <td className="px-3 py-3"><span className="op-tag">{account.provider || account.channel || "—"}</span></td>
+                <td className="px-3 py-3 text-base-content/80">{account.workspace?.name || account.workspaceId || "—"}</td>
+                <td className="px-3 py-3">
                   <div className="join">
                     <input
                       className="input input-bordered input-sm join-item"
@@ -1060,7 +1072,7 @@ function ChannelAccountsTab() {
             ))}
             {!list.isLoading && !list.data?.length && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/60">
+                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
                   No channel accounts found.
                 </td>
               </tr>
@@ -1078,32 +1090,30 @@ function ConnectedClientBusinessesTab() {
   return (
     <div className="space-y-4">
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
       )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[12.5px]">
           <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Verification</th>
-              <th>Business status</th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Name</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Verification</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Business status</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.map((business) => (
-              <tr key={business.id}>
-                <td className="max-w-48 truncate">{business.id}</td>
-                <td>{business.name}</td>
-                <td>{business.verification_status || "-"}</td>
-                <td>{business.business_status || "-"}</td>
+              <tr key={business.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{business.id.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3 font-medium">{business.name}</td>
+                <td className="px-3 py-3"><span className="op-tag">{business.verification_status || "—"}</span></td>
+                <td className="px-3 py-3"><span className="op-tag">{business.business_status || "—"}</span></td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.length && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/60">
+                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
                   No connected client businesses found.
                 </td>
               </tr>

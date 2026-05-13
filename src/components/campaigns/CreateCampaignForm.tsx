@@ -10,6 +10,8 @@ import {
   isMediaHeaderType,
   uploadMediaRowIdAndPrepareWhatsApp,
 } from "@/lib/whatsappTemplateMedia";
+import { InfoTip } from "@/components/ui/InfoTip";
+import { WhatsAppTemplatePreviewFromVersion } from "@/components/templates/WhatsAppTemplatePreview";
 
 export type CampaignCreateTemplate = {
   id: string;
@@ -306,12 +308,12 @@ export function CreateCampaignForm({
   return (
     <div className="mx-auto max-w-2xl">
       {error ? (
-        <div role="alert" className="alert alert-error mb-4 text-sm">
+        <div role="alert" className="mb-4 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
           <span>{error}</span>
         </div>
       ) : null}
 
-      <div className="flex min-h-[min(32rem,70vh)] flex-col rounded-box border border-base-300 bg-base-100 shadow-sm">
+      <div className="flex min-h-[min(32rem,70vh)] flex-col card bg-base-100 border border-base-300 shadow-sm">
         {/* Single view: stepper + one content region (no full “screen” swaps). */}
         <div className="border-b border-base-300 px-3 py-4 sm:px-6">
           <ul className="steps steps-horizontal w-full overflow-x-auto pb-1">
@@ -326,9 +328,10 @@ export function CreateCampaignForm({
           </ul>
         </div>
 
-        <div className="flex flex-1 flex-col px-4 py-5 sm:px-6">
+        <div className="flex flex-1 gap-6 px-4 py-5 sm:px-6">
+          <div className="flex min-w-0 flex-1 flex-col">
           <header className="mb-4 shrink-0">
-            <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
+            <p className="op-label">
               Step {step} of {WIZARD_STEPS.length}
             </p>
             <h2 className="mt-1 text-lg font-semibold text-base-content">
@@ -372,7 +375,7 @@ export function CreateCampaignForm({
                 </p>
               )}
               {templateId && !canUseSelectedTemplate && (
-                <div role="alert" className="alert alert-warning alert-soft text-sm">
+                <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
                   <span>
                     No approved WhatsApp version available yet.
                   </span>
@@ -388,7 +391,7 @@ export function CreateCampaignForm({
                   Loading template details…
                 </div>
               ) : !versionDetail ? (
-                <div role="alert" className="alert alert-warning alert-soft text-sm">
+                <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
                   <span>
                     Could not load template version. Go back and re-select a
                     message.
@@ -397,7 +400,7 @@ export function CreateCampaignForm({
               ) : (
                 <>
                   {needsHeaderMedia ? (
-                    <div className="rounded-box border border-base-300 bg-base-100 p-3">
+                    <div className="card bg-base-100 border border-base-300 p-3">
                       <p className="text-sm font-medium text-base-content">
                         Header media ({versionDetail.headerType})
                       </p>
@@ -441,13 +444,9 @@ export function CreateCampaignForm({
                           }}
                         />
                         {headerMediaId ? (
-                          <span className="badge badge-success badge-outline">
-                            Ready
-                          </span>
+                          <span className="op-tag op-tag-ok">Ready</span>
                         ) : (
-                          <span className="text-xs text-warning">
-                            Required
-                          </span>
+                          <span className="op-tag op-tag-warn">Required</span>
                         )}
                       </div>
                     </div>
@@ -470,7 +469,7 @@ export function CreateCampaignForm({
                         (_, idx) => (
                           <div
                             key={idx}
-                            className="rounded-box border border-base-300 bg-base-100 p-3"
+                            className="card bg-base-100 border border-base-300 p-3"
                           >
                             <p className="text-xs font-medium text-base-content/80">
                               Card {idx + 1}
@@ -518,7 +517,7 @@ export function CreateCampaignForm({
                   ) : null}
 
                   {bindingFieldError ? (
-                    <div role="alert" className="alert alert-error text-sm">
+                    <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
                       {bindingFieldError}
                     </div>
                   ) : null}
@@ -577,7 +576,7 @@ export function CreateCampaignForm({
                 </div>
               ) : null}
               {audienceType === "SPECIFIC" && (
-                <div className="max-h-48 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-2">
+                <div className="max-h-48 overflow-y-auto card bg-base-100 border border-base-300 p-2">
                   {!contactsLoaded ? (
                     <p className="text-sm text-base-content/60">
                       Loading contacts…
@@ -615,7 +614,7 @@ export function CreateCampaignForm({
                       Loading segments…
                     </p>
                   ) : segmentsLoadError ? (
-                    <div role="alert" className="alert alert-warning alert-soft text-sm">
+                    <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
                       {segmentsLoadError}
                     </div>
                   ) : segments.length === 0 ? (
@@ -672,7 +671,10 @@ export function CreateCampaignForm({
           {/* Advanced delivery settings (visible on step 3) */}
           {step === 3 && (
             <div className="mt-4 space-y-3 rounded-box border border-base-300 bg-base-200/30 p-4">
-              <p className="text-sm font-medium text-base-content/70">Advanced delivery settings (optional)</p>
+              <p className="text-sm font-medium text-base-content/70 flex items-center gap-1.5">
+                Advanced delivery settings (optional)
+                <InfoTip tip="Controls how fast messages are sent. Chunk size = messages per batch. Throttle = max messages per minute. Leave blank for safe defaults." />
+              </p>
               <div className="grid grid-cols-2 gap-4">
                 <label className="form-control">
                   <span className="label-text text-xs">Chunk size (min 10)</span>
@@ -703,6 +705,15 @@ export function CreateCampaignForm({
             </div>
           )}
           </div>
+          </div>
+
+          {/* Template preview sidebar */}
+          {versionDetail && (
+            <aside className="hidden w-64 shrink-0 lg:block">
+              <p className="op-label mb-2">Preview</p>
+              <WhatsAppTemplatePreviewFromVersion version={versionDetail} />
+            </aside>
+          )}
         </div>
 
         <div className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-base-300 px-4 py-4 sm:px-6">

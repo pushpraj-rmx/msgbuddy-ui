@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { analyticsApi } from "@/lib/api";
+import { InfoTip } from "@/components/ui/InfoTip";
 
 // ========== Types matching backend DTOs ==========
 
@@ -119,12 +120,17 @@ function formatPct(rate: number | undefined | null): string {
 
 // ========== Reusable components ==========
 
-function KpiCard({ label, value }: { label: string; value: number | string | undefined }) {
+function KpiCard({ label, value, hint }: { label: string; value: number | string | undefined; hint?: string }) {
   return (
-    <div className="card bg-base-200 shadow-sm">
-      <div className="card-body">
-        <div className="text-sm text-base-content/60">{label}</div>
-        <div className="text-2xl font-semibold tabular-nums">{value ?? "—"}</div>
+    <div className="op-grain relative rounded-box border border-base-300 bg-base-200">
+      <div className="flex flex-col gap-3 p-4 sm:p-5">
+        <div className="op-label flex items-center gap-1.5">
+          {label}
+          {hint ? <InfoTip tip={hint} /> : null}
+        </div>
+        <div className="font-mono-op text-[26px] font-semibold leading-none tracking-[-0.02em] tabular-nums">
+          {value ?? "—"}
+        </div>
       </div>
     </div>
   );
@@ -133,8 +139,8 @@ function KpiCard({ label, value }: { label: string; value: number | string | und
 function MiniStat({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="text-center">
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
-      <div className="text-xs text-base-content/60">{label}</div>
+      <div className="font-mono-op text-[22px] font-semibold leading-none tabular-nums">{value}</div>
+      <div className="op-label mt-1">{label}</div>
     </div>
   );
 }
@@ -363,7 +369,7 @@ export function AnalyticsClient() {
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+      <div className="card bg-base-100 border border-base-300 p-4">
         <div className="flex flex-wrap items-end gap-2">
           <label className="form-control">
             <span className="label-text text-xs">Start</span>
@@ -397,21 +403,21 @@ export function AnalyticsClient() {
       </div>
 
       {error ? (
-        <div role="alert" className="alert alert-error">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span>{error}</span>
         </div>
       ) : null}
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total messages" value={summary.totalMessages} />
-        <KpiCard label="Sent" value={summary.messagesSent} />
-        <KpiCard label="Received" value={summary.messagesReceived} />
-        <KpiCard label="Delivery rate" value={formatPct(summary.deliveryRate)} />
-        <KpiCard label="Read rate" value={formatPct(summary.readRate)} />
-        <KpiCard label="Conversations" value={summary.totalConversations} />
-        <KpiCard label="Active conv." value={summary.activeConversations} />
-        <KpiCard label="Failed" value={delivery?.failed} />
+        <KpiCard label="Total messages" value={summary.totalMessages} hint="Sum of sent + received across all channels" />
+        <KpiCard label="Sent" value={summary.messagesSent} hint="Outbound messages submitted to channel providers" />
+        <KpiCard label="Received" value={summary.messagesReceived} hint="Inbound messages from contacts" />
+        <KpiCard label="Delivery rate" value={formatPct(summary.deliveryRate)} hint="Delivered ÷ sent × 100" />
+        <KpiCard label="Read rate" value={formatPct(summary.readRate)} hint="Read ÷ delivered × 100 (WhatsApp only)" />
+        <KpiCard label="Conversations" value={summary.totalConversations} hint="Unique conversation threads in this period" />
+        <KpiCard label="Active conv." value={summary.activeConversations} hint="Conversations with at least one message in this period" />
+        <KpiCard label="Failed" value={delivery?.failed} hint="Messages that could not be delivered" />
       </div>
 
       {/* Message volume + Channel mix */}
@@ -434,31 +440,31 @@ export function AnalyticsClient() {
                   <div key={ch.channel} className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{ch.channel}</span>
-                      <span className="badge badge-ghost badge-sm">
-                        {ch.outbound.sent + ch.inbound} total
-                      </span>
+                      <span className="op-tag font-mono-op tabular-nums">{ch.outbound.sent + ch.inbound} total</span>
                     </div>
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs text-base-content/70">
+                      <div className="flex items-center justify-between text-[11px] text-base-content/65">
                         <span>Delivery</span>
-                        <span>{formatPct(ch.outbound.deliveryRate)}</span>
+                        <span className="font-mono-op tabular-nums">{formatPct(ch.outbound.deliveryRate)}</span>
                       </div>
-                      <progress
-                        className="progress progress-primary h-1.5 w-full"
-                        value={Math.min(100, Math.round((ch.outbound.deliveryRate <= 1 ? ch.outbound.deliveryRate * 100 : ch.outbound.deliveryRate)))}
-                        max={100}
-                      />
+                      <div className="h-1.5 w-full overflow-hidden rounded-sm bg-base-300">
+                        <div
+                          className="h-full bg-primary transition-[width] duration-300"
+                          style={{ width: `${Math.min(100, Math.round((ch.outbound.deliveryRate <= 1 ? ch.outbound.deliveryRate * 100 : ch.outbound.deliveryRate)))}%` }}
+                        />
+                      </div>
                     </div>
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs text-base-content/70">
+                      <div className="flex items-center justify-between text-[11px] text-base-content/65">
                         <span>Read</span>
-                        <span>{formatPct(ch.outbound.readRate)}</span>
+                        <span className="font-mono-op tabular-nums">{formatPct(ch.outbound.readRate)}</span>
                       </div>
-                      <progress
-                        className="progress progress-secondary h-1.5 w-full"
-                        value={Math.min(100, Math.round((ch.outbound.readRate <= 1 ? ch.outbound.readRate * 100 : ch.outbound.readRate)))}
-                        max={100}
-                      />
+                      <div className="h-1.5 w-full overflow-hidden rounded-sm bg-base-300">
+                        <div
+                          className="h-full bg-info transition-[width] duration-300"
+                          style={{ width: `${Math.min(100, Math.round((ch.outbound.readRate <= 1 ? ch.outbound.readRate * 100 : ch.outbound.readRate)))}%` }}
+                        />
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-x-3 text-xs text-base-content/60">
                       <span>Sent: {ch.outbound.sent}</span>
@@ -519,17 +525,18 @@ export function AnalyticsClient() {
                 </div>
                 {contacts.totalContacts > 0 && (
                   <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs text-base-content/70">
+                    <div className="flex items-center justify-between text-[11px] text-base-content/65">
                       <span>Active rate</span>
-                      <span>
+                      <span className="font-mono-op tabular-nums">
                         {Math.round((contacts.activeContacts / contacts.totalContacts) * 100)}%
                       </span>
                     </div>
-                    <progress
-                      className="progress progress-success h-2 w-full"
-                      value={Math.round((contacts.activeContacts / contacts.totalContacts) * 100)}
-                      max={100}
-                    />
+                    <div className="h-2 w-full overflow-hidden rounded-sm bg-base-300">
+                      <div
+                        className="h-full bg-primary transition-[width] duration-300"
+                        style={{ width: `${Math.round((contacts.activeContacts / contacts.totalContacts) * 100)}%` }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -760,16 +767,10 @@ export function AnalyticsClient() {
                 <MiniStat label="Failed" value={activePeriod.delivery.failed} />
               </div>
               <div className="flex flex-wrap gap-2">
-                <span className="badge badge-primary badge-outline">
-                  Delivery: {formatPct(activePeriod.delivery.deliveryRate)}
-                </span>
-                <span className="badge badge-secondary badge-outline">
-                  Read: {formatPct(activePeriod.delivery.readRate)}
-                </span>
+                <span className="op-tag op-tag-ok">Delivery: {formatPct(activePeriod.delivery.deliveryRate)}</span>
+                <span className="op-tag op-tag-info">Read: {formatPct(activePeriod.delivery.readRate)}</span>
                 {activePeriod.delivery.failureRate > 0 && (
-                  <span className="badge badge-error badge-outline">
-                    Failure: {formatPct(activePeriod.delivery.failureRate)}
-                  </span>
+                  <span className="op-tag op-tag-danger">Failure: {formatPct(activePeriod.delivery.failureRate)}</span>
                 )}
               </div>
             </div>

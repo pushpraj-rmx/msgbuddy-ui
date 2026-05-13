@@ -63,40 +63,49 @@ export function OpsClient() {
   return (
     <div className="space-y-4">
       {error ? (
-        <div role="alert" className="alert alert-error">
-          <span>{error}</span>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[13px] text-base-content">{error}</p>
         </div>
       ) : null}
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Queue metrics</h2>
+      <div className="rounded-box border border-base-300 bg-base-200">
+        <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Queue metrics</h2>
+            <span className="op-label">raw metric · bullmq</span>
+          </div>
           <button type="button" className="btn btn-sm btn-primary" onClick={() => void loadQueues()} disabled={loading}>
-            {loading ? "Loading…" : "Refresh queues"}
+            {loading ? "Loading…" : "Refresh →"}
           </button>
         </div>
-        <pre className="max-h-80 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 text-xs">
+        <pre className="max-h-80 overflow-auto bg-base-100 p-3 font-mono text-[11px] leading-relaxed text-base-content/85">
           {queueMetrics == null ? "No data loaded yet." : JSON.stringify(queueMetrics, null, 2)}
         </pre>
       </div>
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-3">
-        <h2 className="text-base font-semibold">Upload session monitor</h2>
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="rounded-box border border-base-300 bg-base-200">
+        <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Upload session monitor</h2>
+            <span className="op-label">session inspector</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-base-300 px-4 py-3">
           <input
-            className="input input-bordered input-sm min-w-[20rem]"
+            className="input input-bordered input-sm min-w-[20rem] font-mono-op"
             placeholder="Upload session ID"
             value={uploadSessionId}
             onChange={(e) => setUploadSessionId(e.target.value)}
           />
-          <button type="button" className="btn btn-sm btn-outline" onClick={() => void checkSession()} disabled={loading || !uploadSessionId.trim()}>
+          <button type="button" className="btn btn-sm" onClick={() => void checkSession()} disabled={loading || !uploadSessionId.trim()}>
             Check status
           </button>
-          <button type="button" className="btn btn-sm btn-ghost text-error" onClick={() => void cancelSession()} disabled={loading || !uploadSessionId.trim()}>
+          <button type="button" className="btn btn-ghost btn-sm text-error" onClick={() => void cancelSession()} disabled={loading || !uploadSessionId.trim()}>
             Cancel session
           </button>
         </div>
-        <pre className="max-h-80 overflow-auto rounded-box border border-base-300 bg-base-100 p-3 text-xs">
+        <pre className="max-h-80 overflow-auto bg-base-100 p-3 font-mono text-[11px] leading-relaxed text-base-content/85">
           {uploadSessionData == null
             ? "No session loaded."
             : JSON.stringify(uploadSessionData, null, 2)}

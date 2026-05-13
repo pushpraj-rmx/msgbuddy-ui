@@ -73,7 +73,10 @@ export type ContactNote = {
 };
 
 export type SegmentQuery = {
+  /** @deprecated Use tagIds. Legacy: tag names. */
   tags?: string[];
+  /** Preferred: tag IDs. Contacts must have ALL listed tags. */
+  tagIds?: string[];
   hasEmail?: boolean;
   hasPhone?: boolean;
   isBlocked?: boolean;
@@ -239,6 +242,8 @@ export type ChannelTemplateVersion = {
   providerVersionId?: string | null;
   syncedAt?: string | null;
   syncError?: string | null;
+  /** Rejection reason from Meta content review (async webhook). */
+  providerRejectionReason?: string | null;
   archivedAt?: string | null;
   submittedAt?: string | null;
   approvedAt?: string | null;

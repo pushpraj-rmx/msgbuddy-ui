@@ -1,19 +1,14 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Inter, Manrope } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 
 import { QueryProvider } from "@/providers/QueryProvider";
 import { getAppOrigin } from "@/lib/site";
 
-/** Stitch Buddy Soft UI: Inter body, Manrope headlines */
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const manrope = Manrope({
-  variable: "--font-manrope",
+/** Operator design system: Geist body/UI, Geist Mono for numerics/IDs/micro-labels,
+ *  Instrument Serif for sparing display moments (hero/empty-states). */
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
   display: "swap",
 });
@@ -21,6 +16,15 @@ const manrope = Manrope({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: "400",
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -50,7 +54,7 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${manrope.variable} ${geistMono.variable} font-sans antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} font-sans antialiased`}
       >
         <QueryProvider>
           {children}

@@ -79,8 +79,8 @@ export function InternalNotesPanel({
   };
 
   return (
-    <div className="rounded-none bg-base-100 p-3 space-y-2">
-      <h3 className="text-sm font-medium">Internal notes</h3>
+    <div className="border-l-2 border-warning bg-warning/5 p-3 space-y-2">
+      <span className="op-label text-warning">Internal note</span>
       <div className="flex items-center gap-2">
         <input
           className="input input-bordered input-sm w-full"
@@ -98,7 +98,7 @@ export function InternalNotesPanel({
         </button>
       </div>
       {error ? (
-        <div role="alert" className="alert alert-error alert-soft py-2 text-sm">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
           {error}
         </div>
       ) : null}

@@ -37,21 +37,6 @@ export function campaignStatusTone(status: string): CampaignStatusTone {
   return "neutral";
 }
 
-export function statusBadgeClasses(tone: CampaignStatusTone): string {
-  switch (tone) {
-    case "success":
-      return "badge-success";
-    case "running":
-      return "badge-info";
-    case "warning":
-      return "badge-warning";
-    case "danger":
-      return "badge-error";
-    default:
-      return "badge-neutral";
-  }
-}
-
 /** Neutral surface; color only on left accent (badge carries semantic color). */
 export function statusHeroClasses(tone: CampaignStatusTone): string {
   const accent =

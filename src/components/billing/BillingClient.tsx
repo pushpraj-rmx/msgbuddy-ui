@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle, Rocket, Star, Crown } from "lucide-react";
+import { CheckCircle, Rocket, Star, Crown, RefreshCw } from "lucide-react";
 import { billingApi, type BillingCurrentResponse } from "@/lib/api";
+import { getApiError } from "@/lib/api-error";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 type PlanCardDef = {
   id: string;
@@ -37,7 +39,7 @@ const PLAN_CARDS: PlanCardDef[] = [
     period: "/month",
     features: [
       "10,000 messages/mo",
-      "2,000 contacts",
+      "10,000 contacts",
       "5 team members",
       "2 phone numbers",
       "2 GB storage",
@@ -53,7 +55,7 @@ const PLAN_CARDS: PlanCardDef[] = [
     highlighted: true,
     features: [
       "50,000 messages/mo",
-      "10,000 contacts",
+      "100,000 contacts",
       "15 team members",
       "5 phone numbers",
       "10 GB storage",
@@ -70,7 +72,7 @@ const PLAN_CARDS: PlanCardDef[] = [
     period: "",
     features: [
       "Unlimited messages",
-      "50,000+ contacts",
+      "1,000,000+ contacts",
       "50+ team members",
       "20+ phone numbers",
       "50 GB+ storage",
@@ -124,6 +126,10 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [subscribing, setSubscribing] = useState<string | null>(null);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -150,7 +156,7 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
 
   if (error) {
     return (
-      <div role="alert" className="alert alert-error alert-soft">
+      <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
         <span>{error}</span>
       </div>
     );
@@ -161,27 +167,42 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
     setError("");
     try {
       const result = await billingApi.subscribe(planId);
-      // Redirect to Razorpay checkout
-      window.location.href = result.shortUrl;
-    } catch (err: any) {
-      setError(
-        err?.response?.data?.message ?? "Failed to create subscription",
-      );
+      // Redirect to Razorpay checkout (replace so back-button doesn't land on stale checkout page)
+      window.location.replace(result.shortUrl);
+    } catch (err) {
+      setError(getApiError(err) || "Failed to create subscription");
       setSubscribing(null);
     }
   };
 
   const handleCancel = async () => {
-    if (!confirm("Are you sure you want to cancel your subscription? You will be downgraded to the free plan at the end of your billing period.")) {
-      return;
-    }
+    setCancelLoading(true);
     try {
       await billingApi.cancel();
-      // Refresh billing data
       const updated = await billingApi.current(workspaceId);
       setBilling(updated);
-    } catch (err: any) {
-      setError(err?.response?.data?.message ?? "Failed to cancel subscription");
+      setShowCancelConfirm(false);
+    } catch (err) {
+      setError(getApiError(err) || "Failed to cancel subscription");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
+  const handleSyncLimits = async () => {
+    setSyncing(true);
+    setSyncSuccess(false);
+    setError("");
+    try {
+      await billingApi.syncPlanLimits();
+      const updated = await billingApi.current(workspaceId);
+      setBilling(updated);
+      setSyncSuccess(true);
+      setTimeout(() => setSyncSuccess(false), 3000);
+    } catch (err) {
+      setError(getApiError(err) || "Failed to sync plan limits");
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -204,7 +225,7 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
                   {planDisplayName(billing.plan)}
                 </span>
                 {isTrial ? (
-                  <span className="badge badge-warning badge-sm">Trial</span>
+                  <span className="op-tag op-tag-warn">Trial</span>
                 ) : null}
               </div>
               {isTrial && trialDays !== null ? (
@@ -227,8 +248,8 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
               </Link>
             ) : billing.plan !== "scale" && billing.subscriptionId ? (
               <button
-                className="btn btn-outline btn-error btn-sm"
-                onClick={handleCancel}
+                className="btn btn-sm border-error/40 text-error hover:bg-error/10"
+                onClick={() => setShowCancelConfirm(true)}
               >
                 Cancel subscription
               </button>
@@ -264,6 +285,25 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
               formatValue={(v) => formatBytes(v)}
             />
           </div>
+
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              className="btn btn-sm btn-ghost gap-2"
+              disabled={syncing || billing.plan === "scale"}
+              onClick={handleSyncLimits}
+            >
+              <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+              Sync plan limits
+            </button>
+            {syncSuccess ? (
+              <span className="text-sm text-success">Limits synced</span>
+            ) : null}
+            {billing.plan === "scale" ? (
+              <span className="text-xs text-base-content/50">
+                Scale plan limits are managed manually
+              </span>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -279,11 +319,13 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
             return (
               <div
                 key={plan.id}
-                className={`rounded-2xl border p-5 ${
-                  plan.highlighted
-                    ? "border-primary bg-primary/5"
-                    : "border-base-300 bg-base-100"
-                } ${isCurrent ? "ring-2 ring-primary/40" : ""}`}
+                className={`rounded-box border bg-base-200 p-5 ${
+                  isCurrent
+                    ? "border-primary border-l-2 border-l-primary"
+                    : plan.highlighted
+                      ? "border-primary"
+                      : "border-base-300"
+                }`}
               >
                 <div className="flex items-center gap-2">
                   {plan.id === "starter" ? (
@@ -322,7 +364,7 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
                   ) : plan.id === "scale" ? (
                     <a
                       href="mailto:sales@msgbuddy.com"
-                      className="btn btn-outline btn-sm w-full"
+                      className="btn btn-sm w-full"
                     >
                       Contact sales
                     </a>
@@ -333,7 +375,7 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
                   ) : (
                     <button
                       className={`btn btn-sm w-full ${
-                        plan.highlighted ? "btn-primary" : "btn-outline"
+                        plan.highlighted ? "btn-primary" : ""
                       }`}
                       disabled={subscribing === plan.id}
                       onClick={() => handleSubscribe(plan.id)}
@@ -392,6 +434,16 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
           </div>
         </section>
       ) : null}
+      <ConfirmDialog
+        open={showCancelConfirm}
+        title="Cancel subscription"
+        description="You will be downgraded to the Free plan at the end of your current billing period. All Growth features will become unavailable."
+        confirmLabel="Cancel subscription"
+        tone="danger"
+        loading={cancelLoading}
+        onConfirm={handleCancel}
+        onClose={() => setShowCancelConfirm(false)}
+      />
     </div>
   );
 }

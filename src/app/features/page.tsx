@@ -3,43 +3,31 @@ import { MarketingPageShell } from "@/components/marketing/MarketingPageShell";
 export default async function FeaturesPage() {
   return (
     <MarketingPageShell>
-      <div className="space-y-8">
-        <div className="space-y-3">
-          <span className="badge badge-primary badge-outline">Features</span>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
+      <div className="space-y-10 py-10">
+        <div className="space-y-4">
+          <span className="op-section-title">Features</span>
+          <h1 className="text-[36px] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[44px]">
             Core tools for WhatsApp operations
           </h1>
-          <p className="max-w-3xl text-base-content/80">
+          <p className="max-w-3xl text-[15px] text-base-content/70">
             Everything in MsgBuddy is built to help operators respond faster,
             segment better, and run campaigns with confidence.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <article className="rounded-box border border-base-300 bg-base-200 p-5">
-            <h2 className="font-semibold">Unified inbox</h2>
-            <p className="mt-2 text-sm text-base-content/70">
-              Keep text and media replies in one flow with contact context.
-            </p>
-          </article>
-          <article className="rounded-box border border-base-300 bg-base-200 p-5">
-            <h2 className="font-semibold">Contact intelligence</h2>
-            <p className="mt-2 text-sm text-base-content/70">
-              Use segments and tags to target the right audience quickly.
-            </p>
-          </article>
-          <article className="rounded-box border border-base-300 bg-base-200 p-5">
-            <h2 className="font-semibold">Campaign control</h2>
-            <p className="mt-2 text-sm text-base-content/70">
-              Launch broadcasts and monitor outcomes from one dashboard.
-            </p>
-          </article>
-          <article className="rounded-box border border-base-300 bg-base-200 p-5">
-            <h2 className="font-semibold">Workspace-ready</h2>
-            <p className="mt-2 text-sm text-base-content/70">
-              Support team collaboration with workspace-aware organization.
-            </p>
-          </article>
+        <div className="grid gap-3 md:grid-cols-2">
+          {[
+            { n: "01", label: "Unified inbox",        title: "Every conversation, one thread.",       desc: "Keep text and media replies in one flow with contact context." },
+            { n: "02", label: "Contact intelligence", title: "Tags and segments that actually bite.", desc: "Use segments and tags to target the right audience quickly." },
+            { n: "03", label: "Campaign control",     title: "Deliver, measure, iterate.",            desc: "Launch broadcasts and monitor outcomes from one dashboard." },
+            { n: "04", label: "Workspace-ready",      title: "Built for teams, not solo inboxes.",    desc: "Support team collaboration with workspace-aware organization." },
+          ].map((item) => (
+            <article key={item.n} className="op-grain relative rounded-box border border-base-300 bg-base-200 p-6">
+              <span className="op-label">{item.n} · {item.label}</span>
+              <h2 className="mt-3 text-[17px] font-semibold tracking-[-0.015em]">{item.title}</h2>
+              <p className="mt-1.5 text-[13px] text-base-content/60">{item.desc}</p>
+            </article>
+          ))}
         </div>
       </div>
     </MarketingPageShell>

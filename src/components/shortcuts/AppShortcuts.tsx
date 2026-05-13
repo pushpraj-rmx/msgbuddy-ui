@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   dispatchOpenGlobalSearch,
+  dispatchToggleDetailsPanel,
   SHORTCUT_EVENTS,
 } from "@/lib/shortcuts";
 import { GlobalContextMenu } from "./GlobalContextMenu";
@@ -28,6 +29,7 @@ function isAnyModalDialogOpen(): boolean {
 export function AppShortcuts() {
   const [helpOpen, setHelpOpen] = useState(false);
   const helpOpenRef = useRef(false);
+  // eslint-disable-next-line react-hooks/refs -- sync ref with state for use in event listeners; assignment is safe
   helpOpenRef.current = helpOpen;
 
   const openHelp = useCallback(() => setHelpOpen(true), []);
@@ -59,6 +61,14 @@ export function AppShortcuts() {
         }
         if (isAnyModalDialogOpen()) return;
         setHelpOpen(true);
+        return;
+      }
+
+      if (e.key === "." && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (typing) return;
+        if (isAnyModalDialogOpen()) return;
+        e.preventDefault();
+        dispatchToggleDetailsPanel();
         return;
       }
 

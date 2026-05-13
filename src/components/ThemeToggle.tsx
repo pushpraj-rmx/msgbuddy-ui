@@ -27,9 +27,11 @@ export function ThemeToggle() {
 
   useEffect(() => {
     const stored = getStored();
+    /* eslint-disable react-hooks/set-state-in-effect -- SSR hydration guard: reads localStorage + prevents FOUC */
     setPreference(stored);
     applyTheme(stored);
     setMounted(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   useEffect(() => {

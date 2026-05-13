@@ -28,6 +28,7 @@ import {
 } from "@/lib/sseEvents";
 import { CampaignDetailView } from "./CampaignDetailView";
 import { CampaignMetaSidebar } from "./CampaignMetaSidebar";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export type Campaign = {
   id: string;
@@ -35,6 +36,7 @@ export type Campaign = {
   status: string;
   channel: string;
   channelTemplateVersionId?: string;
+  channelTemplateVersion?: import("@/lib/types").ChannelTemplateVersion | null;
   /** Backend: header media, staticVariables, carouselCardMediaIds */
   templateBindings?: Record<string, unknown> | null;
   scheduledAt?: string | null;
@@ -87,11 +89,11 @@ export function CampaignsClient({
 }) {
   const searchParams = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    initialCampaigns[0]?.id ?? null
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"cancel" | "drainQueue" | "rename" | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [progress, setProgress] = useState<CampaignProgress | null>(null);
   const [progressLoading, setProgressLoading] = useState(false);
   const [report, setReport] = useState<Record<string, unknown> | null>(null);
@@ -319,17 +321,9 @@ export function CampaignsClient({
         | "delete"
     ) => {
       if (!selectedCampaign) return;
-      if (action === "cancel") {
-        const ok = window.confirm(
-          "Stop this campaign? Remaining sends will be skipped and the campaign will be marked cancelled."
-        );
-        if (!ok) return;
-      }
-      if (action === "drainQueue") {
-        const ok = window.confirm(
-          "Clear stuck jobs from the send queue? This only removes jobs in Redis and does not update campaign status. Use “Stop campaign” to end the run in the database."
-        );
-        if (!ok) return;
+      if (action === "cancel" || action === "drainQueue") {
+        setConfirmAction(action);
+        return;
       }
       setLoading(true);
       setError(null);
@@ -337,13 +331,6 @@ export function CampaignsClient({
         if (action === "start") await campaignsApi.start(selectedCampaign.id);
         if (action === "pause") await campaignsApi.pause(selectedCampaign.id);
         if (action === "resume") await campaignsApi.resume(selectedCampaign.id);
-        if (action === "cancel") await campaignsApi.cancel(selectedCampaign.id);
-        if (action === "drainQueue") {
-          const r = await campaignsApi.drainQueue(selectedCampaign.id);
-          window.alert(
-            `Removed ${r.removedFromQueue} job(s) from the queue.`
-          );
-        }
         if (action === "duplicate") await campaignsApi.duplicate(selectedCampaign.id);
         if (action === "delete") await campaignsApi.remove(selectedCampaign.id);
         await refresh();
@@ -380,21 +367,37 @@ export function CampaignsClient({
     [selectedCampaign, refresh]
   );
 
-  const handleRename = useCallback(async () => {
+  const handleRename = useCallback(() => {
     if (!selectedCampaign) return;
-    const nextName = window.prompt("Campaign name", selectedCampaign.name)?.trim();
-    if (!nextName || nextName === selectedCampaign.name) return;
-    setLoading(true);
+    setConfirmAction("rename");
+  }, [selectedCampaign]);
+
+  const handleConfirmAction = useCallback(async (promptValue?: string) => {
+    if (!selectedCampaign || !confirmAction) return;
+    setConfirmBusy(true);
     setError(null);
     try {
-      await campaignsApi.update(selectedCampaign.id, { name: nextName });
-      await refresh();
+      if (confirmAction === "cancel") {
+        await campaignsApi.cancel(selectedCampaign.id);
+        await refresh();
+        await loadProgress();
+      } else if (confirmAction === "drainQueue") {
+        const r = await campaignsApi.drainQueue(selectedCampaign.id);
+        window.alert(`Removed ${r.removedFromQueue} job(s) from the queue.`);
+      } else if (confirmAction === "rename") {
+        const nextName = promptValue?.trim();
+        if (nextName && nextName !== selectedCampaign.name) {
+          await campaignsApi.update(selectedCampaign.id, { name: nextName });
+          await refresh();
+        }
+      }
+      setConfirmAction(null);
     } catch (err: unknown) {
-      setError(getApiError(err) || "Failed to update campaign.");
+      setError(getApiError(err) || "Action failed.");
     } finally {
-      setLoading(false);
+      setConfirmBusy(false);
     }
-  }, [selectedCampaign, refresh]);
+  }, [selectedCampaign, confirmAction, refresh, loadProgress]);
 
   const progressBarPercent = useMemo(() => {
     const p = completionPercent(mergedMetrics);
@@ -527,6 +530,7 @@ export function CampaignsClient({
         tone={tone}
         runs={runs}
         mergedMetrics={mergedMetrics}
+        templateVersion={selectedCampaign.channelTemplateVersion}
       />
     );
   }, [selectedCampaign, statusLabel, channelLabel, tone, runs, mergedMetrics]);
@@ -539,16 +543,22 @@ export function CampaignsClient({
     setRightPanelContent({
       source: "campaigns",
       title: formatCampaignListTitle(selectedCampaign.name),
-      openAfter: isLgUp,
+      openAfter: true,
       content: campaignMetaPanel,
     });
-  }, [
-    selectedCampaign,
-    campaignMetaPanel,
-    clearRightPanelContent,
-    setRightPanelContent,
-    isLgUp,
-  ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only open panel on new campaign selection
+  }, [selectedId, clearRightPanelContent, setRightPanelContent]);
+
+  // Update panel content silently when data changes (progress, runs, etc.)
+  useEffect(() => {
+    if (!selectedCampaign) return;
+    setRightPanelContent({
+      source: "campaigns",
+      title: formatCampaignListTitle(selectedCampaign.name),
+      content: campaignMetaPanel,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- silent update, no openAfter
+  }, [campaignMetaPanel, setRightPanelContent]);
 
   useEffect(() => {
     return () => clearRightPanelContent("campaigns");
@@ -561,17 +571,22 @@ export function CampaignsClient({
           <h2 className="text-lg font-semibold tracking-tight text-base-content">
             Campaigns
           </h2>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={refresh}
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={refresh}
+            >
+              Refresh
+            </button>
+            <Link href="/campaigns/new" className="btn btn-primary btn-sm">
+              New campaign
+            </Link>
+          </div>
         </div>
 
         {error ? (
-          <div role="alert" className="alert alert-error text-sm">
+          <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm">
             <span>{error}</span>
           </div>
         ) : null}
@@ -611,11 +626,12 @@ export function CampaignsClient({
                       </p>
                     ) : null}
                     {rowTone === "running" && latestRun?.totalJobs ? (
-                      <progress
-                        className="progress progress-info mt-1 h-1 w-full"
-                        value={Math.min(100, Math.round(((latestRun.completedJobs ?? 0) / latestRun.totalJobs) * 100))}
-                        max={100}
-                      />
+                      <div className="mt-2 h-1 w-full overflow-hidden rounded-sm bg-base-300">
+                        <div
+                          className="h-full bg-primary transition-[width] duration-300"
+                          style={{ width: `${Math.min(100, Math.round(((latestRun.completedJobs ?? 0) / (latestRun.totalJobs ?? 1)) * 100))}%` }}
+                        />
+                      </div>
                     ) : null}
                   </div>
                 </div>
@@ -627,10 +643,6 @@ export function CampaignsClient({
         {!campaigns.length ? (
           <p className="text-sm text-base-content/65">No campaigns yet.</p>
         ) : null}
-
-        <Link href="/campaigns/new" className="btn btn-primary w-full">
-          New campaign
-        </Link>
       </aside>
 
       {/* Main content: campaign detail */}
@@ -643,6 +655,38 @@ export function CampaignsClient({
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmAction === "cancel"}
+        title="Stop campaign"
+        description="Remaining sends will be skipped and the campaign will be marked cancelled. Already-delivered messages are not affected."
+        confirmLabel="Stop campaign"
+        tone="danger"
+        loading={confirmBusy}
+        onConfirm={() => handleConfirmAction()}
+        onClose={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === "drainQueue"}
+        title="Drain queue"
+        description="Clear stuck jobs from the send queue. This only removes jobs in Redis and does not update campaign status. Use 'Stop campaign' to end the run."
+        confirmLabel="Drain queue"
+        tone="warning"
+        loading={confirmBusy}
+        onConfirm={() => handleConfirmAction()}
+        onClose={() => setConfirmAction(null)}
+      />
+      <ConfirmDialog
+        open={confirmAction === "rename"}
+        title="Rename campaign"
+        description="Enter a new name for this campaign."
+        confirmLabel="Save"
+        tone="primary"
+        loading={confirmBusy}
+        promptLabel="Campaign name"
+        promptPlaceholder={selectedCampaign?.name}
+        onConfirm={handleConfirmAction}
+        onClose={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

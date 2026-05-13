@@ -26,7 +26,7 @@ export function SettingsGearMenu({
       </button>
       <ul
         tabIndex={0}
-        className="dropdown-content menu menu-sm z-30 mt-2 w-60 rounded-box border border-base-300 bg-base-100 p-2 shadow-xl"
+        className="dropdown-content menu menu-sm z-30 mt-2 w-60 rounded-box border border-base-300 bg-base-200 p-2 shadow-lg"
         role="menu"
       >
         {showTeamLink ? (

@@ -10,7 +10,7 @@ import {
   useChannelTemplateState,
   channelTemplateKeys,
 } from "@/hooks/use-templates";
-import type { ChannelTemplate, ChannelTemplateStateRequirement, TemplateCategory, TemplateChannel, WorkspaceRole } from "@/lib/types";
+import type { ChannelTemplate, ChannelTemplateStateRequirement, TemplateCategory, WorkspaceRole } from "@/lib/types";
 import { templatesApi } from "@/lib/api";
 import { channelTemplateRequirementHref } from "@/lib/site";
 import {
@@ -27,18 +27,16 @@ function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
   const requirements = (state?.missingRequirements ?? []) as ChannelTemplateStateRequirement[];
 
   return (
-    <div className="rounded-box border border-base-300 bg-base-100 p-4">
+    <div className="card bg-base-100 border border-base-300 p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="badge badge-ghost">{ct.channel}</span>
-            {ct.category && (
-              <span className="badge badge-outline">{ct.category}</span>
-            )}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="op-tag">{ct.channel}</span>
+            {ct.category && <span className="op-tag">{ct.category}</span>}
             {state?.isSendable ? (
-              <span className="badge badge-success">Sendable</span>
+              <span className="op-tag op-tag-ok">Sendable</span>
             ) : (
-              <span className="badge badge-warning">Not sendable</span>
+              <span className="op-tag op-tag-warn">Not sendable</span>
             )}
           </div>
           <div className="mt-2 text-sm text-base-content/70 space-y-1">
@@ -59,13 +57,13 @@ function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
       </div>
 
       {stateQuery.isError && (
-        <div role="alert" className="alert alert-error mt-3">
+        <div role="alert" className="mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span>{getApiError(stateQuery.error)}</span>
         </div>
       )}
 
       {state?.categoryPendingChange && (
-        <div role="alert" className="alert alert-info mt-3 text-sm">
+        <div role="alert" className="mt-3 rounded-box border border-info/30 border-l-2 border-l-info bg-base-200 px-3 py-2 text-sm">
           <span>
             Upcoming category change: {state.categoryPendingChange.currentCategory} →{" "}
             {state.categoryPendingChange.correctCategory}
@@ -183,10 +181,6 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
   }, [queryClient, workspaceId]);
 
   const hasWhatsApp = channelTemplates.some((ct) => ct.channel === "WHATSAPP");
-  const hasChannel = useCallback(
-    (ch: TemplateChannel) => channelTemplates.some((ct) => ct.channel === ch),
-    [channelTemplates]
-  );
 
 
   const openEdit = useCallback(() => {
@@ -221,7 +215,7 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
 
   if (templateQuery.isError) {
     return (
-      <div role="alert" className="alert alert-error">
+      <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
         <span>{getApiError(templateQuery.error)}</span>
         <Link href="/templates" className="btn btn-ghost btn-sm">
           Back
@@ -233,7 +227,7 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
   return (
     <div className="space-y-4">
       {waUtilityRestriction && (
-        <div role="alert" className="alert alert-warning">
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <span>
             WhatsApp account notice
             {waUtilityRestriction.level != null && waUtilityRestriction.level !== ""
@@ -245,7 +239,7 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
         </div>
       )}
 
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
+      <div className="card bg-base-100 border border-base-300 p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <div className="text-xl font-semibold">{template.name}</div>
@@ -283,12 +277,12 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
           )}
         </div>
         {addWhatsAppMutation.isError && (
-          <div role="alert" className="alert alert-error">
+          <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
             <span>{getApiError(addWhatsAppMutation.error) || "Failed to add WhatsApp."}</span>
           </div>
         )}
         {channelTemplates.length === 0 ? (
-          <div className="rounded-box border border-base-300 bg-base-100 p-4 text-base-content/70">
+          <div className="card bg-base-100 border border-base-300 p-4 text-base-content/70">
             No channels configured yet.
           </div>
         ) : (
