@@ -41,7 +41,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="op-label">{label}</span>
-      <span className="text-[13px] text-base-content">{value}</span>
+      <span className="text-[0.8125rem] text-base-content">{value}</span>
     </div>
   );
 }
@@ -50,7 +50,7 @@ function MonoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
       <span className="op-label">{label}</span>
-      <span className="font-mono-op text-[12.5px] tabular-nums text-base-content">{value}</span>
+      <span className="font-mono-op text-[0.78125rem] tabular-nums text-base-content">{value}</span>
     </div>
   );
 }

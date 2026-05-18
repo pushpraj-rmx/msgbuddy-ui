@@ -11,7 +11,7 @@ import {
 } from "@/lib/messaging";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getWhatsappDeliveryHint } from "@/lib/whatsappDeliveryErrors";
-import { MessageActionBar } from "@/components/inbox/MessageActionBar";
+import { MessageContextMenu } from "@/components/inbox/MessageContextMenu";
 import { MediaLightbox } from "@/components/ui/MediaLightbox";
 
 function formatFileSizeForDocument(bytes: number | null | undefined): string | null {
@@ -136,16 +136,17 @@ interface MessageBubbleProps {
   message: InboxMessage;
   onPin?: (message: InboxMessage) => void;
   onStar?: (message: InboxMessage) => void;
+  highlighted?: boolean;
 }
 
-export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
+export function MessageBubble({ message, onPin, onStar, highlighted = false }: MessageBubbleProps) {
   const failed = isFailedMessage(message);
   const processing = isProcessingMessage(message);
   const hint = getWhatsappDeliveryHint(message.errorCode);
   const kind = getMessageType(message);
   const richMedia = isRichMediaBubble(message);
   const documentBubble = getMediaKind(message) === "document";
-  const [hovered, setHovered] = useState(false);
+  const [menuPoint, setMenuPoint] = useState<{ x: number; y: number } | null>(null);
 
   let failedAtLabel: string | null = null;
   if (message.failedAt) {
@@ -477,36 +478,37 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
     );
   })();
 
+  const canStar = !!onStar;
+  const canPin = !!onPin;
+  const canCopy = !!message.text;
+  const hasContextMenu = canStar || canPin || canCopy;
+
   return (
     <div
-      className="relative"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      className={`relative rounded-box transition-[box-shadow,background-color] duration-500 ${
+        highlighted ? "bg-warning/15 [box-shadow:0_0_0_3px_hsl(var(--wa)/0.45)]" : ""
+      }`}
+      data-message-id={message.id}
+      data-local-context-menu={hasContextMenu ? "" : undefined}
+      onContextMenu={
+        hasContextMenu
+          ? (e) => {
+              e.preventDefault();
+              setMenuPoint({ x: e.clientX, y: e.clientY });
+            }
+          : undefined
+      }
     >
-      {/* Action bar — rendered outside .chat-bubble so DaisyUI overflow:hidden doesn't clip it */}
-      {(onPin || onStar) && (
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            transform: "translateY(-110%)",
-            /* Full-width row: outbound bubble is on the right → anchor bar to the right; inbound on the left. */
-            ...(message.direction === "OUTBOUND" ? { right: 8 } : { left: 8 }),
-            zIndex: 20,
-            opacity: hovered ? 1 : 0,
-            pointerEvents: hovered ? "auto" : "none",
-            transition: "opacity 0.15s ease",
-          }}
-        >
-          <MessageActionBar
-            isPinned={message.isPinned}
-            isStarred={message.isStarred}
-            text={message.text ?? undefined}
-            onPin={() => onPin?.(message)}
-            onStar={() => onStar?.(message)}
-            direction={message.direction}
-          />
-        </div>
+      {menuPoint && (
+        <MessageContextMenu
+          point={menuPoint}
+          isPinned={message.isPinned}
+          isStarred={message.isStarred}
+          text={message.text ?? undefined}
+          onPin={onPin ? () => onPin(message) : undefined}
+          onStar={onStar ? () => onStar(message) : undefined}
+          onClose={() => setMenuPoint(null)}
+        />
       )}
 
       <div
@@ -597,7 +599,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
                     </span>
                   ) : null}
                   {failedAtLabel ? (
-                    <span className="font-mono-op text-[11px] tabular-nums text-base-content/60">
+                    <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/60">
                       {failedAtLabel}
                     </span>
                   ) : null}
@@ -606,7 +608,7 @@ export function MessageBubble({ message, onPin, onStar }: MessageBubbleProps) {
             )}
           </div>
         ) : null}
-        <div className="chat-footer font-mono-op mt-1 text-[10px] tracking-[0.04em] text-base-content/45 tabular-nums">
+        <div className="chat-footer font-mono-op mt-1 text-[0.625rem] tracking-[0.04em] text-base-content/45 tabular-nums">
           {formatDeliveryStatusLabel(message)}
         </div>
       </div>

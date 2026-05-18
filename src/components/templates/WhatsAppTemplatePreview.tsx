@@ -56,7 +56,7 @@ export function renderVariableText(text: string) {
     /^\{\{[^}]+\}\}$/.test(part) ? (
       <span
         key={i}
-        className="rounded bg-primary/15 px-0.5 font-mono text-[11px] text-primary"
+        className="rounded bg-primary/15 px-0.5 font-mono text-[0.6875rem] text-primary"
       >
         {part}
       </span>
@@ -131,7 +131,7 @@ function HeaderMedia({
 function ButtonRow({ btn }: { btn: TemplateButton }) {
   const Icon = BUTTON_ICON[btn.type] ?? Reply;
   return (
-    <div className="flex items-center justify-center gap-1.5 rounded bg-base-100/60 py-1.5 text-[12px] font-medium text-info">
+    <div className="flex items-center justify-center gap-1.5 rounded bg-base-100/60 py-1.5 text-[0.75rem] font-medium text-info">
       <Icon className="h-3 w-3" />
       <span>{btn.text || "(button)"}</span>
     </div>
@@ -157,7 +157,7 @@ function BubbleCard({
 }) {
   const ht = headerType ?? "NONE";
   const btns = buttons ?? [];
-  const bodySize = compact ? "text-[12px]" : "text-[13px]";
+  const bodySize = compact ? "text-[0.75rem]" : "text-[0.8125rem]";
 
   return (
     <div className="space-y-1.5 rounded-xl bg-base-200 p-2.5 ring-1 ring-base-300">
@@ -190,7 +190,7 @@ function BubbleCard({
 
       {/* Footer */}
       {footer && (
-        <div className="border-t border-base-300/50 pt-1 text-[11px] text-base-content/45">
+        <div className="border-t border-base-300/50 pt-1 text-[0.6875rem] text-base-content/45">
           {footer}
         </div>
       )}
@@ -229,7 +229,7 @@ function CarouselStrip({ cards, body }: { cards: CarouselCard[]; body?: string }
     <div className="space-y-2">
       {/* Intro body */}
       {body?.trim() && (
-        <div className="whitespace-pre-wrap break-words text-[13px] leading-snug text-base-content">
+        <div className="whitespace-pre-wrap break-words text-[0.8125rem] leading-snug text-base-content">
           {renderVariableText(body)}
         </div>
       )}

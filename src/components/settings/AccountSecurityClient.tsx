@@ -112,7 +112,7 @@ export function AccountSecurityClient({
 
         <div className="space-y-1">
           <span className="op-label">Email</span>
-          <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-[7px] text-[13px]">
+          <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-[7px] text-[0.8125rem]">
             <span className="truncate">{accountEmail}</span>
             <span className="op-tag op-tag-ok">Verified</span>
           </div>
@@ -120,10 +120,10 @@ export function AccountSecurityClient({
       </div>
 
       {/* ── Feedback messages ── */}
-      {nameError && <p className="text-[12px] text-error">{nameError}</p>}
-      {nameSaved && <p className="text-[12px] text-success">Name saved.</p>}
+      {nameError && <p className="text-[0.75rem] text-error">{nameError}</p>}
+      {nameSaved && <p className="text-[0.75rem] text-success">Name saved.</p>}
       {!hasPassword && (
-        <p className="text-[12px] text-base-content/50">
+        <p className="text-[0.75rem] text-base-content/50">
           Password login is not set for this account.{" "}
           <a href="/settings/password" className="text-primary hover:underline">Set one</a>
         </p>
@@ -133,7 +133,7 @@ export function AccountSecurityClient({
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-base-300 pt-3">
         <div>
           <span className="op-label">sessions</span>
-          <p className="mt-0.5 text-[12px] text-base-content/55">
+          <p className="mt-0.5 text-[0.75rem] text-base-content/55">
             {Math.max(1, Math.min(loginHistory.length, 6))} device{loginHistory.length === 1 ? "" : "s"} logged in
           </p>
         </div>
@@ -163,10 +163,10 @@ export function AccountSecurityClient({
             <span className="op-label">recent activity</span>
           </div>
           {loginHistory.length === 0 ? (
-            <p className="px-3 py-3 text-[12px] text-base-content/50">No events yet.</p>
+            <p className="px-3 py-3 text-[0.75rem] text-base-content/50">No events yet.</p>
           ) : (
             <div className="max-h-48 overflow-auto">
-              <table className="w-full text-[12.5px]">
+              <table className="w-full text-[0.78125rem]">
                 <thead>
                   <tr className="border-b border-base-300 bg-base-100/30">
                     <th className="op-label px-3 py-2 text-left font-medium">When</th>

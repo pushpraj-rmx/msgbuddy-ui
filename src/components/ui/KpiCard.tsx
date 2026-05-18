@@ -31,7 +31,7 @@ export function KpiCard({
           <span className="op-label">{label}</span>
           {delta ? (
             <span
-              className={`font-mono-op rounded-[3px] border px-1.5 py-[1px] text-[10px] tabular-nums ${
+              className={`font-mono-op rounded-[3px] border px-1.5 py-[1px] text-[0.625rem] tabular-nums ${
                 deltaDirection === "down"
                   ? "border-error/40 text-error"
                   : "border-primary/40 text-primary"
@@ -41,11 +41,11 @@ export function KpiCard({
             </span>
           ) : null}
         </div>
-        <div className="font-mono-op text-[32px] font-semibold leading-none tracking-[-0.02em] tabular-nums">
+        <div className="font-mono-op text-[2rem] font-semibold leading-none tracking-[-0.02em] tabular-nums">
           {value}
         </div>
         {hint ? (
-          <div className="text-[11px] text-base-content/55">{hint}</div>
+          <div className="text-[0.6875rem] text-base-content/55">{hint}</div>
         ) : null}
       </div>
     </div>

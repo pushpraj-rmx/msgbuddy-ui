@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { contactsApi, customFieldsApi } from "@/lib/api";
 import type {
@@ -10,6 +11,15 @@ import type {
 } from "@/lib/types";
 
 const DEFINITIONS_QUERY_KEY = ["custom-field-definitions"] as const;
+
+const FIELD_TYPES: CustomFieldType[] = [
+  "TEXT",
+  "NUMBER",
+  "DATE",
+  "BOOLEAN",
+  "URL",
+  "EMAIL",
+];
 
 export function CustomFieldsSection({ contactId }: { contactId: string }) {
   const [editing, setEditing] = useState(false);
@@ -46,10 +56,10 @@ export function CustomFieldsSection({ contactId }: { contactId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-1.5">
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-xs"
           onClick={() => setManageOpen(true)}
         >
           Manage fields
@@ -57,10 +67,10 @@ export function CustomFieldsSection({ contactId }: { contactId: string }) {
         {definitions.length > 0 && (
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setEditing(true)}
+            className="btn btn-ghost btn-xs"
+            onClick={() => setEditing((v) => !v)}
           >
-            Edit values
+            {editing ? "Cancel" : "Edit values"}
           </button>
         )}
       </div>
@@ -73,16 +83,16 @@ export function CustomFieldsSection({ contactId }: { contactId: string }) {
       )}
 
       {definitions.length === 0 && !editing && (
-        <p className="text-sm text-base-content/60">
-          No custom fields defined. Add fields (e.g. city, label) via{" "}
+        <p className="text-[0.8125rem] text-base-content/55">
+          No custom fields defined.{" "}
           <button
             type="button"
             className="link link-hover link-primary"
             onClick={() => setManageOpen(true)}
           >
             Manage fields
-          </button>
-          .
+          </button>{" "}
+          to add (e.g. city, label).
         </p>
       )}
 
@@ -97,11 +107,16 @@ export function CustomFieldsSection({ contactId }: { contactId: string }) {
       )}
 
       {definitions.length > 0 && !editing && (
-        <ul className="space-y-2">
-          {definitions.map((def) => (
-            <li key={def.id} className="flex justify-between gap-4 text-sm">
-              <span className="text-base-content/70">{def.label}</span>
-              <span>{valueByFieldId.get(def.id) ?? "—"}</span>
+        <ul className="rounded-box border border-base-300 bg-base-200">
+          {definitions.map((def, i) => (
+            <li
+              key={def.id}
+              className={`flex items-center justify-between gap-3 px-3 py-2 text-[0.78125rem] ${
+                i < definitions.length - 1 ? "border-b border-base-300/50" : ""
+              }`}
+            >
+              <span className="op-label">{def.label}</span>
+              <span className="text-base-content">{valueByFieldId.get(def.id) ?? "—"}</span>
             </li>
           ))}
         </ul>
@@ -182,27 +197,34 @@ function ManageDefinitionsModal({
     });
   };
 
-  const FIELD_TYPES: CustomFieldType[] = [
-    "TEXT",
-    "NUMBER",
-    "DATE",
-    "BOOLEAN",
-    "URL",
-    "EMAIL",
-  ];
-
   return (
     <dialog open className="modal modal-middle">
-      <div className="modal-box max-w-lg">
-        <h3 className="text-lg font-semibold">Custom field definitions</h3>
-        <p className="mt-1 text-sm text-base-content/70">
-          Define fields once (e.g. city, label); then set values per contact.
-        </p>
+      <div className="modal-box max-w-lg rounded-box border border-base-300 !bg-base-100 p-0">
+        <div className="flex items-start justify-between gap-3 border-b border-base-300 px-5 py-4">
+          <div>
+            <span className="op-label">contacts</span>
+            <h3 className="mt-0.5 text-[1.0625rem] font-semibold tracking-[-0.015em]">Custom field definitions</h3>
+            <p className="mt-1 text-[0.78125rem] text-base-content/55">
+              Define fields once (e.g. city, label); set values per contact.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-circle"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
 
-        <div className="mt-4 space-y-4">
-          <div className="rounded-box border border-base-300 bg-base-200 p-3">
-            <p className="text-sm font-medium mb-2">Add field</p>
-            <div className="space-y-2">
+        <div className="space-y-4 px-5 py-4">
+          {/* Add field */}
+          <div className="rounded-box border border-base-300 bg-base-200">
+            <div className="border-b border-base-300 px-3 py-2">
+              <span className="op-label">Add field</span>
+            </div>
+            <div className="space-y-2 px-3 py-3">
               <input
                 type="text"
                 className="input input-bordered input-sm w-full"
@@ -217,75 +239,90 @@ function ManageDefinitionsModal({
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
               />
-              <select
-                className="select select-bordered select-sm w-full"
-                value={type}
-                onChange={(e) => setType(e.target.value as CustomFieldType)}
-              >
-                {FIELD_TYPES.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm"
-                  checked={isRequired}
-                  onChange={(e) => setIsRequired(e.target.checked)}
-                />
-                <span className="text-sm">Required</span>
-              </label>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={handleCreate}
-                disabled={
-                  !name.trim() ||
-                  createMutation.isPending
-                }
-              >
-                {createMutation.isPending
-                  ? "Adding…"
-                  : "Add definition"}
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  className="select select-bordered select-sm flex-1 font-mono-op text-[0.6875rem]"
+                  value={type}
+                  onChange={(e) => setType(e.target.value as CustomFieldType)}
+                >
+                  {FIELD_TYPES.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+                <label className="flex cursor-pointer items-center gap-1.5 text-[0.78125rem]">
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-sm"
+                    checked={isRequired}
+                    onChange={(e) => setIsRequired(e.target.checked)}
+                  />
+                  <span>Required</span>
+                </label>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-xs"
+                  onClick={handleCreate}
+                  disabled={!name.trim() || createMutation.isPending}
+                >
+                  {createMutation.isPending ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : (
+                    "Add definition"
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
-          <div>
-            <p className="text-sm font-medium mb-2">Existing fields</p>
+          {/* Existing fields */}
+          <div className="rounded-box border border-base-300 bg-base-200">
+            <div className="border-b border-base-300 px-3 py-2">
+              <span className="op-label">Existing fields · {definitions.length}</span>
+            </div>
             {definitions.length === 0 ? (
-              <p className="text-sm text-base-content/60">None yet.</p>
+              <p className="px-3 py-3 text-[0.8125rem] text-base-content/55">None yet.</p>
             ) : (
-              <ul className="space-y-2">
-                {definitions.map((def) => (
+              <ul>
+                {definitions.map((def, i) => (
                   <li
                     key={def.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-box border border-base-300 p-2 text-sm"
+                    className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 ${
+                      i < definitions.length - 1 ? "border-b border-base-300/50" : ""
+                    }`}
                   >
-                    <span>
-                      <strong>{def.label}</strong> ({def.name}, {def.type}
-                      {def.isRequired ? ", required" : ""})
-                    </span>
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs"
-                        onClick={() => {
-                          setEditingDef(def);
-                        }}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs text-error"
-                        onClick={() => setConfirmDeleteDef(def)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        Delete
-                      </button>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[0.8125rem] font-medium text-base-content">
+                        {def.label}
+                      </p>
+                      <p className="font-mono-op mt-0.5 text-[0.625rem] tracking-[0.04em] text-base-content/55">
+                        {def.name} · {def.type.toLowerCase()}
+                        {def.isRequired ? " · required" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-0.5">
+                      <div className="tooltip tooltip-left" data-tip="Edit">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs btn-square"
+                          onClick={() => setEditingDef(def)}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </div>
+                      <div className="tooltip tooltip-left" data-tip="Delete">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs btn-square text-error/70 hover:text-error"
+                          onClick={() => setConfirmDeleteDef(def)}
+                          disabled={deleteMutation.isPending}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -294,10 +331,10 @@ function ManageDefinitionsModal({
           </div>
 
           {editingDef && (
-            <div className="rounded-box border border-primary/30 bg-base-200 p-3">
-              <p className="text-sm font-medium mb-2">
-                Edit: {editingDef.label}
-              </p>
+            <div className="rounded-box border border-primary/40 bg-base-200">
+              <div className="border-b border-primary/30 px-3 py-2">
+                <span className="op-label text-primary">Edit · {editingDef.label}</span>
+              </div>
               <EditDefinitionForm
                 def={editingDef}
                 onSave={(data) => {
@@ -313,8 +350,8 @@ function ManageDefinitionsModal({
           )}
         </div>
 
-        <div className="modal-action">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>
+        <div className="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>
             Close
           </button>
         </div>
@@ -360,7 +397,7 @@ function EditDefinitionForm({
   const [isRequired, setIsRequired] = useState(def.isRequired);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 px-3 py-3">
       <input
         type="text"
         className="input input-bordered input-sm w-full"
@@ -368,32 +405,32 @@ function EditDefinitionForm({
         value={label}
         onChange={(e) => setLabel(e.target.value)}
       />
-      <select
-        className="select select-bordered select-sm w-full"
-        value={type}
-        onChange={(e) => setType(e.target.value as CustomFieldType)}
-      >
-        {(["TEXT", "NUMBER", "DATE", "BOOLEAN", "URL", "EMAIL"] as const).map(
-          (t) => (
+      <div className="flex items-center gap-2">
+        <select
+          className="select select-bordered select-sm flex-1 font-mono-op text-[0.6875rem]"
+          value={type}
+          onChange={(e) => setType(e.target.value as CustomFieldType)}
+        >
+          {FIELD_TYPES.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
-          ))
-        }
-      </select>
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          className="checkbox checkbox-sm"
-          checked={isRequired}
-          onChange={(e) => setIsRequired(e.target.checked)}
-        />
-        <span className="text-sm">Required</span>
-      </label>
-      <div className="flex gap-2">
+          ))}
+        </select>
+        <label className="flex cursor-pointer items-center gap-1.5 text-[0.78125rem]">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-sm"
+            checked={isRequired}
+            onChange={(e) => setIsRequired(e.target.checked)}
+          />
+          <span>Required</span>
+        </label>
+      </div>
+      <div className="flex justify-end gap-1.5">
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-xs"
           onClick={onCancel}
           disabled={isPending}
         >
@@ -401,11 +438,11 @@ function EditDefinitionForm({
         </button>
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-xs"
           onClick={() => onSave({ label, type, isRequired })}
           disabled={isPending}
         >
-          Save
+          {isPending ? <span className="loading loading-spinner loading-xs" /> : "Save"}
         </button>
       </div>
     </div>
@@ -438,15 +475,13 @@ function CustomFieldsEditForm({
   return (
     <div className="space-y-3">
       {definitions.map((def) => (
-        <div key={def.id}>
-          <label className="label">
-            <span className="label-text">
-              {def.label}
-              {def.isRequired ? " *" : ""}
-            </span>
-          </label>
+        <div key={def.id} className="space-y-1.5">
+          <span className="op-label block">
+            {def.label}
+            {def.isRequired ? <span className="ml-1 text-error">*</span> : null}
+          </span>
           {def.type === "BOOLEAN" ? (
-            <label className="flex cursor-pointer items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 text-[0.8125rem]">
               <input
                 type="checkbox"
                 className="checkbox checkbox-sm"
@@ -455,7 +490,7 @@ function CustomFieldsEditForm({
                   setValue(def.id, e.target.checked ? "true" : "false")
                 }
               />
-              <span className="text-sm">Yes</span>
+              <span>Yes</span>
             </label>
           ) : (
             <input
@@ -470,17 +505,17 @@ function CustomFieldsEditForm({
                         ? "url"
                         : "text"
               }
-              className="input input-bordered w-full input-sm"
+              className="input input-bordered input-sm w-full"
               value={local[def.id] ?? ""}
               onChange={(e) => setValue(def.id, e.target.value)}
             />
           )}
         </div>
       ))}
-      <div className="flex gap-2">
+      <div className="flex justify-end gap-1.5">
         <button
           type="button"
-          className="btn btn-ghost btn-sm"
+          className="btn btn-ghost btn-xs"
           onClick={onCancel}
           disabled={isPending}
         >
@@ -488,7 +523,7 @@ function CustomFieldsEditForm({
         </button>
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-xs"
           onClick={() =>
             onSave(
               definitions.map((d) => ({
@@ -500,7 +535,7 @@ function CustomFieldsEditForm({
           disabled={isPending}
         >
           {isPending ? (
-            <span className="loading loading-spinner loading-sm" />
+            <span className="loading loading-spinner loading-xs" />
           ) : (
             "Save"
           )}

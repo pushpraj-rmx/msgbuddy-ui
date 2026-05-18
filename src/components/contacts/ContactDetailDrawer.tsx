@@ -87,7 +87,7 @@ function InfoRow({
   mono?: boolean;
   muted?: boolean;
 }) {
-  const valClass = `text-[13px] ${mono ? "font-mono-op tabular-nums" : ""} ${muted ? "text-base-content/50" : "text-base-content"}`;
+  const valClass = `text-[0.8125rem] ${mono ? "font-mono-op tabular-nums" : ""} ${muted ? "text-base-content/50" : "text-base-content"}`;
   return (
     <div className="flex items-start gap-3 py-2">
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
@@ -123,7 +123,7 @@ function StatusChip({
 }) {
   return (
     <div
-      className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
+      className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.6875rem] font-medium transition-colors ${
         active
           ? `border-current/30 ${activeColor}`
           : "border-base-300 text-base-content/40"
@@ -132,7 +132,7 @@ function StatusChip({
     >
       <Icon className="h-3 w-3" />
       <span>{label}</span>
-      <span className={`ml-auto font-mono-op text-[10px] ${active ? "" : "text-base-content/30"}`}>
+      <span className={`ml-auto font-mono-op text-[0.625rem] ${active ? "" : "text-base-content/30"}`}>
         {active ? "ON" : "OFF"}
       </span>
     </div>
@@ -221,17 +221,17 @@ export function ContactDetailPanelContent({
           size="lg"
         />
         <div className="text-center">
-          <h2 className="text-[18px] font-semibold tracking-[-0.02em]">
+          <h2 className="text-[1.125rem] font-semibold tracking-[-0.02em]">
             {contact.name || "Unnamed"}
           </h2>
           {contact.designation ? (
-            <p className="mt-0.5 text-[12px] text-base-content/55">{contact.designation}</p>
+            <p className="mt-0.5 text-[0.75rem] text-base-content/55">{contact.designation}</p>
           ) : null}
         </div>
 
         {/* Phone + Email inline */}
         <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-1.5 text-[12px] text-base-content/70">
+          <div className="flex items-center gap-1.5 text-[0.75rem] text-base-content/70">
             <Phone className="h-3 w-3 text-base-content/40" />
             <span className="font-mono-op tabular-nums">{contact.phone}</span>
             {contact.phoneLabel ? (
@@ -239,7 +239,7 @@ export function ContactDetailPanelContent({
             ) : null}
           </div>
           {contact.email ? (
-            <div className="flex items-center gap-1.5 text-[12px]">
+            <div className="flex items-center gap-1.5 text-[0.75rem]">
               <Mail className="h-3 w-3 text-base-content/40" />
               <a href={`mailto:${contact.email}`} className="text-base-content/70 hover:text-primary transition-colors">
                 {contact.email}
@@ -289,7 +289,7 @@ export function ContactDetailPanelContent({
           ) : null}
         </div>
         {deleteError ? (
-          <p className="text-[12px] text-error" role="alert">{deleteError}</p>
+          <p className="text-[0.75rem] text-error" role="alert">{deleteError}</p>
         ) : null}
       </div>
 

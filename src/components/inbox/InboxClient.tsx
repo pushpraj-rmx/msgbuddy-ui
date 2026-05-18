@@ -301,6 +301,8 @@ export function InboxClient({
   const isAtBottomRef = useRef(true);
   const unreadNewRef = useRef(0);
   const [unreadNewCount, setUnreadNewCount] = useState(0);
+  const [pendingScrollMessageId, setPendingScrollMessageId] = useState<string | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const contactDialogRef = useRef<HTMLDialogElement>(null);
   const startChatDialogRef = useRef<HTMLDialogElement>(null);
   const mediaUpload = useInboxWhatsAppMediaUpload();
@@ -674,7 +676,7 @@ export function InboxClient({
 
     if (intent === "auto") {
       scrollThreadIntentRef.current = "none";
-      scrollToBottom("auto");
+      if (!pendingScrollMessageId) scrollToBottom("auto");
       void conversationsApi.read(selectedId).catch(() => { });
       setConversations((prev) =>
         prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
@@ -683,10 +685,10 @@ export function InboxClient({
     }
     if (intent === "smooth") {
       scrollThreadIntentRef.current = "none";
-      requestAnimationFrame(() => scrollToBottom("smooth"));
+      if (!pendingScrollMessageId) requestAnimationFrame(() => scrollToBottom("smooth"));
       return;
     }
-  }, [selectedId, sortedMessages, messageLoading]);
+  }, [selectedId, sortedMessages, messageLoading, pendingScrollMessageId]);
 
   useEffect(() => {
     const container = messagesScrollRef.current;
@@ -712,6 +714,29 @@ export function InboxClient({
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
   }, [selectedId]);
+
+  useEffect(() => {
+    if (!pendingScrollMessageId) return;
+    const container = messagesScrollRef.current;
+    if (!container) return;
+    if (!messages.some((m) => m.id === pendingScrollMessageId)) return;
+    const raf = requestAnimationFrame(() => {
+      const el = container.querySelector<HTMLElement>(
+        `[data-message-id="${pendingScrollMessageId}"]`,
+      );
+      if (!el) return;
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedMessageId(pendingScrollMessageId);
+      setPendingScrollMessageId(null);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, pendingScrollMessageId]);
+
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const timer = window.setTimeout(() => setHighlightedMessageId(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [highlightedMessageId]);
 
   useEffect(() => {
     mediaUpload.cancel();
@@ -2103,7 +2128,7 @@ export function InboxClient({
               phone={contactForDetails.phone}
               size="lg"
             />
-            <h3 className="text-[16px] font-semibold tracking-[-0.02em]">
+            <h3 className="text-[1rem] font-semibold tracking-[-0.02em]">
               {contactForDetails.name || "Unknown"}
             </h3>
             {contactForDetails.status ? (
@@ -2112,7 +2137,7 @@ export function InboxClient({
             {selectedConversation?.contactId ? (
               <a
                 href={`/people/contacts/${selectedConversation.contactId}`}
-                className="mt-1 flex items-center gap-1 text-[11px] text-primary hover:underline"
+                className="mt-1 flex items-center gap-1 text-[0.6875rem] text-primary hover:underline"
                 title="Open full contact page"
               >
                 <ExternalLink className="h-3 w-3" /> Full profile
@@ -2125,7 +2150,7 @@ export function InboxClient({
               <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
                 <Phone className="h-3 w-3" />
               </div>
-              <p className="font-mono-op text-[13px] tabular-nums text-base-content">
+              <p className="font-mono-op text-[0.8125rem] tabular-nums text-base-content">
                 {contactForDetails.phone || "—"}
               </p>
             </div>
@@ -2136,7 +2161,7 @@ export function InboxClient({
                 </div>
                 <a
                   href={`mailto:${contactForDetails.email}`}
-                  className="text-[13px] text-base-content hover:text-primary transition-colors"
+                  className="text-[0.8125rem] text-base-content hover:text-primary transition-colors"
                 >
                   {contactForDetails.email}
                 </a>
@@ -2177,8 +2202,8 @@ export function InboxClient({
                 </button>
               </div>
               {messageSearchResult ? (
-                <div className="mt-2 rounded-md border border-base-300 bg-base-200 p-2.5 text-[12px]">
-                  <p className="font-mono-op text-[10px] tracking-wider text-base-content/50">
+                <div className="mt-2 rounded-md border border-base-300 bg-base-200 p-2.5 text-[0.75rem]">
+                  <p className="font-mono-op text-[0.625rem] tracking-wider text-base-content/50">
                     {messageSearchResult.id.slice(0, 12).toUpperCase()}
                   </p>
                   <p className="mt-1 line-clamp-2 text-base-content/80">{messageSearchResult.text || "—"}</p>
@@ -2242,7 +2267,7 @@ export function InboxClient({
                 <StickyNote className="h-3.5 w-3.5 text-base-content/40" />
                 <span className="op-label">Notes</span>
               </div>
-              <InternalNotesPanel conversationId={selectedConversation.id} />
+              <InternalNotesPanel conversationId={selectedConversation.id} currentUserId={currentUserId} />
             </div>
 
             {/* Shared media */}
@@ -2391,7 +2416,7 @@ export function InboxClient({
                           key={tab}
                           type="button"
                           onClick={() => setStatus(tab)}
-                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${status === tab
+                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${status === tab
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                             }`}
@@ -2405,7 +2430,7 @@ export function InboxClient({
                           key={f}
                           type="button"
                           onClick={() => setQueueFilter(queueFilter === f ? "all" : f)}
-                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${queueFilter === f
+                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${queueFilter === f
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                             }`}
@@ -2419,7 +2444,7 @@ export function InboxClient({
                           key={ch.value}
                           type="button"
                           onClick={() => setChannelFilter(channelFilter === ch.value ? null : ch.value)}
-                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${channelFilter === ch.value
+                          className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${channelFilter === ch.value
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                             }`}
@@ -2431,7 +2456,7 @@ export function InboxClient({
                       <button
                         type="button"
                         onClick={() => setAssigneeFilter(assigneeFilter === currentUserId ? null : currentUserId)}
-                        className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${assigneeFilter === currentUserId
+                        className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${assigneeFilter === currentUserId
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                           }`}
@@ -2442,7 +2467,7 @@ export function InboxClient({
                       <button
                         type="button"
                         onClick={() => setAssigneeFilter(assigneeFilter === "__unassigned__" ? null : "__unassigned__")}
-                        className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${assigneeFilter === "__unassigned__"
+                        className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${assigneeFilter === "__unassigned__"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                           }`}
@@ -2476,7 +2501,7 @@ export function InboxClient({
                   >
                     <SlidersHorizontal className="h-4 w-4" />
                     {activeTagCount > 0 && (
-                      <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[9px] text-primary-content">
+                      <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-primary text-[0.5625rem] text-primary-content">
                         {activeTagCount}
                       </span>
                     )}
@@ -2499,7 +2524,7 @@ export function InboxClient({
                                   : [...prev, tag.id]
                               )
                             }
-                            className={`shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${tagFilter.includes(tag.id)
+                            className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${tagFilter.includes(tag.id)
                               ? "border-primary bg-primary/10 text-primary"
                               : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                               }`}
@@ -2602,7 +2627,7 @@ export function InboxClient({
                                 {title}
                               </span>
                               {hasUnread ? (
-                                <span className="font-mono-op flex min-w-[18px] shrink-0 items-center justify-center rounded-[3px] bg-primary px-1 text-[10px] font-semibold leading-[16px] text-primary-content tabular-nums">
+                                <span className="font-mono-op flex min-w-[18px] shrink-0 items-center justify-center rounded-[3px] bg-primary px-1 text-[0.625rem] font-semibold leading-[16px] text-primary-content tabular-nums">
                                   {conversation.unreadCount}
                                 </span>
                               ) : null}
@@ -2641,18 +2666,30 @@ export function InboxClient({
                   <>
                     <ul className="space-y-2">
                       {starredMessages.map((msg) => (
-                        <li key={msg.id} className="card bg-base-100 border border-base-300 p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-xs font-medium text-base-content/70">
-                                {(msg as Record<string, unknown>).contactName as string || (msg as Record<string, unknown>).contactPhone as string || "Message"}
-                              </p>
-                              <p className="mt-0.5 text-sm text-base-content">{msg.text || `[${msg.type}]`}</p>
-                              <p className="mt-1 text-[10px] text-base-content/40">
-                                {msg.starredAt ? new Date(msg.starredAt).toLocaleString() : ""}
-                              </p>
+                        <li key={msg.id}>
+                          <button
+                            type="button"
+                            className="card w-full bg-base-100 border border-base-300 p-3 text-left transition-colors hover:bg-base-300/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                            onClick={() => {
+                              if (!msg.conversationId) return;
+                              setSidebarView("conversations");
+                              setPendingScrollMessageId(msg.id);
+                              setSelectedId(msg.conversationId);
+                              if (!isLgUp) setMobilePane("thread");
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-medium text-base-content/70">
+                                  {(msg as Record<string, unknown>).contactName as string || (msg as Record<string, unknown>).contactPhone as string || "Message"}
+                                </p>
+                                <p className="mt-0.5 text-sm text-base-content">{msg.text || `[${msg.type}]`}</p>
+                                <p className="mt-1 text-[0.625rem] text-base-content/40">
+                                  {msg.starredAt ? new Date(msg.starredAt).toLocaleString() : ""}
+                                </p>
+                              </div>
                             </div>
-                          </div>
+                          </button>
                         </li>
                       ))}
                     </ul>
@@ -2684,7 +2721,7 @@ export function InboxClient({
                                 {(msg as Record<string, unknown>).contactName as string || (msg as Record<string, unknown>).contactPhone as string || "Message"}
                               </p>
                               <p className="mt-0.5 text-sm text-base-content">{msg.text || `[${msg.type}]`}</p>
-                              <p className="mt-1 text-[10px] text-base-content/40">
+                              <p className="mt-1 text-[0.625rem] text-base-content/40">
                                 Scheduled: {msg.sendAt ? new Date(msg.sendAt).toLocaleString() : "—"}
                               </p>
                             </div>
@@ -3039,6 +3076,7 @@ export function InboxClient({
                           message={message}
                           onPin={handlePinMessage}
                           onStar={handleStarMessage}
+                          highlighted={highlightedMessageId === message.id}
                         />
                       ))}
                     </div>
@@ -3110,13 +3148,13 @@ export function InboxClient({
                           {...(freeChatPolicyTip ? { "data-tip": freeChatPolicyTip } : {})}
                         >
                           <span className="op-tag op-tag-warn shrink-0">Templates only</span>
-                          <span className="truncate text-[10px] text-base-content/55">
+                          <span className="truncate text-[0.625rem] text-base-content/55">
                             Outside 24h window
                           </span>
                         </div>
                       ) : (
                         <div className="flex min-h-7 items-center justify-between gap-2">
-                          <span className="text-[10px] uppercase tracking-wide text-base-content/50">
+                          <span className="text-[0.625rem] uppercase tracking-wide text-base-content/50">
                             Mode
                           </span>
                           <div className="join join-horizontal">
@@ -3773,7 +3811,7 @@ export function InboxClient({
                           ))}
                         </select>
                         <span
-                          className="shrink-0 tabular-nums text-[10px] text-base-content/50"
+                          className="shrink-0 tabular-nums text-[0.625rem] text-base-content/50"
                           title="Approved template version"
                         >
                           {templateVersionLoading

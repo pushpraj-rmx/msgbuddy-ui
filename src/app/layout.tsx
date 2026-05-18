@@ -49,7 +49,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=localStorage.getItem("theme-preference");var pref=p==="dark"||p==="light"?p:"dark";document.documentElement.setAttribute("data-theme",pref);}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`,
+            __html: `(function(){try{var p=localStorage.getItem("theme-preference");var pref=p==="dark"||p==="light"?p:"dark";document.documentElement.setAttribute("data-theme",pref);var d=localStorage.getItem("display-density");if(d==="small"||d==="medium"||d==="large"){document.documentElement.setAttribute("data-density",d);}}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`,
           }}
         />
       </head>

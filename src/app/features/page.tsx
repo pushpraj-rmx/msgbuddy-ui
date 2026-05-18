@@ -6,10 +6,10 @@ export default async function FeaturesPage() {
       <div className="space-y-10 py-10">
         <div className="space-y-4">
           <span className="op-section-title">Features</span>
-          <h1 className="text-[36px] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[44px]">
+          <h1 className="text-[2.25rem] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[2.75rem]">
             Core tools for WhatsApp operations
           </h1>
-          <p className="max-w-3xl text-[15px] text-base-content/70">
+          <p className="max-w-3xl text-[0.9375rem] text-base-content/70">
             Everything in MsgBuddy is built to help operators respond faster,
             segment better, and run campaigns with confidence.
           </p>
@@ -24,8 +24,8 @@ export default async function FeaturesPage() {
           ].map((item) => (
             <article key={item.n} className="op-grain relative rounded-box border border-base-300 bg-base-200 p-6">
               <span className="op-label">{item.n} · {item.label}</span>
-              <h2 className="mt-3 text-[17px] font-semibold tracking-[-0.015em]">{item.title}</h2>
-              <p className="mt-1.5 text-[13px] text-base-content/60">{item.desc}</p>
+              <h2 className="mt-3 text-[1.0625rem] font-semibold tracking-[-0.015em]">{item.title}</h2>
+              <p className="mt-1.5 text-[0.8125rem] text-base-content/60">{item.desc}</p>
             </article>
           ))}
         </div>

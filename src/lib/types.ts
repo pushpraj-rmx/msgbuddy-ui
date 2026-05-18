@@ -132,12 +132,111 @@ export type DuplicatesResponse = {
   duplicateGroups: DuplicateGroup[];
 };
 
-export type ImportResult = {
-  imported: number;
+export type ImportMode = "create_only" | "update_only" | "merge";
+
+export type ImportFieldDiff = {
+  from: string | null;
+  to: string | null;
+};
+
+export type ImportRowSample = {
+  row: number;
+  phone: string;
+  name?: string;
+  action: "create" | "update" | "skip" | "error";
+  diff?: Record<string, ImportFieldDiff>;
+  reason?: string;
+};
+
+export type ImportApplyResult = {
   created: number;
   updated: number;
+  skipped: number;
   failed: number;
   errors: Array<{ row: number; message: string }>;
+};
+
+export type ImportResult = {
+  mode: ImportMode;
+  dryRun: boolean;
+  totals: {
+    totalRows: number;
+    /** CSV rows merged into a previous row with the same normalized phone. */
+    mergedDuplicates: number;
+    willCreate: number;
+    willUpdate: number;
+    willSkip: number;
+    willError: number;
+  };
+  sample: {
+    create: ImportRowSample[];
+    update: ImportRowSample[];
+    skip: ImportRowSample[];
+    error: ImportRowSample[];
+  };
+  newTags: string[];
+  newCustomFields: Array<{ name: string; label: string }>;
+  result: ImportApplyResult | null;
+};
+
+// ===== Async import jobs =====
+
+export type ImportJobStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED";
+
+export type ImportJobMode = "CREATE_ONLY" | "UPDATE_ONLY" | "MERGE";
+
+/** ImportJob row as returned by GET /contacts/import/jobs/:id */
+export type ImportJob = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  filename: string;
+  mode: ImportJobMode;
+  defaultCountry: string;
+  dryRun: boolean;
+  status: ImportJobStatus;
+  totalRows: number | null;
+  processedRows: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  mergedDuplicates: number;
+  errors: Array<{ row: number; message: string }>;
+  newTags: string[];
+  newCustomFields: Array<{ name: string; label: string }>;
+  sample: ImportResult["sample"] | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+export type ImportJobStartResponse = {
+  jobId: string;
+  status: ImportJobStatus;
+};
+
+// ===== Background Tasks (cross-domain bar in the topbar) =====
+
+export type BackgroundTaskKind = "contact-import";
+
+export type BackgroundTask = {
+  id: string;
+  kind: BackgroundTaskKind;
+  label: string;
+  /** RUNNING | QUEUED | COMPLETED | FAILED | CANCELLED */
+  status: string;
+  processed: number;
+  total: number | null;
+  href?: string;
+  detail?: string;
+  createdAt: string;
 };
 
 export type PhoneCheckResult = {
@@ -163,7 +262,8 @@ export type TemplateVersionStatus =
   | "PROVIDER_APPROVED"
   | "PROVIDER_REJECTED"
   | "PROVIDER_PAUSED"
-  | "PROVIDER_DISABLED";
+  | "PROVIDER_DISABLED"
+  | "PROVIDER_IN_APPEAL";
 
 export type TemplateVersionLayoutType = "STANDARD" | "CAROUSEL";
 
@@ -218,6 +318,9 @@ export type Template = {
   channelTemplates?: ChannelTemplate[];
 };
 
+/** Meta's template quality rating, surfaced once a template has been live and received feedback. */
+export type TemplateQualityRating = "GREEN" | "YELLOW" | "RED" | "UNKNOWN";
+
 export type ChannelTemplate = {
   id: string;
   workspaceId: string;
@@ -226,15 +329,35 @@ export type ChannelTemplate = {
   category?: TemplateCategory;
   providerTemplateId?: string | null;
   providerStatus?: string | null;
+  /** Raw quality string from Meta. Use `normalizeQualityRating()` when reading. */
+  qualityScore?: string | null;
+  lastQualityCheckAt?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
 };
 
+/** Coerce a free-form Meta quality string into one of our four rating values. */
+export function normalizeQualityRating(
+  raw: string | null | undefined
+): TemplateQualityRating {
+  const u = (raw ?? "").toString().trim().toUpperCase();
+  if (u === "GREEN" || u === "HIGH" || u === "HIGH_QUALITY") return "GREEN";
+  if (u === "YELLOW" || u === "MEDIUM" || u === "MEDIUM_QUALITY") return "YELLOW";
+  if (u === "RED" || u === "LOW" || u === "LOW_QUALITY") return "RED";
+  return "UNKNOWN";
+}
+
 export type ChannelTemplateVersion = {
   id: string;
   channelTemplateId: string;
+  /**
+   * Parent channel template, optionally included by `findById` so the UI can
+   * read category + provider state without a second round-trip. Absent on
+   * list endpoints to keep the wire payload lean.
+   */
+  channelTemplate?: ChannelTemplate;
   version: number;
   status: TemplateVersionStatus;
   isActive: boolean;
@@ -328,6 +451,9 @@ export type ChannelTemplateState = {
   category?: TemplateCategory | null;
   providerTemplateId: string | null;
   providerStatus: string | null;
+  /** Meta-reported quality (raw string). Pass through `normalizeQualityRating`. */
+  qualityScore?: string | null;
+  lastQualityCheckAt?: string | null;
   lastSyncError: string | null;
   latestVersion: ChannelTemplateVersion | null;
   activeVersion: ChannelTemplateVersion | null;
@@ -345,6 +471,15 @@ export type ChannelTemplateState = {
     level: string | null;
     detail: unknown;
     updatedAt: string | null;
+  } | null;
+  /** From `phone_number_quality_update` webhook — phone-number-level quality. */
+  whatsappPhoneQuality: {
+    /** GREEN | YELLOW | RED | FLAGGED | other. */
+    rating: string | null;
+    displayPhoneNumber: string | null;
+    /** Set when the number first entered FLAGGED; used to compute the 7-day countdown. */
+    flaggedAt: string | null;
+    checkedAt: string | null;
   } | null;
 };
 

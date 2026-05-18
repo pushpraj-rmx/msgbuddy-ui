@@ -196,6 +196,13 @@ body {
   /* Numbers render tabular by default inside tables and KPI surfaces */
   .tabular-nums, table, .num { font-variant-numeric: tabular-nums; }
   ::selection { background: var(--op-accent); color: var(--op-accent-ink); }
+
+  /* User text-size preference. Drives the root font-size; rem-based and
+     text-[N rem] sizes scale with this. Defaults to MEDIUM (16px). */
+  html                          { font-size: 16px; }
+  html[data-density="small"]    { font-size: 14px; }
+  html[data-density="medium"]   { font-size: 16px; }
+  html[data-density="large"]    { font-size: 18px; }
 }
 
 /* ─── Operator utility classes ────────────────────────────────────── */

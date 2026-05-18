@@ -36,6 +36,7 @@ export function resolveMediaUrlForUi(
   const u = url.trim();
   if (!u) return undefined;
   if (u.startsWith("https://") || u.startsWith("http://")) return u;
+  if (u.startsWith("blob:") || u.startsWith("data:")) return u;
   if (u.startsWith("//")) {
     try {
       return new URL(`https:${u}`).href;

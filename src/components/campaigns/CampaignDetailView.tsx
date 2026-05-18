@@ -17,6 +17,7 @@ import {
   statusHeroClasses,
 } from "@/lib/campaignUi";
 import { CampaignReport } from "./CampaignReport";
+import { CampaignReviewDialog } from "./CampaignReviewDialog";
 import { StatusTag } from "@/components/ui/StatusTag";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
@@ -324,6 +325,8 @@ export type CampaignDetailViewProps = {
   reportMetrics: ReturnType<typeof parseReportMetrics>;
   showRawReport: boolean;
   setShowRawReport: Dispatch<SetStateAction<boolean>>;
+  /** Called when the review dialog successfully starts the campaign — parent should refresh list/progress/report. */
+  onCampaignStarted: () => void | Promise<void>;
 };
 
 export function CampaignDetailView({
@@ -358,6 +361,7 @@ export function CampaignDetailView({
   reportMetrics,
   showRawReport,
   setShowRawReport,
+  onCampaignStarted,
 }: CampaignDetailViewProps) {
   const statusNorm = normalizeStatus(selectedCampaign.status);
   const canEditSchedule =
@@ -365,6 +369,10 @@ export function CampaignDetailView({
 
   const [activeTab, setActiveTab] = useState<"overview" | "report">("overview");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  /** "preview" — Preview button; "confirm-start" — Start button gated by confirm. */
+  const [reviewMode, setReviewMode] = useState<
+    "preview" | "confirm-start" | null
+  >(null);
   const [planAt, setPlanAt] = useState(() =>
     isoToDatetimeLocalValue(selectedCampaign.scheduledAt)
   );
@@ -484,7 +492,7 @@ export function CampaignDetailView({
                         style={{ width: `${Math.min(100, Math.max(0, progressBarPercent))}%` }}
                       />
                     </div>
-                    <div className="font-mono-op mt-1.5 text-[10px] tracking-[0.04em] text-base-content/45 tabular-nums">
+                    <div className="font-mono-op mt-1.5 text-[0.625rem] tracking-[0.04em] text-base-content/45 tabular-nums">
                       {Math.round(progressBarPercent)}%
                     </div>
                   </div>
@@ -579,12 +587,21 @@ export function CampaignDetailView({
                     <button
                       type="button"
                       className="btn btn-primary gap-1"
-                      onClick={() => void handleAction("start")}
+                      onClick={() => setReviewMode("confirm-start")}
                       disabled={loading}
                     >
                       <span aria-hidden>▶</span> Start
                     </button>
                   ) : null}
+                  <button
+                    type="button"
+                    className="btn btn-ghost gap-1"
+                    onClick={() => setReviewMode("preview")}
+                    disabled={loading}
+                    title="Preview audience + message without starting"
+                  >
+                    Preview
+                  </button>
                   {showResume(selectedCampaign.status) ? (
                     <button
                       type="button"
@@ -967,6 +984,17 @@ export function CampaignDetailView({
         onConfirm={() => { void handleAction("delete"); setShowDeleteConfirm(false); }}
         onClose={() => setShowDeleteConfirm(false)}
       />
+      {reviewMode ? (
+        <CampaignReviewDialog
+          campaignId={selectedCampaign.id}
+          campaignName={selectedCampaign.name}
+          mode={reviewMode}
+          onClose={() => setReviewMode(null)}
+          onStarted={() => {
+            void onCampaignStarted();
+          }}
+        />
+      ) : null}
     </>
   );
 }

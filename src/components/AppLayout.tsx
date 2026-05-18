@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { AppDock } from "./AppDock";
 import { PwaInstallPrompt } from "./PwaInstallPrompt";
 import { AppUpdateToast } from "./AppUpdateToast";
+import { BackgroundTasksBar } from "./BackgroundTasksBar";
+import { BackgroundTaskToast } from "./BackgroundTaskToast";
+import { useBackgroundTasks } from "@/hooks/useBackgroundTasks";
 import { SessionRefresh } from "./SessionRefresh";
 import { AppShortcuts } from "./shortcuts/AppShortcuts";
 import { GlobalRightPanel } from "./right-panel/GlobalRightPanel";
@@ -16,6 +19,7 @@ import { conversationsApi } from "@/lib/api";
 
 const DRAWER_ID = "app-drawer";
 const SIDEBAR_KEY = "sidebar-collapsed";
+const DENSITY_KEY = "display-density";
 
 export function AppLayout({
   children,
@@ -44,6 +48,22 @@ export function AppLayout({
       // ignore
     }
   }, [sidebarCollapsed]);
+
+  // Sync display density from server-fetched user → html[data-density] + localStorage.
+  // The inline boot script in app/layout.tsx reads localStorage on first paint to avoid FOUC.
+  useEffect(() => {
+    const density = (me.user?.displayDensity ?? "MEDIUM").toLowerCase();
+    document.documentElement.setAttribute("data-density", density);
+    try {
+      localStorage.setItem(DENSITY_KEY, density);
+    } catch {
+      // ignore
+    }
+  }, [me.user?.displayDensity]);
+
+  // Cross-domain background tasks (imports + future campaigns / etc).
+  const { tasks: bgTasks, completed: bgCompleted, dismissCompletion } =
+    useBackgroundTasks(me.workspace.id);
 
   // Handle inline reply actions from push notification service worker
   useEffect(() => {
@@ -99,6 +119,8 @@ export function AppLayout({
       <AppShortcuts />
       <PwaInstallPrompt />
       <AppUpdateToast />
+      <BackgroundTasksBar tasks={bgTasks} />
+      <BackgroundTaskToast notices={bgCompleted} onDismiss={dismissCompletion} />
 
       {/* Desktop: sidebar + content side by side */}
       <div className="hidden h-[100dvh] overflow-hidden lg:flex">

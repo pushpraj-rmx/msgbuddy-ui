@@ -179,8 +179,8 @@ export function AvatarCropUpload({
           <div className="w-full max-w-sm mx-4 overflow-hidden rounded-box border border-base-300 bg-base-200 shadow-lg">
             <div className="border-b border-base-300 px-4 py-3">
               <span className="op-label">Upload</span>
-              <h3 className="text-[15px] font-semibold tracking-[-0.015em]">Crop photo</h3>
-              <p className="font-mono-op mt-1 text-[10px] tracking-[0.04em] text-base-content/55">drag to reposition · scroll to zoom</p>
+              <h3 className="text-[0.9375rem] font-semibold tracking-[-0.015em]">Crop photo</h3>
+              <p className="font-mono-op mt-1 text-[0.625rem] tracking-[0.04em] text-base-content/55">drag to reposition · scroll to zoom</p>
             </div>
 
             {/* Cropper container */}

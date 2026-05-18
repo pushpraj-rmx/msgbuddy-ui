@@ -5,6 +5,7 @@ import { X, FileAudio, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { conversationsApi } from "../../lib/api";
 import type { MediaItem } from "../../lib/messaging";
+import { resolveMediaUrlForUi } from "../../lib/mediaUrls";
 
 interface MediaGalleryProps {
   conversationId: string;
@@ -24,6 +25,7 @@ function MediaThumbnail({
 }) {
   const mime = item.mediaMimeType ?? "";
   const isVisual = isImageOrVideo(mime);
+  const resolvedUrl = resolveMediaUrlForUi(item.mediaUrl ?? undefined);
 
   if (isVisual) {
     return (
@@ -34,7 +36,7 @@ function MediaThumbnail({
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- dynamic user content */}
         <img
-          src={item.mediaUrl ?? ""}
+          src={resolvedUrl ?? ""}
           alt=""
           className="h-full w-full object-cover"
         />
@@ -122,7 +124,8 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
                 key={item.id}
                 item={item}
                 onClick={() => {
-                  if (item.mediaUrl) window.open(item.mediaUrl, "_blank");
+                  const url = resolveMediaUrlForUi(item.mediaUrl ?? undefined);
+                  if (url) window.open(url, "_blank");
                 }}
               />
             ))}
@@ -145,14 +148,14 @@ export function MediaGallery({ conversationId }: MediaGalleryProps) {
             </div>
             {lightbox?.mediaMimeType?.startsWith("video/") ? (
               <video
-                src={lightbox.mediaUrl ?? ""}
+                src={resolveMediaUrlForUi(lightbox.mediaUrl ?? undefined) ?? ""}
                 controls
                 className="block max-h-[80vh] w-full"
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element -- dynamic user content
               <img
-                src={lightbox?.mediaUrl ?? ""}
+                src={resolveMediaUrlForUi(lightbox?.mediaUrl ?? undefined) ?? ""}
                 alt=""
                 className="block max-h-[80vh] w-full object-contain"
               />

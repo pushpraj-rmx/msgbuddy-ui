@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getApiError } from "@/lib/api-error";
 import { analyticsApi, campaignsApi } from "@/lib/api";
@@ -110,6 +110,11 @@ export function CampaignsClient({
     () => campaigns.find((campaign) => campaign.id === selectedId) ?? null,
     [campaigns, selectedId]
   );
+
+  const selectedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   const reportMetrics = useMemo(() => parseReportMetrics(report), [report]);
   const mergedMetrics = useMemo(
@@ -255,7 +260,10 @@ export function CampaignsClient({
         const campaignId = typeof ev.data.campaignId === "string" ? ev.data.campaignId : null;
 
         if (isCampaignRunProgress(ev.type) && campaignId) {
-          // Update progress counters in real-time for the selected campaign
+          // Skip events for non-selected campaigns — otherwise an active
+          // campaign's progress overwrites the stats of an old campaign the
+          // user is currently viewing.
+          if (campaignId !== selectedIdRef.current) return;
           setProgress((prev) => {
             if (!prev) return prev;
             return {
@@ -486,6 +494,13 @@ export function CampaignsClient({
         reportMetrics={reportMetrics}
         showRawReport={showRawReport}
         setShowRawReport={setShowRawReport}
+        onCampaignStarted={async () => {
+          await refresh();
+          await loadProgress();
+          await fetchReport();
+          await loadRuns();
+          await loadRunJobs();
+        }}
       />
     );
   }, [
@@ -519,6 +534,7 @@ export function CampaignsClient({
     hasSummaryCards,
     reportMetrics,
     showRawReport,
+    refresh,
   ]);
 
   const campaignMetaPanel = useMemo(() => {

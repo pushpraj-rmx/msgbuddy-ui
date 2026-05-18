@@ -452,7 +452,7 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
                   </button>
                 )}
                 {item.providerStatus ? (
-                  <span className="absolute left-2 top-2 rounded-md bg-base-100/90 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-base-content/80 shadow-sm backdrop-blur-sm">
+                  <span className="absolute left-2 top-2 rounded-md bg-base-100/90 px-2 py-0.5 text-[0.625rem] font-medium uppercase tracking-wide text-base-content/80 shadow-sm backdrop-blur-sm">
                     {item.providerStatus}
                   </span>
                 ) : null}
@@ -530,7 +530,7 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
               </span>
               <div>
                 <span className="op-label">File details</span>
-                <h3 className="text-[13px] font-semibold tracking-[-0.01em]">API payload for this media item</h3>
+                <h3 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">API payload for this media item</h3>
               </div>
             </div>
             <button
@@ -551,7 +551,7 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
                 key={key}
                 className="rounded-lg border border-base-300/50 bg-base-200/40 px-3 py-2"
               >
-                <dt className="text-[10px] font-semibold uppercase tracking-wider text-base-content/45">
+                <dt className="text-[0.625rem] font-semibold uppercase tracking-wider text-base-content/45">
                   {key}
                 </dt>
                 <dd className="mt-0.5 break-all font-mono text-xs text-base-content/85">
@@ -564,7 +564,7 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
             <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium text-base-content/70">
               Raw JSON
             </summary>
-            <pre className="max-h-52 overflow-auto border-t border-base-300/50 p-3 text-[11px] leading-relaxed text-base-content/80">
+            <pre className="max-h-52 overflow-auto border-t border-base-300/50 p-3 text-[0.6875rem] leading-relaxed text-base-content/80">
               {JSON.stringify(selectedMedia, null, 2)}
             </pre>
           </details>

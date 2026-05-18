@@ -97,18 +97,18 @@ export function SegmentsPanelContent({
               <div className="min-w-0 flex-1">
                 <button
                   type="button"
-                  className="block truncate text-[13px] font-medium text-base-content hover:text-primary transition-colors text-left"
+                  className="block truncate text-[0.8125rem] font-medium text-base-content hover:text-primary transition-colors text-left"
                   onClick={() => onSelectSegment?.(seg.id)}
                   title={`Filter contacts by "${seg.name}"`}
                 >
                   {seg.name}
                 </button>
                 {seg.description && (
-                  <p className="truncate text-[11px] text-base-content/50">{seg.description}</p>
+                  <p className="truncate text-[0.6875rem] text-base-content/50">{seg.description}</p>
                 )}
               </div>
               {seg.contactCount != null && (
-                <span className="font-mono-op text-[10px] tabular-nums text-base-content/40">
+                <span className="font-mono-op text-[0.625rem] tabular-nums text-base-content/40">
                   {seg.contactCount}
                 </span>
               )}

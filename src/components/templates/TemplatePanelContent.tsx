@@ -17,7 +17,6 @@ import type { TemplateCategory } from "@/lib/types";
 import { WhatsAppTemplatePreviewFromVersion } from "./WhatsAppTemplatePreview";
 import { getApiError } from "@/lib/api-error";
 import { PanelBody, PanelSection } from "@/components/right-panel/PanelBody";
-import { InfoTip } from "@/components/ui/InfoTip";
 
 export function TemplatePanelContent({ templateId }: { templateId: string }) {
   const queryClient = useQueryClient();
@@ -67,7 +66,7 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
     return (
       <div className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
         <span className="op-label mb-1 block text-error">error</span>
-        <p className="text-[13px] text-base-content">{getApiError(templateQuery.error) || "Failed to load template."}</p>
+        <p className="text-[0.8125rem] text-base-content">{getApiError(templateQuery.error) || "Failed to load template."}</p>
       </div>
     );
   }
@@ -95,7 +94,7 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
       {/* Template info */}
       <PanelSection label="Details">
         {template.description && (
-          <p className="mb-2 text-[13px] text-base-content/70">{template.description}</p>
+          <p className="mb-2 text-[0.8125rem] text-base-content/70">{template.description}</p>
         )}
         <div className="flex flex-wrap items-center gap-1.5">
           {template.isActive ? (
@@ -113,7 +112,7 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
           ) : null}
         </div>
         {version && (
-          <p className="mt-2 font-mono-op text-[11px] tabular-nums text-base-content/50">
+          <p className="mt-2 font-mono-op text-[0.6875rem] tabular-nums text-base-content/50">
             v{version.version} · {version.status}
           </p>
         )}
@@ -160,12 +159,12 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
                 </button>
               </div>
               {addWhatsAppMutation.isError && (
-                <p className="text-[12px] text-error">{getApiError(addWhatsAppMutation.error)}</p>
+                <p className="text-[0.75rem] text-error">{getApiError(addWhatsAppMutation.error)}</p>
               )}
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2 py-3 text-center">
-              <p className="text-[13px] text-base-content/55">No WhatsApp channel configured yet.</p>
+              <p className="text-[0.8125rem] text-base-content/55">No WhatsApp channel configured yet.</p>
               <button
                 type="button"
                 className="btn btn-primary btn-sm gap-1"
@@ -185,7 +184,7 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
             {state?.missingRequirements?.length ? (
               <div className="space-y-1.5">
                 {(state.missingRequirements as Array<{ code: string; message: string }>).map((r) => (
-                  <div key={r.code} className="rounded-md border border-warning/30 bg-warning/5 px-2.5 py-1.5 text-[12px] text-base-content/70">
+                  <div key={r.code} className="rounded-md border border-warning/30 bg-warning/5 px-2.5 py-1.5 text-[0.75rem] text-base-content/70">
                     <span className="font-medium text-warning">{r.code === "NO_VERSION" ? "No version" : r.code === "NO_SENDABLE_VERSION" ? "Approval needed" : r.code}</span>
                     {" — "}{r.message}
                   </div>
@@ -248,7 +247,7 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
 
                 {/* PROVIDER_REJECTED → Show reason */}
                 {version.status === "PROVIDER_REJECTED" && (
-                  <div className="rounded-md border border-error/30 bg-error/5 px-2.5 py-1.5 text-[12px] text-base-content/70">
+                  <div className="rounded-md border border-error/30 bg-error/5 px-2.5 py-1.5 text-[0.75rem] text-base-content/70">
                     <span className="font-medium text-error">Rejected by Meta</span>
                     {version.providerRejectionReason && (
                       <p className="mt-0.5">{version.providerRejectionReason}</p>
@@ -256,12 +255,22 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
                   </div>
                 )}
 
+                {/* PROVIDER_IN_APPEAL → Awaiting Meta re-review */}
+                {version.status === "PROVIDER_IN_APPEAL" && (
+                  <div className="rounded-md border border-warning/30 bg-warning/5 px-2.5 py-1.5 text-[0.75rem] text-base-content/70">
+                    <span className="font-medium text-warning">Appeal in review</span>
+                    <p className="mt-0.5">
+                      Submitted to Meta for re-review. Status will update via webhook when they decide.
+                    </p>
+                  </div>
+                )}
+
                 {/* Sync error */}
                 {syncMutation.isError && (
-                  <p className="text-[12px] text-error">{getApiError(syncMutation.error) || "Sync failed"}</p>
+                  <p className="text-[0.75rem] text-error">{getApiError(syncMutation.error) || "Sync failed"}</p>
                 )}
                 {syncMutation.isSuccess && (
-                  <p className="text-[12px] text-success">Sent to Meta for review</p>
+                  <p className="text-[0.75rem] text-success">Sent to Meta for review</p>
                 )}
               </div>
             )}

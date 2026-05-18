@@ -30,19 +30,19 @@ export function ActivityTimeline({ contactId }: { contactId: string }) {
           >
             <span className="absolute -left-[3px] top-4 h-1 w-1 bg-primary rounded-full" aria-hidden />
             <span className="op-tag shrink-0">{item.type}</span>
-            <div className="min-w-0 flex-1 text-[13px]">
+            <div className="min-w-0 flex-1 text-[0.8125rem]">
               {item.type === "note" && item.data.content && (
                 <p>{item.data.content}</p>
               )}
               {item.type === "message" && (
                 <p>
-                  <span className="font-mono-op text-[10px] tracking-[0.08em] uppercase text-base-content/50">
+                  <span className="font-mono-op text-[0.625rem] tracking-[0.08em] uppercase text-base-content/50">
                     {item.data.direction}
                   </span>
                   {": "}{item.data.text ?? "—"}
                 </p>
               )}
-              <p className="font-mono-op mt-1 text-[10px] tracking-[0.04em] tabular-nums text-base-content/45">
+              <p className="font-mono-op mt-1 text-[0.625rem] tracking-[0.04em] tabular-nums text-base-content/45">
                 {new Date(item.createdAt).toLocaleString()}
               </p>
             </div>

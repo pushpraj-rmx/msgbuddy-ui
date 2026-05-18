@@ -53,7 +53,7 @@ export function Sidebar({
           )
         ) : (
           <>
-            <Link href="/dashboard" aria-label="MsgBuddy home" className="font-mono-op text-[24px] font-semibold tracking-[-0.01em] text-base-content">
+            <Link href="/dashboard" aria-label="MsgBuddy home" className="font-mono-op text-[1.5rem] font-semibold tracking-[-0.01em] text-base-content">
               MsgBuddy
             </Link>
             {onToggle && (
@@ -188,7 +188,7 @@ export function Sidebar({
         {collapsed ? (
           <div className="tooltip tooltip-right" data-tip={me.workspace.name}>
             <div className="flex items-center justify-center">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-base-300 bg-base-200 font-mono-op text-[11px] font-semibold text-base-content">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md border border-base-300 bg-base-200 font-mono-op text-[0.6875rem] font-semibold text-base-content">
                 {me.workspace.name.slice(0, 2).toUpperCase()}
               </div>
             </div>

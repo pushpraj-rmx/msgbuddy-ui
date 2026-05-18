@@ -28,7 +28,7 @@ import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
-export function TemplatesClient({ meRole, workspaceId }: { meRole: string; workspaceId: string }) {
+export function TemplatesClient({ meRole }: { meRole: string }) {
   const canCreateTemplate = roleHasWorkspacePermission(meRole, "templates.create");
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState<string>("");
@@ -278,8 +278,6 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
     [selectedIds, selectedOnPageCount, data?.items]
   );
 
-  // TanStack Table intentionally uses dynamic function references.
-  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data: data?.items ?? [],
     columns,
@@ -356,7 +354,7 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
           <div className="flex-1" />
           {/* Quota indicator */}
           {limits != null && (
-            <span className="font-mono-op text-[11px] tabular-nums text-base-content/50">
+            <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/50">
               {limits.current}/{limits.max}
               {limits.isVerified && " · verified"}
             </span>
@@ -397,7 +395,7 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
                   disabled={bulkDeleteMutation.isPending}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  <span className="font-mono-op text-[10px] tabular-nums">{selectedIds.size}</span>
+                  <span className="font-mono-op text-[0.625rem] tabular-nums">{selectedIds.size}</span>
                 </button>
               </div>
             </>
@@ -424,7 +422,7 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
       {/* Table */}
       <div className="overflow-hidden rounded-box border border-base-300 bg-base-200">
         <div className="overflow-x-auto">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[0.78125rem]">
             <thead>
               {table.getHeaderGroups().map((hg) => (
                 <tr key={hg.id} className="border-b border-base-300 bg-base-100">
@@ -455,7 +453,7 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
                 </tr>
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-3 py-8 text-center text-[13px] text-base-content/55">
+                  <td colSpan={columns.length} className="px-3 py-8 text-center text-[0.8125rem] text-base-content/55">
                     No templates found.
                   </td>
                 </tr>
@@ -467,7 +465,7 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
                     onClick={() => setSelectedTemplateId(row.original.id)}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className={`px-3 py-3 align-middle ${["updatedAt", "createdAt"].includes(cell.column.id) ? "font-mono-op text-[11px] tabular-nums text-base-content/70" : ""}`}>
+                      <td key={cell.id} className={`px-3 py-3 align-middle ${["updatedAt", "createdAt"].includes(cell.column.id) ? "font-mono-op text-[0.6875rem] tabular-nums text-base-content/70" : ""}`}>
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext()
@@ -484,7 +482,7 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
         {/* Pagination */}
         {data && data.total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-3 py-2.5">
-            <span className="font-mono-op text-[10px] tracking-[0.04em] tabular-nums text-base-content/50">
+            <span className="font-mono-op text-[0.625rem] tracking-[0.04em] tabular-nums text-base-content/50">
               {(page - 1) * limit + 1}–{Math.min(page * limit, data.total)} of {data.total}
             </span>
             <div className="join">
@@ -498,7 +496,7 @@ export function TemplatesClient({ meRole, workspaceId }: { meRole: string; works
               </button>
               <button
                 type="button"
-                className="btn btn-sm join-item font-mono-op tabular-nums text-[10px] no-animation"
+                className="btn btn-sm join-item font-mono-op tabular-nums text-[0.625rem] no-animation"
                 disabled
               >
                 {page} / {totalPages}

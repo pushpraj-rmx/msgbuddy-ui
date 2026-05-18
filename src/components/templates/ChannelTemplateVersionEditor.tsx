@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useUpdateChannelTemplateVersion } from "@/hooks/use-templates";
 import { mediaApi } from "@/lib/api";
 import type {
@@ -17,6 +25,7 @@ import {
 } from "@/lib/whatsapp-template-languages";
 import { getApiError } from "@/lib/api-error";
 import { WhatsAppTemplatePreview } from "@/components/templates/WhatsAppTemplatePreview";
+import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 const BODY_MAX = 1024;
 const FOOTER_MAX = 60;
@@ -38,8 +47,111 @@ const HEADER_TYPES: TemplateHeaderType[] = [
   "DOCUMENT",
 ];
 
-/** Meta template button label limit (QUICK_REPLY / URL / PHONE_NUMBER). */
-const META_TEMPLATE_BUTTON_LABEL_MAX = 25;
+/** Meta template button label limit (QUICK_REPLY / URL / PHONE_NUMBER) — official Meta cap. */
+const META_TEMPLATE_BUTTON_LABEL_MAX = 20;
+/** Meta carousel template card cap. */
+const CAROUSEL_CARDS_MAX = 10;
+/** Meta cap for template header media (IMAGE / VIDEO / DOCUMENT). */
+const HEADER_MEDIA_MAX_BYTES = 15 * 1024 * 1024;
+/** URL shorteners Meta rejects in button URLs — content review will instantly fail. */
+const URL_SHORTENER_HOSTS = new Set([
+  "bit.ly",
+  "tinyurl.com",
+  "t.co",
+  "goo.gl",
+  "ow.ly",
+  "buff.ly",
+  "is.gd",
+  "rebrand.ly",
+  "rb.gy",
+  "wa.me",
+  "shorturl.at",
+  "cutt.ly",
+  "lnkd.in",
+]);
+
+/** Returns the hostname of a button URL if it's a known shortener, else null. */
+function isShortenerUrl(raw: string): string | null {
+  const t = raw.trim();
+  if (!t) return null;
+  try {
+    const u = new URL(t);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    return URL_SHORTENER_HOSTS.has(host) ? host : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Bracket-style placeholders (e.g. `[NAME]`) — common mistake, Meta auto-rejects. */
+const BRACKET_PLACEHOLDER_RE = /\[[A-Za-z_][A-Za-z0-9_ -]*\]/;
+
+/** Extracts positional placeholder numbers from a string. `["1", "3", "1"]` → `[1, 3, 1]`. */
+function extractPositionalPlaceholders(s: string): number[] {
+  const out: number[] = [];
+  const re = /\{\{\s*(\d+)\s*\}\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(s)) !== null) out.push(Number(m[1]));
+  return out;
+}
+
+/** Returns true if the trimmed string begins or ends with a `{{...}}` placeholder. */
+function startsOrEndsWithPlaceholder(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  return /^\{\{[^}]+\}\}/.test(t) || /\{\{[^}]+\}\}$/.test(t);
+}
+
+/** Luhn-validate a digit string (credit-card check). */
+function luhn(num: string): boolean {
+  let sum = 0;
+  let alt = false;
+  for (let i = num.length - 1; i >= 0; i--) {
+    let n = Number(num[i]);
+    if (Number.isNaN(n)) return false;
+    if (alt) {
+      n *= 2;
+      if (n > 9) n -= 9;
+    }
+    sum += n;
+    alt = !alt;
+  }
+  return sum % 10 === 0;
+}
+
+/** Returns the first sensitive-data label found in `text`, or null. Mirrors backend. */
+function detectSensitiveData(text: string): string | null {
+  // Credit card: 13-19 digit run that passes Luhn
+  const ccMatch = text.match(/\b(?:\d[ -]?){13,19}\b/g);
+  if (ccMatch) {
+    for (const m of ccMatch) {
+      const digits = m.replace(/[ -]/g, "");
+      if (digits.length >= 13 && digits.length <= 19 && luhn(digits)) {
+        return "looks like a credit card number";
+      }
+    }
+  }
+  // US SSN
+  if (/\b\d{3}-\d{2}-\d{4}\b/.test(text)) {
+    return "looks like a US Social Security Number (SSN)";
+  }
+  // Password / PIN disclosure
+  if (
+    /\b(password|pwd|pin\s*code)\b\s*[:=]/i.test(text) ||
+    /\b(your|the)\s+(password|pin|pin\s*code)\s+is\b/i.test(text)
+  ) {
+    return "asks for or includes a password / PIN";
+  }
+  // Payment / banking details
+  if (
+    /\b(credit\s*card|debit\s*card|cvv|cvc|bank\s*account|account\s*number|routing\s*number|iban)\b/i.test(
+      text
+    )
+  ) {
+    return "asks for full payment / banking details";
+  }
+  return null;
+}
 
 type CarouselButtonUiType = "QUICK_REPLY" | "URL" | "PHONE_NUMBER";
 
@@ -112,17 +224,30 @@ function rowsFromApiButtons(raw: unknown): CarouselButtonRow[] {
 function rowsToApiButtons(rows: CarouselButtonRow[]): unknown[] {
   return rows.map((r) => {
     if (r.type === "URL") {
-      return { type: "URL", text: r.text.trim(), url: r.url.trim() };
+      return { type: "URL", text: tidyWhitespace(r.text), url: r.url.trim() };
     }
     if (r.type === "PHONE_NUMBER") {
       return {
         type: "PHONE_NUMBER",
-        text: r.text.trim(),
+        text: tidyWhitespace(r.text),
         phone_number: r.phone_number.trim(),
       };
     }
-    return { type: "QUICK_REPLY", text: r.text.trim() };
+    return { type: "QUICK_REPLY", text: tidyWhitespace(r.text) };
   });
+}
+
+/**
+ * Trim leading/trailing whitespace and collapse runs of horizontal whitespace
+ * (spaces, tabs) within each line to a single space. Newlines are preserved so
+ * multi-line bodies keep their structure.
+ */
+function tidyWhitespace(s: string): string {
+  return s
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
 }
 
 function jsonToTextarea(v: unknown): string {
@@ -165,19 +290,33 @@ function starterCarouselCards(count = 2): TemplateCarouselCard[] {
   }));
 }
 
-export function ChannelTemplateVersionEditor({
-  channelTemplateId,
-  version,
-  onCopyAsNewDraft,
-  channelCategory,
-  onAutoSwitchCategoryToMarketing,
-}: {
+/** Imperative handle exposed to the parent — lets it persist unsaved edits before submit. */
+export type ChannelTemplateVersionEditorHandle = {
+  /** Validates + persists current form state. Returns true on success, false if validation/API failed. */
+  save: () => Promise<boolean>;
+};
+
+type ChannelTemplateVersionEditorProps = {
   channelTemplateId: string;
   version: ChannelTemplateVersion;
   onCopyAsNewDraft?: () => void;
   channelCategory?: TemplateCategory | null;
   onAutoSwitchCategoryToMarketing?: () => void;
-}) {
+};
+
+export const ChannelTemplateVersionEditor = forwardRef<
+  ChannelTemplateVersionEditorHandle,
+  ChannelTemplateVersionEditorProps
+>(function ChannelTemplateVersionEditor(
+  {
+    channelTemplateId,
+    version,
+    onCopyAsNewDraft,
+    channelCategory,
+    onAutoSwitchCategoryToMarketing,
+  },
+  ref
+) {
   const editable = !version.isLocked && !version.archivedAt;
   const updateMutation = useUpdateChannelTemplateVersion();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -207,11 +346,16 @@ export function ChannelTemplateVersionEditor({
   // After the first manual "Save draft" succeeds, keep auto-saving on edits.
   const [autoSaveAfterManual, setAutoSaveAfterManual] = useState(false);
   const [autoSavePending, setAutoSavePending] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [carouselUploadBusyByIndex, setCarouselUploadBusyByIndex] = useState<
     Record<number, boolean>
+  >({});
+  /** Blob URL for the just-picked header file — local-only, lets the right-panel preview render the actual image. */
+  const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
+  /** Same as above, per carousel card index. */
+  const [carouselPreviewUrlsByIndex, setCarouselPreviewUrlsByIndex] = useState<
+    Record<number, string>
   >({});
 
   useEffect(() => {
@@ -284,11 +428,11 @@ export function ChannelTemplateVersionEditor({
   ]);
 
   // Meta restriction: carousel templates cannot be UTILITY. Auto switch category to MARKETING.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- callback ref intentionally excluded to prevent infinite loop
   useEffect(() => {
     if (layoutType !== "CAROUSEL") return;
     if (channelCategory !== "UTILITY") return;
     onAutoSwitchCategoryToMarketing?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callback ref intentionally excluded to prevent infinite loop
   }, [layoutType, channelCategory]);
 
   /** Ensure each card index has button row state (avoids unstable fallbacks on every render). */
@@ -342,6 +486,19 @@ export function ChannelTemplateVersionEditor({
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      if (file.size > HEADER_MEDIA_MAX_BYTES) {
+        const mb = (file.size / (1024 * 1024)).toFixed(1);
+        const capMb = (HEADER_MEDIA_MAX_BYTES / (1024 * 1024)).toFixed(0);
+        setFormError(
+          `Header media is ${mb} MB — Meta limit is ${capMb} MB. Resize or compress before uploading.`
+        );
+        e.target.value = "";
+        return;
+      }
+      setHeaderPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(file);
+      });
       setUploadBusy(true);
       setFormError(null);
       try {
@@ -357,25 +514,93 @@ export function ChannelTemplateVersionEditor({
     []
   );
 
-  const onSave = useCallback((silent = false) => {
+  // Revoke standard header blob URL on unmount or when version switches.
+  useEffect(() => {
+    return () => {
+      setHeaderPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
+  }, [version.id]);
+
+  // Revoke any carousel blob URLs on unmount.
+  useEffect(() => {
+    return () => {
+      setCarouselPreviewUrlsByIndex((prev) => {
+        for (const u of Object.values(prev)) URL.revokeObjectURL(u);
+        return {};
+      });
+    };
+  }, [version.id]);
+
+  const onSave = useCallback(async (silent = false): Promise<boolean> => {
+    if (!editable) return true;
     if (!silent) setFormError(null);
     const b = body.trim();
     if (!b.length) {
       setFormError("Body is required.");
-      return;
+      return false;
     }
     if (b.length > BODY_MAX) {
       setFormError(`Body must be at most ${BODY_MAX} characters.`);
-      return;
+      return false;
     }
     if (footer.length > FOOTER_MAX) {
       setFormError(`Footer must be at most ${FOOTER_MAX} characters.`);
-      return;
+      return false;
+    }
+
+    // ── Meta policy lint ───────────────────────────────────────────────────
+    // Bracket-style placeholders like [NAME] — Meta auto-rejects.
+    if (BRACKET_PLACEHOLDER_RE.test(b)) {
+      setFormError(
+        "Body uses bracket-style placeholders (e.g. [NAME]). Use Meta variable syntax instead — {{1}} for positional, or {{name}} for named."
+      );
+      return false;
+    }
+    // Body must not start or end with a variable.
+    if (startsOrEndsWithPlaceholder(b)) {
+      setFormError(
+        "Body cannot begin or end with a variable. Add fixed text around {{...}} placeholders."
+      );
+      return false;
+    }
+    // Positional placeholders must start at 1 and be sequential.
+    if (parameterFormat === "POSITIONAL") {
+      const nums = extractPositionalPlaceholders(b);
+      if (nums.length > 0) {
+        const unique = Array.from(new Set(nums)).sort((a, b) => a - b);
+        for (let i = 0; i < unique.length; i++) {
+          if (unique[i] !== i + 1) {
+            setFormError(
+              `Positional variables must start at 1 and be sequential (no gaps). Found {{${unique.join("}}, {{")}}}.`
+            );
+            return false;
+          }
+        }
+      }
+    }
+    // Footer cannot contain variables (Meta rule).
+    if (footer && /\{\{[^}]+\}\}/.test(footer)) {
+      setFormError("Footer cannot contain variables — only fixed text is allowed there.");
+      return false;
+    }
+    // Sensitive data — Meta auto-rejects templates that look like they request or
+    // disclose card numbers, SSNs, passwords, or banking details.
+    {
+      const reason = detectSensitiveData(b);
+      if (reason) {
+        setFormError(
+          `Body ${reason}. Meta auto-rejects templates with this content — remove it from the template.`
+        );
+        return false;
+      }
     }
     if (layoutType === "STANDARD") {
       if (headerType === "TEXT" && headerContent.length > HEADER_TEXT_MAX) {
         setFormError(`Text header must be at most ${HEADER_TEXT_MAX} characters.`);
-        return;
+        return false;
       }
       if (
         headerType === "IMAGE" ||
@@ -386,7 +611,7 @@ export function ChannelTemplateVersionEditor({
           setFormError(
             "Upload a file or paste the media asset handle for this header."
           );
-          return;
+          return false;
         }
       }
     }
@@ -394,17 +619,17 @@ export function ChannelTemplateVersionEditor({
     const parsedButtons = parseJsonOptional(buttonsJson, "Buttons");
     if (!parsedButtons.ok) {
       setFormError(parsedButtons.error);
-      return;
+      return false;
     }
     const parsedVars = parseJsonOptional(variablesJson, "Variables");
     if (!parsedVars.ok) {
       setFormError(parsedVars.error);
-      return;
+      return false;
     }
     const parsedCarousel = parseJsonOptional(carouselJson, "Carousel cards");
     if (!parsedCarousel.ok) {
       setFormError(parsedCarousel.error);
-      return;
+      return false;
     }
 
     if (layoutType === "STANDARD" && standardButtonRows && standardButtonRows.length > 0) {
@@ -417,13 +642,13 @@ export function ChannelTemplateVersionEditor({
         const label = r.text.trim();
         if (!label) {
           setFormError(`Button ${i + 1}: label is required.`);
-          return;
+          return false;
         }
         if (label.length > META_TEMPLATE_BUTTON_LABEL_MAX) {
           setFormError(
             `Button ${i + 1}: label must be at most ${META_TEMPLATE_BUTTON_LABEL_MAX} characters.`
           );
-          return;
+          return false;
         }
         if (r.type === "QUICK_REPLY") {
           quickReplyCount++;
@@ -433,83 +658,127 @@ export function ChannelTemplateVersionEditor({
         if (r.type === "URL") {
           if (!r.url.trim()) {
             setFormError(`Button ${i + 1}: URL is required.`);
-            return;
+            return false;
           }
           const placeholders = (r.url.match(/\{\{[^}]+\}\}/g) ?? []).length;
           if (placeholders !== 1) {
             setFormError(
               `Button ${i + 1}: URL must contain exactly 1 placeholder (found ${placeholders}).`
             );
-            return;
+            return false;
+          }
+          const shortener = isShortenerUrl(r.url.replace(/\{\{[^}]+\}\}/g, "x"));
+          if (shortener) {
+            setFormError(
+              `Button ${i + 1}: URL shortener "${shortener}" is not allowed. Use the full destination URL.`
+            );
+            return false;
           }
         }
         if (r.type === "PHONE_NUMBER" && !r.phone_number.trim()) {
           setFormError(`Button ${i + 1}: phone number is required.`);
-          return;
+          return false;
         }
       }
       if (quickReplyCount > QUICK_REPLY_MAX) {
         setFormError(`Too many quick-reply buttons (${quickReplyCount}); max is ${QUICK_REPLY_MAX}.`);
-        return;
+        return false;
       }
       if (ctaCount > CTA_MAX) {
         setFormError(`Too many CTA buttons (${ctaCount}); max is ${CTA_MAX}.`);
-        return;
+        return false;
       }
     }
 
     if (layoutType === "CAROUSEL") {
       if (carouselCards.length === 0) {
         setFormError("Add at least one carousel card.");
-        return;
+        return false;
+      }
+      if (carouselCards.length > CAROUSEL_CARDS_MAX) {
+        setFormError(
+          `Carousel templates support at most ${CAROUSEL_CARDS_MAX} cards (currently ${carouselCards.length}).`
+        );
+        return false;
       }
       for (let i = 0; i < carouselCards.length; i++) {
         const c = carouselCards[i];
         if (!c?.body?.trim()) {
           setFormError(`Card ${i + 1}: body is required.`);
-          return;
+          return false;
+        }
+        if (BRACKET_PLACEHOLDER_RE.test(c.body)) {
+          setFormError(
+            `Card ${i + 1}: body uses bracket-style placeholders (e.g. [NAME]). Use {{1}} or {{name}} instead.`
+          );
+          return false;
+        }
+        if (startsOrEndsWithPlaceholder(c.body)) {
+          setFormError(
+            `Card ${i + 1}: body cannot begin or end with a variable.`
+          );
+          return false;
+        }
+        {
+          const cardSensitive = detectSensitiveData(c.body);
+          if (cardSensitive) {
+            setFormError(
+              `Card ${i + 1}: body ${cardSensitive}. Meta auto-rejects this.`
+            );
+            return false;
+          }
         }
         if (!c?.headerHandle?.trim()) {
           setFormError(
             `Card ${i + 1}: upload a header file or paste the asset handle (headerHandle).`
           );
-          return;
+          return false;
         }
         const rows = carouselButtonRowsByIndex[i] ?? [];
         if (rows.length === 0) {
           setFormError(`Card ${i + 1}: add at least one button.`);
-          return;
+          return false;
         }
         for (let j = 0; j < rows.length; j++) {
           const r = rows[j];
           const label = r.text.trim();
           if (!label) {
             setFormError(`Card ${i + 1}, button ${j + 1}: label is required.`);
-            return;
+            return false;
           }
           if (label.length > META_TEMPLATE_BUTTON_LABEL_MAX) {
             setFormError(
               `Card ${i + 1}, button ${j + 1}: label must be at most ${META_TEMPLATE_BUTTON_LABEL_MAX} characters (Meta).`
             );
-            return;
+            return false;
           }
-          if (r.type === "URL" && !r.url.trim()) {
-            setFormError(`Card ${i + 1}, button ${j + 1}: URL is required.`);
-            return;
+          if (r.type === "URL") {
+            if (!r.url.trim()) {
+              setFormError(`Card ${i + 1}, button ${j + 1}: URL is required.`);
+              return false;
+            }
+            const shortener = isShortenerUrl(r.url.replace(/\{\{[^}]+\}\}/g, "x"));
+            if (shortener) {
+              setFormError(
+                `Card ${i + 1}, button ${j + 1}: URL shortener "${shortener}" is not allowed. Use the full destination URL.`
+              );
+              return false;
+            }
           }
           if (r.type === "PHONE_NUMBER" && !r.phone_number.trim()) {
             setFormError(
               `Card ${i + 1}, button ${j + 1}: phone number is required (E.164, e.g. +15551234567).`
             );
-            return;
+            return false;
           }
         }
       }
     }
 
+    const tidiedFooter = tidyWhitespace(footer);
     const payload: ChannelTemplateVersionUpdatePayload = {
-      body: b,
-      footer: footer.trim() ? footer.trim() : null,
+      body: tidyWhitespace(b),
+      footer: tidiedFooter ? tidiedFooter : null,
       language: language.trim() || DEFAULT_WHATSAPP_TEMPLATE_LANGUAGE,
       parameterFormat,
       layoutType,
@@ -521,8 +790,14 @@ export function ChannelTemplateVersionEditor({
       payload.headerContent = null;
     } else {
       payload.headerType = headerType;
+      // Only tidy text headers — IMAGE/VIDEO/DOCUMENT store an asset handle that
+      // must be preserved character-for-character.
       payload.headerContent =
-        headerType === "NONE" ? null : headerContent.trim();
+        headerType === "NONE"
+          ? null
+          : headerType === "TEXT"
+            ? tidyWhitespace(headerContent)
+            : headerContent.trim();
     }
 
     if (parsedButtons.value !== undefined) {
@@ -542,7 +817,7 @@ export function ChannelTemplateVersionEditor({
         return {
           headerFormat: c.headerFormat ?? "IMAGE",
           headerHandle: String(c.headerHandle ?? "").trim(),
-          body: String(c.body ?? "").trim(),
+          body: tidyWhitespace(String(c.body ?? "")),
           buttons,
         };
       });
@@ -553,27 +828,29 @@ export function ChannelTemplateVersionEditor({
       payload.carouselCards = null;
     }
 
-    updateMutation.mutate(
-      { id: channelTemplateId, version: version.version, data: payload },
-      {
-        onSuccess: () => {
-          if (!silent) {
-            setSaveOk("Saved.");
-            setFormError(null);
-            // Start auto-saving after the first successful manual save.
-            setAutoSaveAfterManual(true);
-            window.setTimeout(() => setSaveOk(null), 4000);
-          } else {
-            setSaveOk(null);
-          }
-        },
-        onError: (err) => {
-          setSaveOk(null);
-          if (!silent) setFormError(getApiError(err));
-        },
+    try {
+      await updateMutation.mutateAsync({
+        id: channelTemplateId,
+        version: version.version,
+        data: payload,
+      });
+      if (!silent) {
+        setSaveOk("Saved.");
+        setFormError(null);
+        // Start auto-saving after the first successful manual save.
+        setAutoSaveAfterManual(true);
+        window.setTimeout(() => setSaveOk(null), 4000);
+      } else {
+        setSaveOk(null);
       }
-    );
+      return true;
+    } catch (err) {
+      setSaveOk(null);
+      if (!silent) setFormError(getApiError(err));
+      return false;
+    }
   }, [
+    editable,
     body,
     footer,
     headerContent,
@@ -701,6 +978,73 @@ export function ChannelTemplateVersionEditor({
     onSave,
   ]);
 
+  // Expose a `save()` method so the parent can persist unsaved edits before
+  // submitting the version for approval — otherwise Submit would advance whatever
+  // last hit the DB and silently drop in-flight keystrokes.
+  useImperativeHandle(
+    ref,
+    () => ({
+      save: () => onSave(false),
+    }),
+    [onSave]
+  );
+
+  // Push live preview into the global right panel. Memoize the JSX so panel
+  // chrome doesn't re-render — only the preview subtree diffs on each keystroke.
+  const { setContent: setRightPanelContent, clearContent: clearRightPanelContent, open: openRightPanel, isOpen: rightPanelOpen } =
+    useRightPanel();
+
+  const previewNode = useMemo(() => {
+    const standardButtons = standardButtonRows
+      ? standardButtonRows.map((r) => ({ type: r.type, text: r.text }))
+      : [];
+    const carouselForPreview = carouselCards.map((card, idx) => ({
+      headerFormat: (card.headerFormat ?? "IMAGE") as "IMAGE" | "VIDEO",
+      headerHandle: card.headerHandle,
+      headerPreviewUrl: carouselPreviewUrlsByIndex[idx],
+      body: card.body,
+      buttons: (carouselButtonRowsByIndex[idx] ?? []).map((r) => ({
+        type: r.type,
+        text: r.text,
+      })),
+    }));
+    return (
+      <WhatsAppTemplatePreview
+        headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"}
+        headerContent={headerContent}
+        headerPreviewUrl={headerPreviewUrl}
+        body={body}
+        footer={footer}
+        buttons={standardButtons}
+        layoutType={layoutType as "STANDARD" | "CAROUSEL"}
+        carouselCards={carouselForPreview}
+      />
+    );
+  }, [
+    headerType,
+    headerContent,
+    headerPreviewUrl,
+    body,
+    footer,
+    standardButtonRows,
+    layoutType,
+    carouselCards,
+    carouselButtonRowsByIndex,
+    carouselPreviewUrlsByIndex,
+  ]);
+
+  useEffect(() => {
+    setRightPanelContent({
+      source: "channel-template-preview",
+      title: "Preview",
+      content: previewNode,
+    });
+  }, [previewNode, setRightPanelContent]);
+
+  useEffect(() => {
+    return () => clearRightPanelContent("channel-template-preview");
+  }, [clearRightPanelContent]);
+
   if (!editable) {
     const advanced = [
       { label: "Buttons", value: version.buttons },
@@ -713,7 +1057,7 @@ export function ChannelTemplateVersionEditor({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <span className="op-label text-warning">read-only</span>
-            <p className="mt-1 text-[13px] text-base-content/70">
+            <p className="mt-1 text-[0.8125rem] text-base-content/70">
               {version.isLocked
                 ? "🔒 This version is locked after internal approval. Content cannot be changed."
                 : `This version is in "${version.status}" status. Only draft versions can be edited.`}
@@ -840,9 +1184,7 @@ export function ChannelTemplateVersionEditor({
   );
 
   return (
-    <div className="flex gap-5">
-    {/* Left: form */}
-    <div className="card bg-base-100 border border-base-300 p-4 space-y-5 min-w-0 flex-1">
+    <div className="card bg-base-100 border border-base-300 p-4 space-y-5 min-w-0">
 
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -859,13 +1201,16 @@ export function ChannelTemplateVersionEditor({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs lg:hidden"
-            onClick={() => setShowPreview((p) => !p)}
-          >
-            {showPreview ? "Hide preview" : "Show preview"}
-          </button>
+          {!rightPanelOpen && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={openRightPanel}
+              title="Open the live preview in the right panel"
+            >
+              Show preview
+            </button>
+          )}
           {SaveButton}
         </div>
       </div>
@@ -873,13 +1218,13 @@ export function ChannelTemplateVersionEditor({
       {formError && (
         <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span className="op-label mb-1 block text-error">error</span>
-          <p className="text-[13px] text-base-content">{formError}</p>
+          <p className="text-[0.8125rem] text-base-content">{formError}</p>
         </div>
       )}
       {saveOk && !formError && (
         <div role="status" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-4 py-3">
           <span className="op-label mb-1 block text-success">saved</span>
-          <p className="text-[13px] text-base-content">{saveOk}</p>
+          <p className="text-[0.8125rem] text-base-content">{saveOk}</p>
         </div>
       )}
 
@@ -967,24 +1312,20 @@ export function ChannelTemplateVersionEditor({
             {(headerType === "IMAGE" || headerType === "VIDEO" || headerType === "DOCUMENT") && (
               <div className="space-y-2">
                 {headerContent ? (
-                  <div className="relative overflow-hidden rounded-box border border-base-300 bg-base-200/50 aspect-video max-h-[140px]">
-                    {headerType === "IMAGE" ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- dynamic user content
-                      <img
-                        src={headerContent}
-                        alt="Header preview"
-                        className="h-full w-full object-cover"
-                        onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-base-content/50">
-                        {headerType === "VIDEO" ? "Video uploaded" : "Document uploaded"}
-                      </div>
-                    )}
+                  <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2">
+                    <span className="op-label text-success">
+                      ✓ {headerType.toLowerCase()} uploaded · see preview
+                    </span>
                     <button
                       type="button"
-                      className="btn btn-ghost btn-xs absolute top-1 right-1 bg-base-100/80 text-error/70"
-                      onClick={() => setHeaderContent("")}
+                      className="btn btn-ghost btn-xs text-error/70"
+                      onClick={() => {
+                        setHeaderContent("");
+                        setHeaderPreviewUrl((prev) => {
+                          if (prev) URL.revokeObjectURL(prev);
+                          return null;
+                        });
+                      }}
                     >
                       Remove
                     </button>
@@ -1391,7 +1732,7 @@ export function ChannelTemplateVersionEditor({
                           <option value="VIDEO">VIDEO</option>
                         </select>
                         {idx === 0 && (
-                          <span className="text-[10px] text-base-content/40 mt-1">Applies to all cards</span>
+                          <span className="text-[0.625rem] text-base-content/40 mt-1">Applies to all cards</span>
                         )}
                       </label>
 
@@ -1400,28 +1741,24 @@ export function ChannelTemplateVersionEditor({
                     {/* Header media */}
                     <div className="space-y-2">
                       {card.headerHandle ? (
-                        <div className="relative overflow-hidden rounded-box border border-base-300 bg-base-200/50 aspect-video max-h-[120px]">
-                          {card.headerFormat === "IMAGE" ? (
-                            // eslint-disable-next-line @next/next/no-img-element -- dynamic user content
-                            <img
-                              src={card.headerHandle}
-                              alt={`Card ${idx + 1} header`}
-                              className="h-full w-full object-cover"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                            />
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center text-xs text-base-content/50">
-                              Video uploaded
-                            </div>
-                          )}
+                        <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2">
+                          <span className="op-label text-success">
+                            ✓ {(card.headerFormat ?? "IMAGE").toLowerCase()} uploaded · see preview
+                          </span>
                           <button
                             type="button"
-                            className="btn btn-ghost btn-xs absolute top-1 right-1 bg-base-100/80 text-error/70"
-                            onClick={() =>
+                            className="btn btn-ghost btn-xs text-error/70"
+                            onClick={() => {
                               setCarouselCards((prev) =>
                                 prev.map((c, i) => (i === idx ? { ...c, headerHandle: "" } : c))
-                              )
-                            }
+                              );
+                              setCarouselPreviewUrlsByIndex((prev) => {
+                                const next = { ...prev };
+                                if (next[idx]) URL.revokeObjectURL(next[idx]);
+                                delete next[idx];
+                                return next;
+                              });
+                            }}
                           >
                             Remove
                           </button>
@@ -1436,6 +1773,21 @@ export function ChannelTemplateVersionEditor({
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
+                              if (file.size > HEADER_MEDIA_MAX_BYTES) {
+                                const mb = (file.size / (1024 * 1024)).toFixed(1);
+                                const capMb = (HEADER_MEDIA_MAX_BYTES / (1024 * 1024)).toFixed(0);
+                                setFormError(
+                                  `Card ${idx + 1} header media is ${mb} MB — Meta limit is ${capMb} MB. Resize or compress before uploading.`
+                                );
+                                e.target.value = "";
+                                return;
+                              }
+                              setCarouselPreviewUrlsByIndex((prev) => {
+                                const next = { ...prev };
+                                if (next[idx]) URL.revokeObjectURL(next[idx]);
+                                next[idx] = URL.createObjectURL(file);
+                                return next;
+                              });
                               setCarouselUploadBusyByIndex((prev) => ({
                                 ...prev,
                                 [idx]: true,
@@ -1735,71 +2087,10 @@ export function ChannelTemplateVersionEditor({
         </div>
       </details>
 
-      {/* Mobile-only preview toggle */}
-      {showPreview && (
-        <div className="rounded-box border border-base-300 bg-base-200/50 p-3 space-y-2 lg:hidden">
-          <div className="op-label">Preview</div>
-          <WhatsAppTemplatePreview
-            headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"}
-            headerContent={headerContent}
-            body={body}
-            footer={footer}
-            buttons={
-              standardButtonRows
-                ? standardButtonRows.map((r) => ({ type: r.type, text: r.text }))
-                : []
-            }
-            layoutType={layoutType as "STANDARD" | "CAROUSEL"}
-            carouselCards={
-              carouselCards.map((card, idx) => ({
-                headerFormat: (card.headerFormat ?? "IMAGE") as "IMAGE" | "VIDEO",
-                headerHandle: card.headerHandle,
-                body: card.body,
-                buttons: (carouselButtonRowsByIndex[idx] ?? []).map((r) => ({
-                  type: r.type,
-                  text: r.text,
-                })),
-              }))
-            }
-          />
-        </div>
-      )}
-
       {/* Bottom save */}
       <div className="flex justify-end pt-1">
         {SaveButton}
       </div>
     </div>
-
-    {/* Right: sticky preview (desktop) */}
-    <aside className="hidden lg:block w-72 shrink-0">
-      <div className="sticky top-4 space-y-2">
-        <div className="op-label">Preview</div>
-        <WhatsAppTemplatePreview
-          headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"}
-          headerContent={headerContent}
-          body={body}
-          footer={footer}
-          buttons={
-            standardButtonRows
-              ? standardButtonRows.map((r) => ({ type: r.type, text: r.text }))
-              : []
-          }
-          layoutType={layoutType as "STANDARD" | "CAROUSEL"}
-          carouselCards={
-            carouselCards.map((card, idx) => ({
-              headerFormat: (card.headerFormat ?? "IMAGE") as "IMAGE" | "VIDEO",
-              headerHandle: card.headerHandle,
-              body: card.body,
-              buttons: (carouselButtonRowsByIndex[idx] ?? []).map((r) => ({
-                type: r.type,
-                text: r.text,
-              })),
-            }))
-          }
-        />
-      </div>
-    </aside>
-    </div>
   );
-}
+});

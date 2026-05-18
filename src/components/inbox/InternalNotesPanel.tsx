@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Pin, PinOff, Trash2 } from "lucide-react";
 import { extractApiErrorMessage } from "@/lib/messageApiErrors";
 import { internalApi, type InternalNote } from "@/lib/api";
 
 export function InternalNotesPanel({
   conversationId,
+  currentUserId,
 }: {
   conversationId: string;
+  currentUserId?: string;
 }) {
   const [notes, setNotes] = useState<InternalNote[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,23 +114,31 @@ export function InternalNotesPanel({
               <p className="text-xs">{note.content}</p>
               <div className="mt-1 flex items-center justify-between gap-2 text-xs text-base-content/60">
                 <span>{note.authorId || "unknown"}</span>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => togglePin(note.id)}
-                    disabled={busy}
-                  >
-                    {note.isPinned ? "Unpin" : "Pin"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-xs"
-                    onClick={() => remove(note.id)}
-                    disabled={busy}
-                  >
-                    Delete
-                  </button>
+                <div className="flex items-center gap-0.5">
+                  <div className="tooltip tooltip-left" data-tip={note.isPinned ? "Unpin" : "Pin"}>
+                    <button
+                      type="button"
+                      className={`btn btn-ghost btn-xs btn-square ${note.isPinned ? "text-warning" : ""}`}
+                      onClick={() => togglePin(note.id)}
+                      disabled={busy}
+                      aria-label={note.isPinned ? "Unpin note" : "Pin note"}
+                    >
+                      {note.isPinned ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                    </button>
+                  </div>
+                  {currentUserId && note.authorId === currentUserId ? (
+                    <div className="tooltip tooltip-left" data-tip="Delete">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs btn-square text-error/70 hover:text-error"
+                        onClick={() => remove(note.id)}
+                        disabled={busy}
+                        aria-label="Delete note"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </li>

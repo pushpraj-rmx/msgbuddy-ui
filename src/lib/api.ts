@@ -13,7 +13,6 @@ import type {
   SegmentPreviewResponse,
   TimelineResponse,
   DuplicatesResponse,
-  ImportResult,
   PhoneCheckResult,
   Template,
   TemplatesListResponse,
@@ -75,6 +74,8 @@ export interface RegisterPendingVerificationResponse {
   email: string;
 }
 
+export type DisplayDensity = "SMALL" | "MEDIUM" | "LARGE";
+
 export interface User {
   id: string;
   email: string;
@@ -82,6 +83,8 @@ export interface User {
   avatarUrl?: string | null;
   /** True when the account can sign in with email + password (not Google-only). */
   hasPassword?: boolean;
+  /** UI text-size preference (drives the root font-size). */
+  displayDensity?: DisplayDensity;
 }
 
 /** GET /auth/login-history */
@@ -502,8 +505,14 @@ export const contactsApi = {
     order?: "asc" | "desc";
     includeTotal?: boolean;
     include?: string;
-    /** Comma-separated tag IDs. Server filters contacts that have ALL listed tags. */
+    /** Comma-separated tag IDs. Combined per `tagsMatch`. */
     tagIds?: string;
+    /** "all" = AND (default); "any" = OR. */
+    tagsMatch?: "all" | "any";
+    /** ISO timestamp — contacts created on or after. */
+    createdAfter?: string;
+    /** ISO timestamp — contacts created on or before. */
+    createdBefore?: string;
   }): Promise<ContactsListResponse> => {
     const response = await api.get<ContactsListResponse>(
       endpoints.contacts.list,
@@ -538,16 +547,47 @@ export const contactsApi = {
     );
     return response.data;
   },
-  importCsv: async (
+  /**
+   * Start a background contact-import job. Returns `{ jobId }` immediately;
+   * the wizard subscribes to SSE for live progress and may poll
+   * `getImportJob` on demand for a snapshot.
+   */
+  startImportJob: async (
     file: File,
-    options?: { defaultCountry?: string }
-  ): Promise<ImportResult> => {
+    options?: {
+      defaultCountry?: string;
+      mode?: import("./types").ImportMode;
+      dryRun?: boolean;
+    }
+  ): Promise<import("./types").ImportJobStartResponse> => {
     const formData = new FormData();
     formData.append("file", file);
-    const response = await api.post<ImportResult>(
+    const params: Record<string, string> = {};
+    if (options?.defaultCountry) params.defaultCountry = options.defaultCountry;
+    if (options?.mode) params.mode = options.mode;
+    if (options?.dryRun) params.dryRun = "true";
+    const response = await api.post<
+      import("./types").ImportJobStartResponse
+    >(
       endpoints.contacts.import,
       formData,
-      { params: options?.defaultCountry ? { defaultCountry: options.defaultCountry } : undefined }
+      Object.keys(params).length > 0 ? { params } : undefined
+    );
+    return response.data;
+  },
+  getImportJob: async (
+    id: string
+  ): Promise<import("./types").ImportJob> => {
+    const response = await api.get<import("./types").ImportJob>(
+      endpoints.contacts.importJob(id)
+    );
+    return response.data;
+  },
+  cancelImportJob: async (
+    id: string
+  ): Promise<import("./types").ImportJob> => {
+    const response = await api.post<import("./types").ImportJob>(
+      endpoints.contacts.importJobCancel(id)
     );
     return response.data;
   },
@@ -590,6 +630,13 @@ export const contactsApi = {
   },
   delete: async (id: string): Promise<Contact> => {
     const response = await api.delete<Contact>(endpoints.contacts.delete(id));
+    return response.data;
+  },
+  /** OWNER-only — soft-deletes ALL contacts in the workspace. */
+  deleteAll: async (): Promise<{ deleted: number }> => {
+    const response = await api.delete<{ deleted: number }>(
+      endpoints.contacts.deleteAll
+    );
     return response.data;
   },
   findDuplicates: async (): Promise<DuplicatesResponse> => {
@@ -1007,6 +1054,28 @@ export const campaignsApi = {
     const response = await api.post(endpoints.campaigns.create, data);
     return response.data;
   },
+  preview: async (data: {
+    audienceType: "ALL" | "SPECIFIC" | "SEGMENT";
+    contactIds?: string[];
+    audienceQuery?: Record<string, unknown> | null;
+    /** When MARKETING, response includes `excludedFrequencyCapped`. */
+    templateCategory?: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  }): Promise<{
+    audienceCount: number;
+    sample: Array<{ id: string; name: string | null; phone: string }>;
+    excludedBlocked: number;
+    excludedOptedOut: number;
+    excludedFrequencyCapped: number;
+  }> => {
+    const response = await api.post(endpoints.campaigns.preview, data);
+    return response.data as {
+      audienceCount: number;
+      sample: Array<{ id: string; name: string | null; phone: string }>;
+      excludedBlocked: number;
+      excludedOptedOut: number;
+      excludedFrequencyCapped: number;
+    };
+  },
   getById: async (id: string) => {
     const response = await api.get(endpoints.campaigns.byId(id));
     return response.data;
@@ -1123,7 +1192,20 @@ function parseBytesReceivedFromPayload(data: unknown): number | undefined {
 export const meApi = {
   updateProfile: async (data: { name?: string; avatarUrl?: string }) => {
     const response = await api.patch(endpoints.auth.meProfile, data);
-    return response.data as { user: { id: string; email: string; name?: string; avatarUrl?: string; hasPassword?: boolean } };
+    return response.data as { user: User };
+  },
+  updatePreferences: async (data: { displayDensity?: DisplayDensity }) => {
+    const response = await api.patch(endpoints.auth.mePreferences, data);
+    return response.data as { user: User };
+  },
+};
+
+export const backgroundTasksApi = {
+  listActive: async (): Promise<import("./types").BackgroundTask[]> => {
+    const response = await api.get<import("./types").BackgroundTask[]>(
+      endpoints.backgroundTasks.active,
+    );
+    return response.data;
   },
 };
 
@@ -1670,6 +1752,7 @@ export type WhatsAppConnection = {
   workspaceId?: string;
   phoneNumberId: string;
   wabaId?: string;
+  displayPhoneNumber?: string | null;
   isDefault?: boolean;
   status?: CloudApiAccountStatus;
   tokenExpiresAt?: string | null;
@@ -1681,6 +1764,11 @@ export type WhatsAppConnection = {
   lastOnboardingSyncAt?: string | null;
   /** True when Meta still needs Cloud API registration (PIN). */
   registrationPending?: boolean;
+  /** Meta phone-number quality rating: GREEN | YELLOW | RED | FLAGGED. */
+  phoneQualityRating?: string | null;
+  /** When the phone number first entered FLAGGED state. */
+  phoneFlaggedAt?: string | null;
+  phoneQualityCheckAt?: string | null;
 };
 
 /** GET /whatsapp/onboarding-status/:phoneNumberId */

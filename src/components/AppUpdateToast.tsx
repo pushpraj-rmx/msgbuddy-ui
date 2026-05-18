@@ -80,7 +80,7 @@ export function AppUpdateToast() {
         </div>
         <div className="flex-1">
           <span className="op-label block text-primary">update available</span>
-          <p className="mt-0.5 text-[12px] text-base-content/65">A new version of MsgBuddy is ready.</p>
+          <p className="mt-0.5 text-[0.75rem] text-base-content/65">A new version of MsgBuddy is ready.</p>
         </div>
         <div className="flex items-center gap-1">
           <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useChannelTemplateState,
@@ -20,16 +20,22 @@ import {
 import type {
   ChannelTemplateVersion,
   ChannelTemplateVersionPayload,
+  TemplateQualityRating,
   TemplateVersionStatus,
 } from "@/lib/types";
+import { normalizeQualityRating } from "@/lib/types";
 import { channelTemplateRequirementHref } from "@/lib/site";
 import {
   parseWorkspaceSseEvent,
   isChannelTemplateStatusChanged,
   isChannelTemplateCategoryPending,
+  isChannelTemplateQualityChanged,
   isWhatsAppAccountRestriction,
 } from "@/lib/sseEvents";
-import { ChannelTemplateVersionEditor } from "./ChannelTemplateVersionEditor";
+import {
+  ChannelTemplateVersionEditor,
+  type ChannelTemplateVersionEditorHandle,
+} from "./ChannelTemplateVersionEditor";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getApiError } from "@/lib/api-error";
 import { StatusTag } from "@/components/ui/StatusTag";
@@ -46,6 +52,7 @@ function statusLabel(status: TemplateVersionStatus): string {
     case "PROVIDER_REJECTED": return "Rejected by Meta";
     case "PROVIDER_PAUSED": return "Paused by Meta";
     case "PROVIDER_DISABLED": return "Disabled by Meta";
+    case "PROVIDER_IN_APPEAL": return "Appeal in review with Meta";
     default: return status;
   }
 }
@@ -54,14 +61,57 @@ function statusBadge(status: TemplateVersionStatus) {
   const tone: "success" | "warning" | "info" | "danger" | "neutral" =
     status === "PROVIDER_APPROVED"
       ? "success"
-      : status === "PENDING" || status === "PROVIDER_PENDING"
+      : status === "PENDING" || status === "PROVIDER_PENDING" || status === "PROVIDER_IN_APPEAL"
         ? "warning"
         : status === "APPROVED"
           ? "info"
-          : status === "REJECTED" || status === "PROVIDER_REJECTED"
+          : status === "REJECTED" || status === "PROVIDER_REJECTED" || status === "PROVIDER_DISABLED"
             ? "danger"
-            : "neutral";
+            : status === "PROVIDER_PAUSED"
+              ? "warning"
+              : "neutral";
   return <StatusTag tone={tone}>{statusLabel(status)}</StatusTag>;
+}
+
+function qualityLabel(q: TemplateQualityRating): string {
+  switch (q) {
+    case "GREEN": return "High quality";
+    case "YELLOW": return "Medium quality";
+    case "RED": return "Low quality";
+    case "UNKNOWN": return "Quality pending";
+  }
+}
+
+function QualityBadge({
+  qualityScore,
+  lastQualityCheckAt,
+}: {
+  qualityScore?: string | null;
+  lastQualityCheckAt?: string | null;
+}) {
+  // Meta only reports quality once a template has been live and received some traffic.
+  // Don't render anything if we've never fetched it.
+  if (qualityScore == null && lastQualityCheckAt == null) return null;
+  const rating = normalizeQualityRating(qualityScore);
+  const tone: "success" | "warning" | "danger" | "neutral" =
+    rating === "GREEN"
+      ? "success"
+      : rating === "YELLOW"
+        ? "warning"
+        : rating === "RED"
+          ? "danger"
+          : "neutral";
+  return (
+    <span
+      title={
+        lastQualityCheckAt
+          ? `Meta quality · checked ${new Date(lastQualityCheckAt).toLocaleString()}`
+          : "Meta quality rating"
+      }
+    >
+      <StatusTag tone={tone}>Quality · {qualityLabel(rating)}</StatusTag>
+    </span>
+  );
 }
 
 const WA_STEPS: { key: TemplateVersionStatus | string; label: string }[] = [
@@ -390,6 +440,8 @@ export function ChannelTemplateDetailClient({
   const refreshProviderMutation = useRefreshChannelTemplateProviderState();
   const updateChannelTemplateMutation = useUpdateChannelTemplate();
 
+  const editorRef = useRef<ChannelTemplateVersionEditorHandle | null>(null);
+
   const anyMutationPending =
     activateMutation.isPending ||
     submitMutation.isPending ||
@@ -433,6 +485,14 @@ export function ChannelTemplateDetailClient({
             });
           }
         }
+        if (isChannelTemplateQualityChanged(ev.type)) {
+          const id = ev.data.channelTemplateId as string | undefined;
+          if (id === channelTemplateId) {
+            void queryClient.invalidateQueries({
+              queryKey: channelTemplateKeys.state(channelTemplateId),
+            });
+          }
+        }
         if (isWhatsAppAccountRestriction(ev.type)) {
           void queryClient.invalidateQueries({
             queryKey: channelTemplateKeys.state(channelTemplateId),
@@ -461,12 +521,12 @@ export function ChannelTemplateDetailClient({
   const canActivate = version != null && version.status === "PROVIDER_APPROVED" && !version.archivedAt;
 
   /** Meta-linked template: can pull status/category without sending a new version. */
-  /* eslint-disable react-hooks/preserve-manual-memoization -- narrowed deps are intentional; compiler wants full `state` but we only need two fields */
+  const stateChannel = state?.channel;
+  const stateProviderTemplateId = state?.providerTemplateId;
   const canRefreshFromMeta = useMemo(
-    () => state?.channel === "WHATSAPP" && Boolean(state.providerTemplateId?.trim()),
-    [state?.channel, state?.providerTemplateId]
+    () => stateChannel === "WHATSAPP" && Boolean(stateProviderTemplateId?.trim()),
+    [stateChannel, stateProviderTemplateId]
   );
-  /* eslint-enable react-hooks/preserve-manual-memoization */
 
   const canSyncToProvider = useMemo(() => {
     if (!version || state?.channel !== "WHATSAPP") return false;
@@ -503,13 +563,17 @@ export function ChannelTemplateDetailClient({
     return "Submit & approve this version locally first, then send it to Meta.";
   }, [version, state?.channel]);
 
+  // Bind state.category to a local so the React Compiler's inferred dep matches
+  // our manual dep array (otherwise mixing `state?.category` and `state.category`
+  // reads makes it widen the dep to `state`, breaking memoization preservation).
+  const currentCategory = state?.category;
   const handleAutoSwitchCategoryToMarketing = useCallback(() => {
-    if (!state?.category || state.category !== "UTILITY") return;
+    if (currentCategory !== "UTILITY") return;
     updateChannelTemplateMutation.mutate({
       id: channelTemplateId,
       category: "MARKETING",
     });
-  }, [state?.category, channelTemplateId, updateChannelTemplateMutation]);
+  }, [currentCategory, channelTemplateId, updateChannelTemplateMutation]);
 
   const onCreate = useCallback(() => {
     const payload: ChannelTemplateVersionPayload =
@@ -552,8 +616,13 @@ export function ChannelTemplateDetailClient({
     activateMutation.mutate({ id: channelTemplateId, version: version.version });
   }, [activateMutation, channelTemplateId, version]);
 
-  const onSubmitAndApprove = useCallback(() => {
+  const onSubmitAndApprove = useCallback(async () => {
     if (!version) return;
+    // Persist any unsaved local edits first. submitForApproval on the server
+    // takes no body — without this, in-flight keystrokes would be silently
+    // dropped and the version locked on PENDING → APPROVED.
+    const saved = await editorRef.current?.save();
+    if (saved === false) return; // validation/API failed; error is shown in the editor
     submitMutation.mutate(
       { id: channelTemplateId, version: version.version },
       {
@@ -690,20 +759,73 @@ export function ChannelTemplateDetailClient({
         </div>
       )}
 
+      {state.whatsappPhoneQuality?.rating === "FLAGGED" && (
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">phone number flagged</span>
+          <p className="text-[0.8125rem] text-base-content">
+            WhatsApp has flagged
+            {state.whatsappPhoneQuality.displayPhoneNumber ? (
+              <> phone number <strong>{state.whatsappPhoneQuality.displayPhoneNumber}</strong></>
+            ) : (
+              <> your WhatsApp phone number</>
+            )}{" "}
+            due to multiple low-quality templates. If quality doesn&apos;t recover within 7 days, the messaging tier
+            will drop, lowering how many users you can message per day.
+            {state.whatsappPhoneQuality.flaggedAt && (() => {
+              const flaggedAt = new Date(state.whatsappPhoneQuality.flaggedAt);
+              // eslint-disable-next-line react-hooks/purity -- render-time relative day counter; day-resolution staleness is fine
+              const daysIn = Math.floor((Date.now() - flaggedAt.getTime()) / 86_400_000);
+              const daysLeft = Math.max(0, 7 - daysIn);
+              return (
+                <span className="font-mono-op ml-1.5 text-[0.6875rem] text-base-content/55">
+                  flagged {daysIn}d ago · ~{daysLeft}d until tier downgrade
+                </span>
+              );
+            })()}
+          </p>
+          <p className="mt-1.5 text-[0.75rem] text-base-content/60">
+            Address low-quality templates (see RED warnings) and pause campaigns with poor read-rates.
+            Quality scores recover automatically as positive feedback accumulates.
+          </p>
+        </div>
+      )}
+
       {state.categoryPendingChange && (
         <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <span className="op-label mb-1 block text-warning">category change required</span>
-          <p className="text-[13px] text-base-content">
+          <p className="text-[0.8125rem] text-base-content">
             Meta detected this template should be <strong>{state.categoryPendingChange.correctCategory}</strong> instead
             of <strong>{state.categoryPendingChange.currentCategory}</strong>.
             {state.categoryPendingChange.fetchedAt && (
-              <span className="font-mono-op ml-1.5 text-[11px] text-base-content/50">
+              <span className="font-mono-op ml-1.5 text-[0.6875rem] text-base-content/50">
                 checked {new Date(state.categoryPendingChange.fetchedAt).toLocaleString()}
               </span>
             )}
           </p>
-          <p className="mt-1.5 text-[12px] text-base-content/60">
+          <p className="mt-1.5 text-[0.75rem] text-base-content/60">
             Update the category in template settings to match Meta&apos;s classification, or your template may be paused.
+          </p>
+        </div>
+      )}
+
+      {/* Meta quality rating — RED is a "may be paused" signal worth surfacing. */}
+      {normalizeQualityRating(state.qualityScore) === "RED" && (
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-warning">low quality</span>
+          <p className="text-[0.8125rem] text-base-content">
+            Meta has rated this template <strong>Low quality</strong>. Continued negative feedback or low read-rates
+            <em> may </em>cause Meta to pause this template (3 hours on first pause, 6 hours on the second; a third
+            pause disables it permanently). A RED rating without policy violations no longer forces an automatic
+            tier downgrade.
+            {state.lastQualityCheckAt && (
+              <span className="font-mono-op ml-1.5 text-[0.6875rem] text-base-content/50">
+                checked {new Date(state.lastQualityCheckAt).toLocaleString()}
+              </span>
+            )}
+          </p>
+          <p className="mt-1.5 text-[0.75rem] text-base-content/60">
+            Reduce send frequency to recipients with low engagement, or revise the content to address the feedback.
+            Seven consecutive days at Medium or High returns the template to Approved automatically.
           </p>
         </div>
       )}
@@ -732,6 +854,10 @@ export function ChannelTemplateDetailClient({
             ) : (
               <span className="op-tag op-tag-warn">Not sendable</span>
             )}
+            <QualityBadge
+              qualityScore={state.qualityScore}
+              lastQualityCheckAt={state.lastQualityCheckAt}
+            />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {state.channel === "WHATSAPP" && (
@@ -854,6 +980,18 @@ export function ChannelTemplateDetailClient({
             {version.isLocked && !version.archivedAt && <span className="op-tag" title="Content is locked and cannot be edited">🔒 Locked</span>}
             {version.archivedAt && <span className="op-tag">Archived</span>}
           </div>
+          {version.status === "PROVIDER_PENDING" && (
+            <div
+              role="status"
+              className="rounded-box border border-info/30 border-l-2 border-l-info bg-base-200 px-4 py-3"
+            >
+              <span className="op-label mb-1 block text-info">in review</span>
+              <p className="text-[0.8125rem] text-base-content">
+                Meta typically reviews templates within minutes, but can take up to 24 hours.
+                You&apos;ll see status updates here automatically — no need to refresh.
+              </p>
+            </div>
+          )}
           {state?.channel === "WHATSAPP" && !version.archivedAt && (
             <VersionWorkflowStepper status={version.status} />
           )}
@@ -862,8 +1000,8 @@ export function ChannelTemplateDetailClient({
           {version.syncError && version.status !== "PROVIDER_REJECTED" && (
             <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
               <span className="op-label mb-1 block text-error">sync error — structural</span>
-              <p className="text-[13px] text-base-content">{version.syncError}</p>
-              <p className="mt-1.5 text-[12px] text-base-content/55">
+              <p className="text-[0.8125rem] text-base-content">{version.syncError}</p>
+              <p className="mt-1.5 text-[0.75rem] text-base-content/55">
                 Meta rejected the template format instantly. The template was NOT registered on Meta&apos;s side.
                 Edit the content below to fix the issue, then re-submit and sync.
               </p>
@@ -874,10 +1012,10 @@ export function ChannelTemplateDetailClient({
           {version.status === "PROVIDER_REJECTED" && (
             <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
               <span className="op-label mb-1 block text-error">rejected by meta — content review</span>
-              <p className="text-[13px] text-base-content">
+              <p className="text-[0.8125rem] text-base-content">
                 {version.providerRejectionReason || version.syncError || "Meta rejected this template after content review."}
               </p>
-              <p className="mt-1.5 text-[12px] text-base-content/55">
+              <p className="mt-1.5 text-[0.75rem] text-base-content/55">
                 This template name is now registered on Meta&apos;s side as rejected.
                 You cannot reuse the same name — create a new template with a different name, or create a new version and resubmit.
               </p>
@@ -885,6 +1023,7 @@ export function ChannelTemplateDetailClient({
           )}
 
           <ChannelTemplateVersionEditor
+            ref={editorRef}
             channelTemplateId={channelTemplateId}
             version={version}
             channelCategory={state?.category ?? null}
@@ -898,7 +1037,7 @@ export function ChannelTemplateDetailClient({
           <div className="flex flex-wrap items-center gap-2">
             <button
               className="btn btn-outline btn-sm"
-              onClick={onSubmitAndApprove}
+              onClick={() => void onSubmitAndApprove()}
               disabled={
                 anyMutationPending ||
                 version.status !== "DRAFT" ||
@@ -1069,7 +1208,7 @@ export function ChannelTemplateDetailClient({
                       </div>
                       {(v.syncError || (v.status === "PROVIDER_REJECTED" && v.providerRejectionReason)) && (
                         <div className="mt-1 rounded-md border border-error/20 bg-error/5 px-2 py-1">
-                          <p className="text-[11px] text-error line-clamp-2" title={v.providerRejectionReason || v.syncError || ""}>
+                          <p className="text-[0.6875rem] text-error line-clamp-2" title={v.providerRejectionReason || v.syncError || ""}>
                             {v.status === "PROVIDER_REJECTED"
                               ? `Rejected: ${v.providerRejectionReason || v.syncError || "Content review failed"}`
                               : `Error: ${v.syncError}`}

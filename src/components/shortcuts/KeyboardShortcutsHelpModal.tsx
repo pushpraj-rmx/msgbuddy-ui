@@ -37,8 +37,8 @@ export function KeyboardShortcutsHelpModal({
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <span className="op-label mb-1 block">reference</span>
-            <h2 className="text-[17px] font-semibold tracking-[-0.015em]">Keyboard shortcuts</h2>
-            <p className="mt-1.5 text-[12.5px] text-base-content/65">
+            <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">Keyboard shortcuts</h2>
+            <p className="mt-1.5 text-[0.78125rem] text-base-content/65">
               Press <span className="op-kbd">?</span> anytime outside of text fields to
               open this dialog.
             </p>
@@ -55,7 +55,7 @@ export function KeyboardShortcutsHelpModal({
         </div>
 
         <div className="overflow-hidden rounded-box border border-base-300 bg-base-200">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[0.78125rem]">
             <thead>
               <tr className="border-b border-base-300 bg-base-100">
                 <th className="op-label w-[36%] px-3 py-2.5 text-left font-medium">Shortcut</th>

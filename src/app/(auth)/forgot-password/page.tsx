@@ -33,8 +33,8 @@ export default function ForgotPasswordPage() {
         </div>
         <div className="space-y-1.5">
           <span className="op-label">Account recovery</span>
-          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Forgot password</h1>
-          <p className="text-[13px] text-base-content/65">
+          <h1 className="text-[1.375rem] font-semibold tracking-[-0.02em]">Forgot password</h1>
+          <p className="text-[0.8125rem] text-base-content/65">
             If an account exists with this email and uses a password, we will
             send a reset link.
           </p>
@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
             className="rounded-box border-l-2 border border-success/30 border-l-success bg-base-200 px-4 py-3"
           >
             <span className="op-label mb-1 block text-success">reset link sent</span>
-            <p className="text-[13px] text-base-content">
+            <p className="text-[0.8125rem] text-base-content">
               If we found a matching account, check your inbox for a reset link.
               It expires in one hour.
             </p>

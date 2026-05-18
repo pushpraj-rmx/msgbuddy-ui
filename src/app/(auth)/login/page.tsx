@@ -126,16 +126,16 @@ export default function LoginPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="op-label">Sign in</span>
-                <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Welcome back</h1>
+                <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em]">Welcome back</h1>
               </div>
-              <p className="text-[13px] text-base-content/65">
+              <p className="text-[0.8125rem] text-base-content/65">
                 Access your workspace and inbox.
               </p>
             </div>
 
             <div className="space-y-3">
               <GoogleSignInButton />
-              <p className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50 text-center">
+              <p className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/50 text-center">
                 no inbox link required · google handles sign-in
               </p>
               <div className="flex items-center gap-3 py-1">
@@ -151,7 +151,7 @@ export default function LoginPage() {
                 className="rounded-box border-l-2 border border-success/30 border-l-success bg-base-200 px-4 py-3"
               >
                 <span className="op-label mb-1 block text-success">verified</span>
-                <p className="text-[13px] text-base-content">Email verified. You can sign in below.</p>
+                <p className="text-[0.8125rem] text-base-content">Email verified. You can sign in below.</p>
               </div>
             ) : null}
 
@@ -215,7 +215,7 @@ export default function LoginPage() {
 
             <div className="rounded-box border border-base-300 bg-base-200 p-4 space-y-2">
               <span className="op-label">needs verification?</span>
-              <p className="text-[12px] text-base-content/65">
+              <p className="text-[0.75rem] text-base-content/65">
                 Registered with email &amp; password but didn&apos;t get a verification
                 link? (Google sign-in doesn&apos;t use this.)
               </p>
@@ -243,10 +243,10 @@ export default function LoginPage() {
           <div className="hidden md:flex flex-col justify-between bg-base-200 p-8">
             <div className="space-y-3">
               <span className="op-label">{String(activeSlide + 1).padStart(2, "0")} · preview</span>
-              <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
+              <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
                 {loginFeatureSlides[activeSlide].title}
               </h2>
-              <p className="text-[13px] text-base-content/60">
+              <p className="text-[0.8125rem] text-base-content/60">
                 {loginFeatureSlides[activeSlide].description}
               </p>
             </div>
@@ -274,7 +274,7 @@ export default function LoginPage() {
                   aria-label={`Go to slide ${idx + 1}`}
                 />
               ))}
-              <div className="font-mono-op ml-auto text-[10px] tabular-nums text-base-content/45">
+              <div className="font-mono-op ml-auto text-[0.625rem] tabular-nums text-base-content/45">
                 {String(activeSlide + 1).padStart(2, "0")} / {String(loginFeatureSlides.length).padStart(2, "0")}
               </div>
             </div>

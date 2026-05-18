@@ -86,7 +86,7 @@ export function PlatformConsoleClient({
           <button
             key={entry.key}
             role="tab"
-            className={`relative px-3 py-2 font-mono-op text-[11px] tracking-[0.08em] uppercase transition-colors whitespace-nowrap ${
+            className={`relative px-3 py-2 font-mono-op text-[0.6875rem] tracking-[0.08em] uppercase transition-colors whitespace-nowrap ${
               tab === entry.key
                 ? "text-primary after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-primary"
                 : "text-base-content/55 hover:text-base-content"
@@ -196,17 +196,17 @@ function WorkspacesTab() {
       </div>
 
       {list.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {mutationError && (
         <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span className="op-label mb-1 block text-error">error</span>
-          <p className="text-[13px] text-base-content">{mutationError}</p>
+          <p className="text-[0.8125rem] text-base-content">{mutationError}</p>
         </div>
       )}
 
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr className="border-b border-base-300 bg-base-100">
               <th className="op-label px-3 py-2.5 text-left font-medium">Name</th>
@@ -225,12 +225,12 @@ function WorkspacesTab() {
               <tr key={workspace.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
                 <td className="px-3 py-3">
                   <div className="font-medium">{workspace.name}</div>
-                  <div className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50">{workspace.slug}</div>
+                  <div className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/50">{workspace.slug}</div>
                 </td>
                 <td className="px-3 py-3 text-base-content/80">{workspace.plan || "—"}</td>
-                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(workspace.planExpiresAt ?? null)}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(workspace.planExpiresAt ?? null)}</td>
                 <td className="px-3 py-3">
-                  <div className="font-mono-op text-[11px] text-base-content/70">
+                  <div className="font-mono-op text-[0.6875rem] text-base-content/70">
                     {(numbersByWorkspaceId.get(workspace.id) ?? []).slice(0, 2).join(", ") || "—"}
                     {(numbersByWorkspaceId.get(workspace.id) ?? []).length > 2 && (
                       <span className="ml-1">
@@ -283,7 +283,7 @@ function WorkspacesTab() {
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-[13px] text-base-content/55">
+                <td colSpan={9} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No workspaces found.
                 </td>
               </tr>
@@ -326,7 +326,7 @@ function WorkspacesTab() {
             </div>
             {detail.isLoading && <span className="loading loading-spinner loading-sm" />}
             {detail.error && (
-              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(detail.error)}</p></div>
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(detail.error)}</p></div>
             )}
             {detail.data && (
               <div className="space-y-2 text-sm">
@@ -476,17 +476,17 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
       </div>
 
       {list.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {mutationError && (
         <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span className="op-label mb-1 block text-error">error</span>
-          <p className="text-[13px] text-base-content">{mutationError}</p>
+          <p className="text-[0.8125rem] text-base-content">{mutationError}</p>
         </div>
       )}
 
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr className="border-b border-base-300 bg-base-100">
               <th className="op-label px-3 py-2.5 text-left font-medium">Email</th>
@@ -518,7 +518,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No users found.
                 </td>
               </tr>
@@ -561,7 +561,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
             </div>
             {detail.isLoading && <span className="loading loading-spinner loading-sm" />}
             {detail.error && (
-              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(detail.error)}</p></div>
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(detail.error)}</p></div>
             )}
             {detail.data && (
               <div className="space-y-3">
@@ -730,10 +730,10 @@ function WebhookLogsTab() {
         </div>
       </div>
       {list.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr className="border-b border-base-300 bg-base-100">
               <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
@@ -747,19 +747,19 @@ function WebhookLogsTab() {
           <tbody>
             {list.data?.items.map((row) => (
               <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
-                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
-                <td className="font-mono-op px-3 py-3 text-[10px] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.625rem] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
                 <td className="px-3 py-3"><span className="op-tag">{row.provider}</span></td>
                 <td className="px-3 py-3 font-medium">{row.eventType}</td>
                 <td className="px-3 py-3">
                   {row.processed ? <span className="op-tag op-tag-ok">Yes</span> : <span className="op-tag op-tag-warn">No</span>}
                 </td>
-                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-[13px] text-base-content/55">
+                <td colSpan={6} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No webhook logs found.
                 </td>
               </tr>
@@ -833,10 +833,10 @@ function UsageEventsTab() {
         </div>
       </div>
       {list.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr className="border-b border-base-300 bg-base-100">
               <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
@@ -848,15 +848,15 @@ function UsageEventsTab() {
           <tbody>
             {list.data?.items.map((row) => (
               <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
-                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
-                <td className="font-mono-op px-3 py-3 text-[10px] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.625rem] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
                 <td className="px-3 py-3 font-medium">{row.eventType}</td>
-                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No usage events found.
                 </td>
               </tr>
@@ -953,11 +953,11 @@ function AuditLogsTab() {
       </div>
 
       {list.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
 
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr>
               <th className="op-label px-3 py-2.5 text-left font-medium">Created</th>
@@ -970,18 +970,18 @@ function AuditLogsTab() {
           <tbody>
             {list.data?.items.map((row) => (
               <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
-                <td className="font-mono-op px-3 py-3 text-[11px] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
                 <td className="max-w-48 truncate px-3 py-3 font-medium">{row.action}</td>
-                <td className="font-mono-op max-w-64 truncate px-3 py-3 text-[11px] text-base-content/70">
+                <td className="font-mono-op max-w-64 truncate px-3 py-3 text-[0.6875rem] text-base-content/70">
                   {row.targetType}:{row.targetId}
                 </td>
-                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.actorUserId.slice(0, 8).toUpperCase()}</td>
-                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{row.requestId || "—"}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.actorUserId.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.requestId || "—"}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center text-[13px] text-base-content/55">
+                <td colSpan={5} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No audit logs found.
                 </td>
               </tr>
@@ -1010,13 +1010,13 @@ function ChannelAccountsTab() {
   return (
     <div className="space-y-4">
       {list.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {errorMessage && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{errorMessage}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{errorMessage}</p></div>
       )}
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr className="border-b border-base-300 bg-base-100">
               <th className="op-label px-3 py-2.5 text-left font-medium">Account</th>
@@ -1030,7 +1030,7 @@ function ChannelAccountsTab() {
               <tr key={account.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
                 <td className="px-3 py-3">
                   <div className="font-medium">{account.displayName || account.id}</div>
-                  <div className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50">
+                  <div className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/50">
                     {account.externalId || "—"}
                   </div>
                 </td>
@@ -1072,7 +1072,7 @@ function ChannelAccountsTab() {
             ))}
             {!list.isLoading && !list.data?.length && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No channel accounts found.
                 </td>
               </tr>
@@ -1090,10 +1090,10 @@ function ConnectedClientBusinessesTab() {
   return (
     <div className="space-y-4">
       {list.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(list.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr className="border-b border-base-300 bg-base-100">
               <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
@@ -1105,7 +1105,7 @@ function ConnectedClientBusinessesTab() {
           <tbody>
             {list.data?.map((business) => (
               <tr key={business.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
-                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[10px] tracking-wider text-base-content/60">{business.id.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{business.id.slice(0, 8).toUpperCase()}</td>
                 <td className="px-3 py-3 font-medium">{business.name}</td>
                 <td className="px-3 py-3"><span className="op-tag">{business.verification_status || "—"}</span></td>
                 <td className="px-3 py-3"><span className="op-tag">{business.business_status || "—"}</span></td>
@@ -1113,7 +1113,7 @@ function ConnectedClientBusinessesTab() {
             ))}
             {!list.isLoading && !list.data?.length && (
               <tr>
-                <td colSpan={4} className="px-3 py-6 text-center text-[13px] text-base-content/55">
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No connected client businesses found.
                 </td>
               </tr>

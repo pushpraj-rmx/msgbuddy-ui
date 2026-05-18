@@ -8,9 +8,9 @@ const SIZE_CLASS: Record<
   "sm" | "md" | "lg",
   { box: string; text: string }
 > = {
-  sm: { box: "h-9 w-9 min-h-9 min-w-9",    text: "text-[11px] font-semibold" },
-  md: { box: "h-11 w-11 min-h-11 min-w-11", text: "text-[13px] font-semibold" },
-  lg: { box: "h-14 w-14 min-h-14 min-w-14", text: "text-[17px] font-semibold" },
+  sm: { box: "h-9 w-9 min-h-9 min-w-9",    text: "text-[0.6875rem] font-semibold" },
+  md: { box: "h-11 w-11 min-h-11 min-w-11", text: "text-[0.8125rem] font-semibold" },
+  lg: { box: "h-14 w-14 min-h-14 min-w-14", text: "text-[1.0625rem] font-semibold" },
 };
 
 /**

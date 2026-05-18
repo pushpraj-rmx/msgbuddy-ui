@@ -179,7 +179,7 @@ export function GlobalSearch({
             ) : !hasResults ? (
               <div className="px-6 py-8 text-center">
                 <span className="op-label mb-2 block">no results</span>
-                <p className="text-[13px] text-base-content/55">
+                <p className="text-[0.8125rem] text-base-content/55">
                   Nothing matched &ldquo;{debounced}&rdquo;
                 </p>
               </div>
@@ -265,7 +265,7 @@ export function GlobalSearch({
                 ? `${conversations.length + contacts.length} results`
                 : "Search by name, email, or phone"}
             </span>
-            <div className="flex items-center gap-1.5 font-mono-op text-[10px] text-base-content/40">
+            <div className="flex items-center gap-1.5 font-mono-op text-[0.625rem] text-base-content/40">
               <span className="op-kbd">↑↓</span>
               <span>navigate</span>
               <span className="op-kbd ml-1">↵</span>

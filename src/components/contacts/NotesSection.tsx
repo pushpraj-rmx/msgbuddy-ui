@@ -38,56 +38,62 @@ export function NotesSection({
 
   return (
     <div className="space-y-4">
-      <div>
-        <label className="label">
-          <span className="label-text">Add note</span>
-        </label>
+      <div className="space-y-2">
+        <span className="op-label block">Add note</span>
         <textarea
-          className="textarea textarea-bordered w-full"
+          className="textarea textarea-bordered w-full text-[0.8125rem]"
           placeholder="Write a note…"
           value={content}
           onChange={(e) => setContent(e.target.value)}
           rows={3}
         />
-        <button
-          type="button"
-          className="btn btn-primary btn-sm mt-2"
-          onClick={() => {
-            if (!content.trim()) return;
-            createMutation.mutate(content.trim());
-          }}
-          disabled={!content.trim() || createMutation.isPending}
-        >
-          {createMutation.isPending ? (
-            <span className="loading loading-spinner loading-sm" />
-          ) : (
-            "Add note"
-          )}
-        </button>
-      </div>
-      <ul className="space-y-2">
-        {notes.map((note) => (
-          <li
-            key={note.id}
-            className="rounded-box border border-base-300 bg-base-200 p-3"
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              if (!content.trim()) return;
+              createMutation.mutate(content.trim());
+            }}
+            disabled={!content.trim() || createMutation.isPending}
           >
-            <p className="text-sm">{note.content}</p>
-            <p className="mt-1 text-xs text-base-content/60">
-              {new Date(note.createdAt).toLocaleString()}
-              {canDelete(note) && (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-xs ml-2 text-error"
-                  onClick={() => deleteMutation.mutate(note.id)}
-                  disabled={deleteMutation.isPending}
-                >
-                  Delete
-                </button>
-              )}
-            </p>
-          </li>
-        ))}
-      </ul>
+            {createMutation.isPending ? (
+              <span className="loading loading-spinner loading-xs" />
+            ) : (
+              "Add note"
+            )}
+          </button>
+        </div>
+      </div>
+      {notes.length === 0 ? (
+        <p className="text-[0.8125rem] text-base-content/55">No notes yet.</p>
+      ) : (
+        <ul className="space-y-2">
+          {notes.map((note) => (
+            <li
+              key={note.id}
+              className="rounded-box border border-base-300 bg-base-200 px-3 py-2.5"
+            >
+              <p className="text-[0.8125rem] text-base-content">{note.content}</p>
+              <div className="mt-1.5 flex items-center justify-between gap-2">
+                <span className="font-mono-op text-[0.625rem] tracking-[0.04em] tabular-nums text-base-content/50">
+                  {new Date(note.createdAt).toLocaleString()}
+                </span>
+                {canDelete(note) && (
+                  <button
+                    type="button"
+                    className="font-mono-op text-[0.625rem] tracking-[0.08em] uppercase text-error/70 transition-colors hover:text-error disabled:opacity-50"
+                    onClick={() => deleteMutation.mutate(note.id)}
+                    disabled={deleteMutation.isPending}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -11,8 +11,10 @@ import {
   workspaceApi,
 } from "@/lib/api";
 import { AccountSecurityClient } from "@/components/settings/AccountSecurityClient";
+import { DisplayPreferencesClient } from "@/components/settings/DisplayPreferencesClient";
+import { PurgeContactsClient } from "@/components/settings/PurgeContactsClient";
 import { TeamClient } from "@/components/settings/TeamClient";
-import type { LoginHistoryEvent } from "@/lib/api";
+import type { DisplayDensity, LoginHistoryEvent } from "@/lib/api";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 import { canDeleteWorkspace } from "@/lib/workspace-access";
 
@@ -64,6 +66,7 @@ export function SettingsClient({
   accountName,
   accountAvatarUrl,
   hasPassword,
+  displayDensity,
   loginHistory,
 }: {
   workspace: Workspace;
@@ -77,6 +80,7 @@ export function SettingsClient({
   accountName?: string;
   accountAvatarUrl?: string | null;
   hasPassword: boolean;
+  displayDensity: DisplayDensity;
   loginHistory: LoginHistoryEvent[];
 }) {
   const router = useRouter();
@@ -209,7 +213,7 @@ export function SettingsClient({
           <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">
             Workspace Settings
           </h1>
-          <p className="mt-0.5 text-[13px] text-base-content/55">
+          <p className="mt-0.5 text-[0.8125rem] text-base-content/55">
             Configure your account, workspace, and integrations.
           </p>
         </header>
@@ -224,6 +228,12 @@ export function SettingsClient({
             hasPassword={hasPassword}
             loginHistory={loginHistory}
           />
+        </section>
+
+        {/* ── Display ── */}
+        <section id="display" className="space-y-3">
+          <span className="op-section-title">Display</span>
+          <DisplayPreferencesClient initialDensity={displayDensity} />
         </section>
 
         {/* ── Workspace Info ── */}
@@ -243,7 +253,7 @@ export function SettingsClient({
                 />
               </div>
               {workspace.description && (
-                <p className="text-[12px] text-base-content/50">{workspace.description}</p>
+                <p className="text-[0.75rem] text-base-content/50">{workspace.description}</p>
               )}
               <div className="flex items-center justify-end border-t border-base-300 pt-3">
                 <button
@@ -256,7 +266,7 @@ export function SettingsClient({
               </div>
             </div>
           ) : (
-            <div className="rounded-box border border-base-300 bg-base-200 px-4 py-3 text-[13px] text-base-content/55">
+            <div className="rounded-box border border-base-300 bg-base-200 px-4 py-3 text-[0.8125rem] text-base-content/55">
               You do not have permission to change workspace settings.
             </div>
           )}
@@ -282,12 +292,12 @@ export function SettingsClient({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[14px] font-semibold">Cloud API</span>
+                  <span className="text-[0.875rem] font-semibold">Cloud API</span>
                   <span className={isWhatsAppConnected(cloudApiConfig) ? "op-tag op-tag-ok" : "op-tag"}>
                     {isWhatsAppConnected(cloudApiConfig) ? "Connected" : "Disconnected"}
                   </span>
                 </div>
-                <p className="text-[12px] text-base-content/55">
+                <p className="text-[0.75rem] text-base-content/55">
                   Manage conversations, templates, and automation from dashboard.
                 </p>
               </div>
@@ -332,18 +342,18 @@ export function SettingsClient({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[14px] font-semibold">LLM Auto-Reply</span>
+                    <span className="text-[0.875rem] font-semibold">LLM Auto-Reply</span>
                     <span className={chatbotForm.chatbotEnabled ? "op-tag op-tag-ok" : "op-tag"}>
                       {chatbotForm.chatbotEnabled ? "Active" : "Disabled"}
                     </span>
                   </div>
-                  <p className="text-[12px] text-base-content/55">
+                  <p className="text-[0.75rem] text-base-content/55">
                     Automatically replies to unassigned conversations using an LLM.
                     Stops when an agent claims the conversation.
                   </p>
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <span className="text-[12px] text-base-content/55">Enabled</span>
+                  <span className="text-[0.75rem] text-base-content/55">Enabled</span>
                   <input
                     type="checkbox"
                     className="toggle toggle-sm toggle-primary"
@@ -400,7 +410,7 @@ export function SettingsClient({
                     setChatbotForm((s) => ({ ...s, chatbotApiKey: e.target.value }))
                   }
                 />
-                <span className="mt-1 text-[11px] text-base-content/40">
+                <span className="mt-1 text-[0.6875rem] text-base-content/40">
                   Leave blank to keep the existing key. Enter a new value to replace it.
                 </span>
               </label>
@@ -421,13 +431,13 @@ export function SettingsClient({
               {chatbotError ? (
                 <div className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
                   <span className="op-label mb-1 block text-error">error</span>
-                  <p className="text-[13px]">{chatbotError}</p>
+                  <p className="text-[0.8125rem]">{chatbotError}</p>
                 </div>
               ) : null}
 
               <div className="flex items-center justify-end gap-2 border-t border-base-300 pt-3">
                 {chatbotSaved ? (
-                  <span className="text-[12px] text-success">Saved.</span>
+                  <span className="text-[0.75rem] text-success">Saved.</span>
                 ) : null}
                 <button
                   type="button"
@@ -451,30 +461,36 @@ export function SettingsClient({
 
         {/* ── Danger zone ── */}
         {canDeleteWorkspaceAction ? (
-          <section className="rounded-box border border-error/20 bg-base-200 p-4 sm:p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <span className="op-label text-error">danger zone</span>
-                <p className="mt-1 text-[14px] font-semibold">Archive workspace</p>
-                <p className="mt-0.5 text-[12px] text-base-content/55">
-                  Pauses all integrations and automation. Reactivate anytime.
-                </p>
+          <section className="space-y-3" id="danger-zone">
+            <span className="op-section-title text-error">Danger zone</span>
+            <div className="space-y-3">
+              <div className="rounded-box border border-error/20 bg-base-200 p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[0.875rem] font-semibold">Archive workspace</p>
+                    <p className="mt-0.5 text-[0.75rem] text-base-content/55">
+                      Pauses all integrations and automation. Reactivate anytime.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline btn-error"
+                    onClick={() => setShowConfirmDelete(true)}
+                    disabled={dangerBusy}
+                  >
+                    {dangerBusy ? (
+                      <>
+                        <span className="loading loading-spinner loading-xs" />
+                        Archiving…
+                      </>
+                    ) : (
+                      "Archive"
+                    )}
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline btn-error"
-                onClick={() => setShowConfirmDelete(true)}
-                disabled={dangerBusy}
-              >
-                {dangerBusy ? (
-                  <>
-                    <span className="loading loading-spinner loading-xs" />
-                    Archiving…
-                  </>
-                ) : (
-                  "Archive"
-                )}
-              </button>
+
+              <PurgeContactsClient workspaceName={workspace.name} />
             </div>
           </section>
         ) : null}
@@ -484,15 +500,15 @@ export function SettingsClient({
       <dialog id="edit_workspace_modal" className="modal modal-middle">
         <div className="modal-box max-w-3xl">
           <span className="op-label mb-1 block">workspace</span>
-          <h3 className="text-[17px] font-semibold">Edit workspace</h3>
-          <p className="mt-0.5 text-[12.5px] text-base-content/55">
+          <h3 className="text-[1.0625rem] font-semibold">Edit workspace</h3>
+          <p className="mt-0.5 text-[0.78125rem] text-base-content/55">
             Changes apply to the entire workspace.
           </p>
 
           {error ? (
             <div className="mt-4 rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
               <span className="op-label mb-1 block text-error">error</span>
-              <p className="text-[13px]">{error}</p>
+              <p className="text-[0.8125rem]">{error}</p>
             </div>
           ) : null}
 
@@ -500,7 +516,7 @@ export function SettingsClient({
             open
             className="group mt-4 rounded-box border border-base-300 bg-base-200/30"
           >
-            <summary className="cursor-pointer select-none px-4 py-3 text-[13px] font-semibold">
+            <summary className="cursor-pointer select-none px-4 py-3 text-[0.8125rem] font-semibold">
               General
             </summary>
             <div className="border-t border-base-300 px-4 py-3">
@@ -516,7 +532,7 @@ export function SettingsClient({
           </details>
 
           <details className="group mt-3 rounded-box border border-base-300 bg-base-200/30">
-            <summary className="cursor-pointer select-none px-4 py-3 text-[13px] font-semibold">
+            <summary className="cursor-pointer select-none px-4 py-3 text-[0.8125rem] font-semibold">
               Business profile
             </summary>
             <div className="border-t border-base-300 px-4 py-3">
@@ -589,7 +605,7 @@ function InfoRow({
   return (
     <div className="space-y-0.5 px-1">
       <span className="op-label">{label}</span>
-      <p className="text-[13px] font-medium text-base-content truncate">
+      <p className="text-[0.8125rem] font-medium text-base-content truncate">
         {display || "—"}
       </p>
     </div>
@@ -600,7 +616,7 @@ function StatCell({ label, value }: { label: string; value: string }) {
   return (
     <div className="bg-base-200 px-3 py-2.5">
       <span className="op-label">{label}</span>
-      <p className="mt-0.5 text-[13px] font-medium tabular-nums truncate">{value}</p>
+      <p className="mt-0.5 text-[0.8125rem] font-medium tabular-nums truncate">{value}</p>
     </div>
   );
 }

@@ -138,7 +138,7 @@ export function GlobalRightPanel() {
         <button
           key={tab.key}
           type="button"
-          className={`relative whitespace-nowrap px-3 py-2 font-mono-op text-[10px] tracking-[0.08em] uppercase transition-colors ${
+          className={`relative whitespace-nowrap px-3 py-2 font-mono-op text-[0.625rem] tracking-[0.08em] uppercase transition-colors ${
             activeTab === tab.key
               ? "text-primary after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-primary"
               : "text-base-content/55 hover:text-base-content"
@@ -200,7 +200,7 @@ export function GlobalRightPanel() {
           <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
             <PanelRight className="h-8 w-8 text-base-content/20" />
             <span className="op-label">No selection</span>
-            <p className="text-[13px] text-base-content/55">
+            <p className="text-[0.8125rem] text-base-content/55">
               Select a contact, campaign, or template to see details here.
             </p>
           </div>

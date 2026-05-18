@@ -99,9 +99,9 @@ export default function RegisterPage() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="op-label">Register</span>
-                <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Create your account</h1>
+                <h1 className="text-[1.5rem] font-semibold tracking-[-0.02em]">Create your account</h1>
               </div>
-              <p className="text-[13px] text-base-content/65">
+              <p className="text-[0.8125rem] text-base-content/65">
                 We&apos;ll create your workspace automatically — you can rename it
                 anytime in settings.
               </p>
@@ -131,7 +131,7 @@ export default function RegisterPage() {
               <>
             <div className="space-y-3">
               <GoogleSignInButton label="Sign up with Google" />
-              <p className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/50 text-center">
+              <p className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/50 text-center">
                 google confirms your address · no separate verification email from us
               </p>
               <div className="flex items-center gap-3 py-1">
@@ -240,10 +240,10 @@ export default function RegisterPage() {
           <div className="hidden md:flex flex-col justify-between bg-base-200 p-8">
             <div className="space-y-3">
               <span className="op-label">{String(activeSlide + 1).padStart(2, "0")} · preview</span>
-              <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
+              <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
                 {registerFeatureSlides[activeSlide].title}
               </h2>
-              <p className="text-[13px] text-base-content/60">
+              <p className="text-[0.8125rem] text-base-content/60">
                 {registerFeatureSlides[activeSlide].description}
               </p>
             </div>
@@ -271,7 +271,7 @@ export default function RegisterPage() {
                   aria-label={`Go to slide ${idx + 1}`}
                 />
               ))}
-              <div className="font-mono-op ml-auto text-[10px] tabular-nums text-base-content/45">
+              <div className="font-mono-op ml-auto text-[0.625rem] tabular-nums text-base-content/45">
                 {String(activeSlide + 1).padStart(2, "0")} / {String(registerFeatureSlides.length).padStart(2, "0")}
               </div>
             </div>

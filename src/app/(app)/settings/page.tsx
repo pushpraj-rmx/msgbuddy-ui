@@ -82,6 +82,7 @@ export default async function SettingsPage() {
         accountName={me.user.name}
         accountAvatarUrl={me.user.avatarUrl}
         hasPassword={me.user.hasPassword === true}
+        displayDensity={me.user.displayDensity ?? "MEDIUM"}
         loginHistory={loginHistory}
       />
     </PageContainer>

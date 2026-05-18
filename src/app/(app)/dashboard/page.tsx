@@ -38,23 +38,24 @@ export default async function DashboardPage() {
   const showConnectWhatsAppTodo = !isViewer && !isWhatsAppConnected(cloudApiConfig);
 
   return (
-    <PageContainer>
+    <PageContainer className="overflow-hidden !gap-0">
       <PageHeader
         title="Dashboard"
         description={`Welcome back, ${me.user?.email ?? "User"}.`}
       />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <DashboardClient meRole={String(me.role)} />
 
-      <DashboardClient meRole={String(me.role)} />
-
-      {showConnectWhatsAppTodo && (
-        <IntegrationCard
-          name="WhatsApp"
-          description="Connect your WhatsApp Business account to start messaging customers."
-          status="disconnected"
-          actionLabel="Connect"
-          href="/settings/integrations/whatsapp"
-        />
-      )}
+        {showConnectWhatsAppTodo && (
+          <IntegrationCard
+            name="WhatsApp"
+            description="Connect your WhatsApp Business account to start messaging customers."
+            status="disconnected"
+            actionLabel="Connect"
+            href="/settings/integrations/whatsapp"
+          />
+        )}
+      </div>
     </PageContainer>
   );
 }

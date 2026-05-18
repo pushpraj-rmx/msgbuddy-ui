@@ -29,7 +29,7 @@ export default async function TemplatesPage() {
         title="Templates"
         description="Create and manage message templates. Search, filter, sort, and preview on demand."
       />
-      <TemplatesClient meRole={String(me.role)} workspaceId={me.workspace.id} />
+      <TemplatesClient meRole={String(me.role)} />
     </PageContainer>
   );
 }

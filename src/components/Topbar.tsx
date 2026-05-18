@@ -103,7 +103,7 @@ export function Topbar({
 
       {/* Breadcrumb + live signal (xl only) */}
       <div className="flex min-w-0 flex-1 items-center gap-3 px-4">
-        <div className="hidden shrink-0 items-center gap-2 text-[12px] text-base-content/60 xl:flex">
+        <div className="hidden shrink-0 items-center gap-2 text-[0.75rem] text-base-content/60 xl:flex">
           <span className="max-w-[140px] truncate">{me.workspace.name}</span>
           <span className="text-base-content/30">/</span>
           <span className="font-medium text-base-content">{pageTitle}</span>
@@ -168,7 +168,7 @@ export function Topbar({
           >
             <Bell className="h-5 w-5" />
             {unreadCount > 0 ? (
-              <span className="font-mono-op absolute -right-0.5 -top-0.5 flex min-w-[18px] items-center justify-center rounded-[3px] bg-primary px-1 text-[10px] font-semibold leading-[16px] text-primary-content tabular-nums">
+              <span className="font-mono-op absolute -right-0.5 -top-0.5 flex min-w-[18px] items-center justify-center rounded-[3px] bg-primary px-1 text-[0.625rem] font-semibold leading-[16px] text-primary-content tabular-nums">
                 {unreadCount > 99 ? "99+" : unreadCount}
               </span>
             ) : null}
@@ -277,7 +277,7 @@ export function Topbar({
             aria-label="User menu"
           >
             <div className="flex h-8 w-8 items-center justify-center rounded-md border border-base-300 bg-base-200">
-              <span className="font-mono-op text-[11px] font-semibold text-base-content">
+              <span className="font-mono-op text-[0.6875rem] font-semibold text-base-content">
                 {me.user.email.slice(0, 2).toUpperCase()}
               </span>
             </div>
@@ -291,7 +291,7 @@ export function Topbar({
               <p className="mt-1 truncate text-sm font-medium text-base-content">
                 {me.user.email}
               </p>
-              <p className="font-mono-op mt-0.5 text-[11px] text-base-content/50">{me.workspace.name}</p>
+              <p className="font-mono-op mt-0.5 text-[0.6875rem] text-base-content/50">{me.workspace.name}</p>
             </div>
             <ul className="menu menu-sm p-2">
               <li>

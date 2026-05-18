@@ -93,7 +93,7 @@ export function SegmentFormModal({
       <div className="modal-box max-w-lg rounded-box border border-base-300">
         {/* Header */}
         <span className="op-label">{segment ? "Edit" : "New"}</span>
-        <h3 className="mt-1 text-[17px] font-semibold tracking-[-0.015em]">
+        <h3 className="mt-1 text-[1.0625rem] font-semibold tracking-[-0.015em]">
           {segment ? "Edit segment" : "Create segment"}
         </h3>
 
@@ -135,7 +135,7 @@ export function SegmentFormModal({
                   <button
                     key={tag.id}
                     type="button"
-                    className={`rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    className={`rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${
                       selectedTagIds.includes(tag.id)
                         ? "border-primary bg-primary/10 text-primary"
                         : "border-base-300 bg-base-200 text-base-content/60 hover:bg-base-300"
@@ -153,7 +153,7 @@ export function SegmentFormModal({
                 ))}
               </div>
             ) : (
-              <p className="text-[12px] text-base-content/50">No tags created yet.</p>
+              <p className="text-[0.75rem] text-base-content/50">No tags created yet.</p>
             )}
           </div>
 
@@ -184,7 +184,7 @@ export function SegmentFormModal({
                 }
                 title="After this date"
               />
-              <span className="text-[11px] text-base-content/40">to</span>
+              <span className="text-[0.6875rem] text-base-content/40">to</span>
               <input
                 type="date"
                 className="input input-bordered input-sm flex-1"
@@ -210,7 +210,7 @@ export function SegmentFormModal({
               </button>
             </div>
             {customFields.length === 0 ? (
-              <p className="mt-2 text-[11px] text-base-content/50">
+              <p className="mt-2 text-[0.6875rem] text-base-content/50">
                 Optional. Add rules like &quot;city contains London&quot;.
               </p>
             ) : (
@@ -302,9 +302,9 @@ function TriSelect({
 }) {
   return (
     <div className="flex items-center justify-between rounded-md border border-base-300 bg-base-100 px-2.5 py-1.5">
-      <span className="text-[12px] text-base-content/70">{label}</span>
+      <span className="text-[0.75rem] text-base-content/70">{label}</span>
       <select
-        className="select select-bordered select-xs w-20 font-mono-op text-[10px]"
+        className="select select-bordered select-xs w-20 font-mono-op text-[0.625rem]"
         value={value}
         onChange={(e) => onChange(e.target.value as TriState)}
       >

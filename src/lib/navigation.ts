@@ -1,7 +1,6 @@
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
-  BarChart3,
   Bell,
   Bug,
   CreditCard,
@@ -12,15 +11,11 @@ import {
   MessageSquare,
   Rocket,
   Settings,
-  Tag,
   Terminal,
-  LayoutGrid,
   Users,
-  User,
 } from "lucide-react";
 import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
 import {
-  canAccessAnalyticsNav,
   canAccessBillingPage,
   canAccessCampaigns,
   canAccessUsagePage,
@@ -49,16 +44,10 @@ export function getAppNav(
       label: "People",
       Icon: Users,
       showInDock: true,
-      children: [
-        { href: "/people/contacts", label: "Contacts", Icon: User },
-        { href: "/people/tags", label: "Tags", Icon: Tag },
-        { href: "/people/segments", label: "Segments", Icon: LayoutGrid },
-      ],
     },
     { href: "/campaigns", label: "Campaigns", Icon: Rocket, showInDock: true },
     { href: "/templates", label: "Templates", Icon: FileText, showInDock: true },
     { href: "/media", label: "Media", Icon: Image },
-    { href: "/analytics", label: "Analytics", Icon: BarChart3 },
     { href: "/notifications", label: "Notifications", Icon: Bell },
     { href: "/feedback", label: "Feedback", Icon: Bug },
     { href: "/usage", label: "Usage", Icon: Layers },
@@ -83,7 +72,6 @@ export function getAppNav(
     return items.filter((item) => {
       if (item.href === "/campaigns" && !canAccessCampaigns(wr)) return false;
       if (item.href === "/templates" && !canViewTemplates(wr)) return false;
-      if (item.href === "/analytics" && !canAccessAnalyticsNav(wr)) return false;
       if (item.href === "/usage" && !canAccessUsagePage(wr)) return false;
       if (item.href === "/billing" && !canAccessBillingPage(wr)) return false;
       return true;
@@ -101,14 +89,11 @@ export function isActivePath(pathname: string, href: string): boolean {
 export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/dashboard")) return "Dashboard";
   if (pathname.startsWith("/inbox")) return "Inbox";
-  if (pathname.startsWith("/people/segments")) return "Segments";
-  if (pathname.startsWith("/people/tags")) return "Tags";
   if (pathname.startsWith("/people/contacts")) return "Contacts";
   if (pathname.startsWith("/campaigns/new")) return "New campaign";
   if (pathname.startsWith("/campaigns")) return "Campaigns";
   if (pathname.startsWith("/templates")) return "Templates";
   if (pathname.startsWith("/media")) return "Media";
-  if (pathname.startsWith("/analytics")) return "Analytics";
   if (pathname.startsWith("/settings/integrations/whatsapp")) return "WhatsApp";
   if (pathname.startsWith("/settings/integrations")) return "Integrations";
   if (pathname.startsWith("/settings/team")) return "Team";

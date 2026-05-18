@@ -102,16 +102,16 @@ export default function NotificationsPage() {
                       <div className="min-w-0">
                         {href ? (
                           <Link href={href} className="block hover:opacity-90">
-                            <h2 className={`text-[13px] ${isUnread ? "font-semibold" : "font-medium"}`}>{item.title}</h2>
-                            <p className="mt-1 text-[13px] text-base-content/75">{item.body}</p>
+                            <h2 className={`text-[0.8125rem] ${isUnread ? "font-semibold" : "font-medium"}`}>{item.title}</h2>
+                            <p className="mt-1 text-[0.8125rem] text-base-content/75">{item.body}</p>
                           </Link>
                         ) : (
                           <>
-                            <h2 className={`text-[13px] ${isUnread ? "font-semibold" : "font-medium"}`}>{item.title}</h2>
-                            <p className="mt-1 text-[13px] text-base-content/75">{item.body}</p>
+                            <h2 className={`text-[0.8125rem] ${isUnread ? "font-semibold" : "font-medium"}`}>{item.title}</h2>
+                            <p className="mt-1 text-[0.8125rem] text-base-content/75">{item.body}</p>
                           </>
                         )}
-                        <p className="font-mono-op mt-1.5 text-[10px] tracking-[0.04em] tabular-nums text-base-content/50">
+                        <p className="font-mono-op mt-1.5 text-[0.625rem] tracking-[0.04em] tabular-nums text-base-content/50">
                           {formatRelativeTime(item.createdAt)}
                         </p>
                       </div>
@@ -133,7 +133,7 @@ export default function NotificationsPage() {
           )}
 
           <div className="flex items-center justify-between">
-            <span className="font-mono-op text-[10px] tracking-[0.04em] tabular-nums text-base-content/50">
+            <span className="font-mono-op text-[0.625rem] tracking-[0.04em] tabular-nums text-base-content/50">
               Page {page} of {totalPages}
             </span>
             <div className="join">

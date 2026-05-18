@@ -85,11 +85,11 @@ export function ConfirmDialog({
     <dialog ref={dialogRef} className="modal modal-middle">
       <div className="modal-box max-w-sm">
         <span className="op-label text-error">confirm action</span>
-        <h3 className="mt-1 text-[17px] font-semibold tracking-[-0.015em]">
+        <h3 className="mt-1 text-[1.0625rem] font-semibold tracking-[-0.015em]">
           {title}
         </h3>
         {description ? (
-          <p className="mt-2 text-[13px] leading-relaxed text-base-content/70">
+          <p className="mt-2 text-[0.8125rem] leading-relaxed text-base-content/70">
             {description}
           </p>
         ) : null}

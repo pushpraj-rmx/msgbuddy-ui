@@ -430,7 +430,7 @@ export function WhatsAppIntegrationPage({
   if (variant === "connectOnly") {
     if (atLimit) {
       return (
-        <p className="text-[12px] text-warning">
+        <p className="text-[0.75rem] text-warning">
           Phone number limit reached. Upgrade your plan to connect more.
         </p>
       );
@@ -438,12 +438,12 @@ export function WhatsAppIntegrationPage({
 
     return (
       <div className="space-y-2">
-        {cancelMessage && <p className="text-[12px] text-warning">{cancelMessage}</p>}
-        {exchangeError && <p className="text-[12px] text-error">{exchangeError}</p>}
+        {cancelMessage && <p className="text-[0.75rem] text-warning">{cancelMessage}</p>}
+        {exchangeError && <p className="text-[0.75rem] text-error">{exchangeError}</p>}
 
         {needsPhoneNumberId ? (
           <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
-            <p className="text-[12px] text-base-content/65">
+            <p className="text-[0.75rem] text-base-content/65">
               This WABA has multiple numbers. Enter the phone number ID you want, then retry.
             </p>
             <div className="flex flex-wrap items-end gap-2">
@@ -505,7 +505,7 @@ export function WhatsAppIntegrationPage({
         <div>
           <span className="op-label">integration</span>
           <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">WhatsApp</h1>
-          <p className="mt-0.5 text-[13px] text-base-content/60">
+          <p className="mt-0.5 text-[0.8125rem] text-base-content/60">
             Manage your WhatsApp Business connection.
           </p>
         </div>
@@ -514,7 +514,7 @@ export function WhatsAppIntegrationPage({
         <div className="rounded-box border border-base-300 bg-base-200 p-4 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="op-tag op-tag-ok">Connected</span>
-            <span className="text-[13px] font-medium tabular-nums">
+            <span className="text-[0.8125rem] font-medium tabular-nums">
               {connectedDisplay.phoneNumberId || connectedDisplay.wabaId || "WhatsApp Business linked"}
             </span>
           </div>
@@ -537,7 +537,7 @@ export function WhatsAppIntegrationPage({
           </div>
 
           {!phoneNumberId?.trim() ? (
-            <p className="text-[12px] text-warning">
+            <p className="text-[0.75rem] text-warning">
               No phone number ID found. Refresh after connecting.
             </p>
           ) : phoneStatusQuery.isLoading ? (
@@ -546,12 +546,12 @@ export function WhatsAppIntegrationPage({
               <div className="skeleton h-5 w-20" />
             </div>
           ) : errorStatus === 404 ? (
-            <p className="text-[12px] text-base-content/50">Not connected.</p>
+            <p className="text-[0.75rem] text-base-content/50">Not connected.</p>
           ) : errorStatus === 422 ? (
-            <p className="text-[12px] text-warning">{errorMessage}</p>
+            <p className="text-[0.75rem] text-warning">{errorMessage}</p>
           ) : phoneStatusQuery.isError ? (
             <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[12px] text-error/70">{errorMessage}</p>
+              <p className="text-[0.75rem] text-error/70">{errorMessage}</p>
               <button
                 type="button"
                 className="btn btn-ghost btn-xs"
@@ -564,12 +564,12 @@ export function WhatsAppIntegrationPage({
             <div className="flex flex-wrap gap-x-4 gap-y-2">
               <div className="space-y-0.5">
                 <span className="op-label">phone</span>
-                <p className="text-[13px] font-medium tabular-nums">{displayPhone}</p>
+                <p className="text-[0.8125rem] font-medium tabular-nums">{displayPhone}</p>
               </div>
               {statusData?.verifiedName && (
                 <div className="space-y-0.5">
                   <span className="op-label">verified name</span>
-                  <p className="text-[13px] font-medium">{statusData.verifiedName}</p>
+                  <p className="text-[0.8125rem] font-medium">{statusData.verifiedName}</p>
                 </div>
               )}
               <div className="flex flex-wrap items-end gap-1.5 pb-0.5">
@@ -615,24 +615,24 @@ export function WhatsAppIntegrationPage({
       <div>
         <span className="op-label">integration</span>
         <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">WhatsApp</h1>
-        <p className="mt-0.5 text-[13px] text-base-content/60">
+        <p className="mt-0.5 text-[0.8125rem] text-base-content/60">
           Connect your WhatsApp Business account to start messaging.
         </p>
       </div>
 
       <div className="op-grain relative rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-3">
         <span className="op-label">connect</span>
-        <p className="text-[14px] font-semibold">Connect WhatsApp Business</p>
-        <p className="text-[12px] text-base-content/55">
+        <p className="text-[0.875rem] font-semibold">Connect WhatsApp Business</p>
+        <p className="text-[0.75rem] text-base-content/55">
           Link your WhatsApp Business account via Meta Embedded Signup.
         </p>
 
-        {cancelMessage && <p className="text-[12px] text-warning">{cancelMessage}</p>}
-        {exchangeError && <p className="text-[12px] text-error">{exchangeError}</p>}
+        {cancelMessage && <p className="text-[0.75rem] text-warning">{cancelMessage}</p>}
+        {exchangeError && <p className="text-[0.75rem] text-error">{exchangeError}</p>}
 
         {needsPhoneNumberId ? (
           <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
-            <p className="text-[12px] text-base-content/65">
+            <p className="text-[0.75rem] text-base-content/65">
               This WABA has multiple numbers. Enter the phone number ID you want, then retry.
             </p>
             <div className="flex flex-wrap items-end gap-2">
@@ -678,7 +678,7 @@ export function WhatsAppIntegrationPage({
       {status === "error" && exchangeError && (
         <div className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
           <span className="op-label mb-1 block text-error">error</span>
-          <p className="text-[13px]">{exchangeError}</p>
+          <p className="text-[0.8125rem]">{exchangeError}</p>
         </div>
       )}
     </div>

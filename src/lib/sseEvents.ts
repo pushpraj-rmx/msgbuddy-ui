@@ -14,6 +14,7 @@ export const SseWireType = {
   contactBulkUpdated: "contact.bulk_updated",
   channelTemplateStatusChanged: "channel_template.status.changed",
   channelTemplateCategoryPending: "channel_template.category.pending",
+  channelTemplateQualityChanged: "channel_template.quality.changed",
   whatsappAccountRestriction: "whatsapp.account.restriction",
   notificationCreated: "notification.created",
   campaignRunStarted: "campaign.run.started",
@@ -22,6 +23,11 @@ export const SseWireType = {
   campaignRunCancelled: "campaign.run.cancelled",
   campaignRunCompleted: "campaign.run.completed",
   campaignRunProgress: "campaign.run.progress",
+  contactImportClassified: "contact.import.classified",
+  contactImportProgress: "contact.import.progress",
+  contactImportCompleted: "contact.import.completed",
+  contactImportFailed: "contact.import.failed",
+  contactImportCancelled: "contact.import.cancelled",
 } as const;
 
 /** Parse `EventSource` `event.data` JSON — supports flat `{ type, data? }` and nested `{ data: { type, data } }`. */
@@ -169,6 +175,13 @@ export function isChannelTemplateCategoryPending(type: string): boolean {
   );
 }
 
+export function isChannelTemplateQualityChanged(type: string): boolean {
+  return (
+    type === SseWireType.channelTemplateQualityChanged ||
+    type === "CHANNEL_TEMPLATE_QUALITY_CHANGED"
+  );
+}
+
 export function isWhatsAppAccountRestriction(type: string): boolean {
   return (
     type === SseWireType.whatsappAccountRestriction ||
@@ -204,4 +217,28 @@ export function isCampaignRunCompleted(type: string): boolean {
 
 export function isCampaignRunProgress(type: string): boolean {
   return type === SseWireType.campaignRunProgress;
+}
+
+export function isContactImportClassified(type: string): boolean {
+  return type === SseWireType.contactImportClassified;
+}
+export function isContactImportProgress(type: string): boolean {
+  return type === SseWireType.contactImportProgress;
+}
+export function isContactImportCompleted(type: string): boolean {
+  return type === SseWireType.contactImportCompleted;
+}
+export function isContactImportFailed(type: string): boolean {
+  return type === SseWireType.contactImportFailed;
+}
+export function isContactImportCancelled(type: string): boolean {
+  return type === SseWireType.contactImportCancelled;
+}
+/** Any terminal import event (completed | failed | cancelled). */
+export function isContactImportTerminal(type: string): boolean {
+  return (
+    isContactImportCompleted(type) ||
+    isContactImportFailed(type) ||
+    isContactImportCancelled(type)
+  );
 }

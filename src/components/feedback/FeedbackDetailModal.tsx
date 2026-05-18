@@ -95,8 +95,8 @@ export function FeedbackDetailModal({ report, isAdmin, onClose }: FeedbackDetail
               <span className="op-tag">▲ {report.voteCount}</span>
             )}
           </div>
-          <h3 className="text-[15px] font-semibold tracking-[-0.015em]">{report.title}</h3>
-          <p className="font-mono-op mt-1 text-[11px] tabular-nums text-base-content/50">
+          <h3 className="text-[0.9375rem] font-semibold tracking-[-0.015em]">{report.title}</h3>
+          <p className="font-mono-op mt-1 text-[0.6875rem] tabular-nums text-base-content/50">
             {report.submittedBy ? `${report.submittedBy} · ` : ""}
             {formatDate(report.createdAt)}
           </p>

@@ -169,7 +169,7 @@ export default async function HomePage() {
           msgbuddy · v2
         </span>
 
-        <h1 className="max-w-4xl text-[40px] font-semibold leading-[1.05] tracking-[-0.03em] sm:text-[56px]">
+        <h1 className="max-w-4xl text-[2.5rem] font-semibold leading-[1.05] tracking-[-0.03em] sm:text-[3.5rem]">
           Multi-channel messaging{" "}
           <span className="font-serif font-normal italic text-base-content/80">
             platform
@@ -177,7 +177,7 @@ export default async function HomePage() {
           for teams that move fast.
         </h1>
 
-        <p className="max-w-2xl text-[15px] leading-relaxed text-base-content/70 sm:text-[17px]">
+        <p className="max-w-2xl text-[0.9375rem] leading-relaxed text-base-content/70 sm:text-[1.0625rem]">
           Inbox, contacts, templates, campaigns, and analytics — across
           WhatsApp, Telegram, Email, and SMS. One workspace for your whole team,
           with the controls to run it properly.
@@ -188,7 +188,7 @@ export default async function HomePage() {
           {CHANNELS.map((ch) => (
             <span
               key={ch.name}
-              className="inline-flex items-center gap-1.5 rounded-full border border-base-300 bg-base-200 px-3 py-1 font-mono-op text-[11px] uppercase tracking-[0.06em]"
+              className="inline-flex items-center gap-1.5 rounded-full border border-base-300 bg-base-200 px-3 py-1 font-mono-op text-[0.6875rem] uppercase tracking-[0.06em]"
             >
               <span
                 className="inline-block h-1.5 w-1.5 rounded-full"
@@ -219,8 +219,8 @@ export default async function HomePage() {
               <p className="font-mono-op text-2xl font-semibold tracking-tight text-primary">
                 {s.value}
               </p>
-              <p className="mt-1 text-[13px] font-medium">{s.label}</p>
-              <p className="mt-0.5 text-[11px] text-base-content/50">
+              <p className="mt-1 text-[0.8125rem] font-medium">{s.label}</p>
+              <p className="mt-0.5 text-[0.6875rem] text-base-content/50">
                 {s.sub}
               </p>
             </div>
@@ -231,10 +231,10 @@ export default async function HomePage() {
       {/* ─── FEATURES ─────────────────────────────────────────────── */}
       <section id="features" className="scroll-mt-20 py-16">
         <span className="op-section-title">Platform features</span>
-        <h2 className="mt-4 max-w-2xl text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+        <h2 className="mt-4 max-w-2xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
           Everything you need to run customer messaging at scale.
         </h2>
-        <p className="mt-3 max-w-xl text-[15px] text-base-content/60">
+        <p className="mt-3 max-w-xl text-[0.9375rem] text-base-content/60">
           Six core modules that cover the full lifecycle — from first contact to
           campaign delivery report.
         </p>
@@ -256,10 +256,10 @@ export default async function HomePage() {
                   </span>
                 </div>
 
-                <p className="mt-4 text-[16px] font-semibold tracking-[-0.015em]">
+                <p className="mt-4 text-[1rem] font-semibold tracking-[-0.015em]">
                   {f.title}
                 </p>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-base-content/60">
+                <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-base-content/60">
                   {f.desc}
                 </p>
 
@@ -267,7 +267,7 @@ export default async function HomePage() {
                   {f.details.map((d) => (
                     <li
                       key={d}
-                      className="flex items-start gap-2 text-[12px] text-base-content/55"
+                      className="flex items-start gap-2 text-[0.75rem] text-base-content/55"
                     >
                       <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-primary/60" />
                       {d}
@@ -283,10 +283,10 @@ export default async function HomePage() {
       {/* ─── HOW IT WORKS — message lifecycle ─────────────────────── */}
       <section className="py-16">
         <span className="op-section-title">Message lifecycle</span>
-        <h2 className="mt-4 max-w-xl text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+        <h2 className="mt-4 max-w-xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
           From send to read receipt.
         </h2>
-        <p className="mt-3 max-w-lg text-[15px] text-base-content/60">
+        <p className="mt-3 max-w-lg text-[0.9375rem] text-base-content/60">
           Every outbound message passes through a tracked pipeline with
           idempotency, retries, and real-time status updates.
         </p>
@@ -322,10 +322,10 @@ export default async function HomePage() {
               }`}
             >
               <span className="op-label">{s.step}</span>
-              <p className="mt-3 text-[15px] font-semibold tracking-[-0.015em]">
+              <p className="mt-3 text-[0.9375rem] font-semibold tracking-[-0.015em]">
                 {s.title}
               </p>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-base-content/60">
+              <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-base-content/60">
                 {s.desc}
               </p>
             </div>
@@ -334,7 +334,7 @@ export default async function HomePage() {
 
         {/* status badges */}
         <div className="mt-6 flex flex-wrap items-center gap-4">
-          <span className="text-[12px] text-base-content/40">
+          <span className="text-[0.75rem] text-base-content/40">
             Status flow:
           </span>
           {MESSAGE_LIFECYCLE.map((s, i) => {
@@ -342,7 +342,7 @@ export default async function HomePage() {
             return (
               <span
                 key={s.label}
-                className={`inline-flex items-center gap-1.5 text-[12px] font-medium ${s.color}`}
+                className={`inline-flex items-center gap-1.5 text-[0.75rem] font-medium ${s.color}`}
               >
                 <Icon className="h-3.5 w-3.5" />
                 {s.label}
@@ -358,10 +358,10 @@ export default async function HomePage() {
       {/* ─── TEMPLATE APPROVAL WORKFLOW ───────────────────────────── */}
       <section className="py-16">
         <span className="op-section-title">Template approval</span>
-        <h2 className="mt-4 max-w-xl text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+        <h2 className="mt-4 max-w-xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
           Multi-stage review, built in.
         </h2>
-        <p className="mt-3 max-w-lg text-[15px] text-base-content/60">
+        <p className="mt-3 max-w-lg text-[0.9375rem] text-base-content/60">
           Templates pass through internal approval before reaching Meta.
           Version, activate, and track quality scores without leaving MsgBuddy.
         </p>
@@ -371,7 +371,7 @@ export default async function HomePage() {
             (stage, i) => (
               <div key={stage} className="flex items-center gap-2">
                 <span
-                  className={`inline-flex items-center rounded-md border px-3 py-1.5 font-mono-op text-[11px] uppercase tracking-[0.06em] ${
+                  className={`inline-flex items-center rounded-md border px-3 py-1.5 font-mono-op text-[0.6875rem] uppercase tracking-[0.06em] ${
                     i === 4
                       ? "border-primary/30 bg-primary/10 text-primary"
                       : "border-base-300 bg-base-200 text-base-content/60"
@@ -412,8 +412,8 @@ export default async function HomePage() {
                 className="op-grain rounded-box border border-base-300 bg-base-200 p-5"
               >
                 <Icon className="h-4 w-4 text-primary" />
-                <p className="mt-3 text-[14px] font-semibold">{item.title}</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-base-content/55">
+                <p className="mt-3 text-[0.875rem] font-semibold">{item.title}</p>
+                <p className="mt-1 text-[0.75rem] leading-relaxed text-base-content/55">
                   {item.desc}
                 </p>
               </div>
@@ -425,10 +425,10 @@ export default async function HomePage() {
       {/* ─── INFRASTRUCTURE CAPABILITIES ──────────────────────────── */}
       <section className="py-16">
         <span className="op-section-title">Under the hood</span>
-        <h2 className="mt-4 max-w-2xl text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+        <h2 className="mt-4 max-w-2xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
           Enterprise infrastructure, not just a pretty inbox.
         </h2>
-        <p className="mt-3 max-w-xl text-[15px] text-base-content/60">
+        <p className="mt-3 max-w-xl text-[0.9375rem] text-base-content/60">
           Encryption, job queues, rate limiting, audit logs, and real-time
           event streaming — the backend to match the frontend.
         </p>
@@ -445,8 +445,8 @@ export default async function HomePage() {
                   <Icon className="h-3.5 w-3.5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-[13px] font-semibold">{cap.title}</p>
-                  <p className="mt-0.5 text-[12px] leading-relaxed text-base-content/55">
+                  <p className="text-[0.8125rem] font-semibold">{cap.title}</p>
+                  <p className="mt-0.5 text-[0.75rem] leading-relaxed text-base-content/55">
                     {cap.desc}
                   </p>
                 </div>
@@ -459,10 +459,10 @@ export default async function HomePage() {
       {/* ─── CONTACT & AUDIENCE SECTION ───────────────────────────── */}
       <section className="py-16">
         <span className="op-section-title">Audience tools</span>
-        <h2 className="mt-4 max-w-xl text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+        <h2 className="mt-4 max-w-xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
           Contacts that work for campaigns.
         </h2>
-        <p className="mt-3 max-w-lg text-[15px] text-base-content/60">
+        <p className="mt-3 max-w-lg text-[0.9375rem] text-base-content/60">
           Tags, segments, custom fields, and compliance flags — so your
           broadcast always reaches the right people.
         </p>
@@ -481,8 +481,8 @@ export default async function HomePage() {
                 className="op-grain rounded-box border border-base-300 bg-base-200 p-5"
               >
                 <Icon className="h-4 w-4 text-primary" />
-                <p className="mt-3 text-[14px] font-semibold">{item.title}</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-base-content/55">
+                <p className="mt-3 text-[0.875rem] font-semibold">{item.title}</p>
+                <p className="mt-1 text-[0.75rem] leading-relaxed text-base-content/55">
                   {item.desc}
                 </p>
               </div>
@@ -494,7 +494,7 @@ export default async function HomePage() {
       {/* ─── CAMPAIGN DEEP DIVE ───────────────────────────────────── */}
       <section className="py-16">
         <span className="op-section-title">Campaign engine</span>
-        <h2 className="mt-4 max-w-xl text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+        <h2 className="mt-4 max-w-xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
           Send thousands, track every one.
         </h2>
 
@@ -511,7 +511,7 @@ export default async function HomePage() {
               ].map((item) => (
                 <li
                   key={item}
-                  className="flex items-start gap-2 text-[13px] text-base-content/65"
+                  className="flex items-start gap-2 text-[0.8125rem] text-base-content/65"
                 >
                   <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-primary/60" />
                   {item}
@@ -532,7 +532,7 @@ export default async function HomePage() {
               ].map((item) => (
                 <li
                   key={item}
-                  className="flex items-start gap-2 text-[13px] text-base-content/65"
+                  className="flex items-start gap-2 text-[0.8125rem] text-base-content/65"
                 >
                   <span className="mt-1.5 inline-block h-1 w-1 shrink-0 rounded-full bg-primary/60" />
                   {item}
@@ -546,7 +546,7 @@ export default async function HomePage() {
       {/* ─── TEAM & ROLES ─────────────────────────────────────────── */}
       <section className="py-16">
         <span className="op-section-title">Team management</span>
-        <h2 className="mt-4 max-w-xl text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+        <h2 className="mt-4 max-w-xl text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
           The right access for every role.
         </h2>
 
@@ -563,10 +563,10 @@ export default async function HomePage() {
               key={r.role}
               className="flex items-center gap-2 rounded-md border border-base-300 bg-base-200 px-3 py-2"
             >
-              <span className="font-mono-op text-[11px] font-medium uppercase tracking-wider text-primary">
+              <span className="font-mono-op text-[0.6875rem] font-medium uppercase tracking-wider text-primary">
                 {r.role}
               </span>
-              <span className="text-[11px] text-base-content/45">
+              <span className="text-[0.6875rem] text-base-content/45">
                 {r.desc}
               </span>
             </div>
@@ -598,8 +598,8 @@ export default async function HomePage() {
                 className="op-grain rounded-box border border-base-300 bg-base-200 p-5"
               >
                 <Icon className="h-4 w-4 text-primary" />
-                <p className="mt-3 text-[14px] font-semibold">{item.title}</p>
-                <p className="mt-1 text-[12px] leading-relaxed text-base-content/55">
+                <p className="mt-3 text-[0.875rem] font-semibold">{item.title}</p>
+                <p className="mt-1 text-[0.75rem] leading-relaxed text-base-content/55">
                   {item.desc}
                 </p>
               </div>
@@ -615,10 +615,10 @@ export default async function HomePage() {
             <span className="dot" />
             ready
           </span>
-          <h2 className="mt-6 max-w-lg text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[36px]">
+          <h2 className="mt-6 max-w-lg text-[1.75rem] font-semibold leading-tight tracking-[-0.02em] sm:text-[2.25rem]">
             Start messaging in minutes.
           </h2>
-          <p className="mt-3 max-w-md text-[15px] text-base-content/60">
+          <p className="mt-3 max-w-md text-[0.9375rem] text-base-content/60">
             Create a workspace, connect your WhatsApp number through Embedded
             Signup, and send your first template — no API keys to copy-paste.
           </p>

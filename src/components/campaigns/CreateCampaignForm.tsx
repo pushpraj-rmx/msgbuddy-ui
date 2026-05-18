@@ -12,6 +12,7 @@ import {
 } from "@/lib/whatsappTemplateMedia";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { WhatsAppTemplatePreviewFromVersion } from "@/components/templates/WhatsAppTemplatePreview";
+import { useRightPanel } from "@/components/right-panel/RightPanelProvider";
 
 export type CampaignCreateTemplate = {
   id: string;
@@ -29,7 +30,7 @@ type Contact = {
   phone: string;
 };
 
-/** Matches API CampaignAudienceType. SEGMENT uses a saved segment’s `query` as `audienceQuery`. */
+/** Matches API CampaignAudienceType. SEGMENT uses a saved segment's `query` as `audienceQuery`. */
 const AUDIENCE_TYPES = ["ALL", "SPECIFIC", "SEGMENT"] as const;
 
 const WIZARD_STEPS = [
@@ -49,6 +50,12 @@ const WIZARD_STEPS = [
     title: "Who receives this",
     description:
       "All contacts, hand-picked contacts, or a saved segment (People → Segments).",
+  },
+  {
+    short: "Review",
+    title: "Review & send",
+    description:
+      "Final check before sending. Resolved audience, message preview, and delivery settings.",
   },
 ] as const;
 
@@ -74,9 +81,13 @@ export function CreateCampaignForm({
   );
   const [versionDetailLoading, setVersionDetailLoading] = useState(false);
   const [headerMediaId, setHeaderMediaId] = useState<string | null>(null);
+  const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
   const [carouselCardMediaIds, setCarouselCardMediaIds] = useState<string[]>(
     []
   );
+  const [carouselCardPreviewUrls, setCarouselCardPreviewUrls] = useState<
+    string[]
+  >([]);
   const [bindingUploadBusy, setBindingUploadBusy] = useState(false);
   const [bindingFieldError, setBindingFieldError] = useState<string | null>(
     null
@@ -85,6 +96,17 @@ export function CreateCampaignForm({
   const [throttlePerMin, setThrottlePerMin] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Review-step audience preview state — fetched on entering step 4.
+  const [preview, setPreview] = useState<{
+    audienceCount: number;
+    sample: Array<{ id: string; name: string | null; phone: string }>;
+    excludedBlocked: number;
+    excludedOptedOut: number;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   const [segments, setSegments] = useState<Segment[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [segmentsLoadError, setSegmentsLoadError] = useState<string | null>(null);
@@ -92,8 +114,51 @@ export function CreateCampaignForm({
     null
   );
 
+  const { setContent: setRightPanel, clearContent: clearRightPanel } = useRightPanel();
+
   const canUseSelectedTemplate =
     !!templateId && channelTemplateVersionId.trim().length > 0;
+
+  // Push template preview into the app's right panel
+  useEffect(() => {
+    if (!versionDetail) {
+      clearRightPanel("campaign-preview");
+      return;
+    }
+
+    const previewVersion =
+      headerPreviewUrl || carouselCardPreviewUrls.length > 0
+        ? {
+            ...versionDetail,
+            ...(headerPreviewUrl ? { headerPreviewUrl } : {}),
+            ...(carouselCardPreviewUrls.length > 0 &&
+            Array.isArray(versionDetail.carouselCards)
+              ? {
+                  carouselCards: (
+                    versionDetail.carouselCards as Array<Record<string, unknown>>
+                  ).map((card, i) => ({
+                    ...card,
+                    ...(carouselCardPreviewUrls[i]
+                      ? { headerPreviewUrl: carouselCardPreviewUrls[i] }
+                      : {}),
+                  })),
+                }
+              : {}),
+          }
+        : versionDetail;
+
+    setRightPanel({
+      title: "Template preview",
+      source: "campaign-preview",
+      content: <WhatsAppTemplatePreviewFromVersion version={previewVersion} />,
+      openAfter: true,
+    });
+  }, [versionDetail, headerPreviewUrl, carouselCardPreviewUrls, setRightPanel, clearRightPanel]);
+
+  // Clear right panel on unmount
+  useEffect(() => {
+    return () => clearRightPanel("campaign-preview");
+  }, [clearRightPanel]);
 
   useEffect(() => {
     let cancelled = false;
@@ -226,13 +291,51 @@ export function CreateCampaignForm({
           .slice(0, carouselCardCount)
           .every((id) => String(id ?? "").trim().length > 0)));
 
+  /** Audience-preview fetch — runs when entering step 4 OR when the audience
+   *  config changes while on step 4. Server-side resolution gives the user
+   *  the actual sendable count (post blocked/opted-out exclusions). */
+  useEffect(() => {
+    if (step !== 4) return;
+    let cancelled = false;
+    setPreview(null);
+    setPreviewError(null);
+    setPreviewLoading(true);
+
+    const audienceQuery =
+      audienceType === "SEGMENT"
+        ? (segments.find((s) => s.id === selectedSegmentId)?.query as
+            | Record<string, unknown>
+            | undefined) ?? undefined
+        : undefined;
+    const contactIds =
+      audienceType === "SPECIFIC" ? selectedContacts : undefined;
+
+    void campaignsApi
+      .preview({ audienceType, contactIds, audienceQuery })
+      .then((data) => {
+        if (cancelled) return;
+        setPreview(data);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setPreviewError(getApiError(err));
+      })
+      .finally(() => {
+        if (!cancelled) setPreviewLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [step, audienceType, selectedSegmentId, selectedContacts, segments]);
+
   const createCampaign = async () => {
     if (!templateId || !channelTemplateVersionId.trim()) {
       setError("Pick a message and provide a channelTemplateVersionId.");
       return;
     }
     if (audienceType === "SPECIFIC" && selectedContacts.length === 0) {
-      setError("Select at least one contact, or choose audience “All contacts”.");
+      setError("Select at least one contact, or choose audience \u201cAll contacts\u201d.");
       return;
     }
     if (audienceType === "SEGMENT") {
@@ -314,7 +417,7 @@ export function CreateCampaignForm({
       ) : null}
 
       <div className="flex min-h-[min(32rem,70vh)] flex-col card bg-base-100 border border-base-300 shadow-sm">
-        {/* Single view: stepper + one content region (no full “screen” swaps). */}
+        {/* Single view: stepper + one content region (no full "screen" swaps). */}
         <div className="border-b border-base-300 px-3 py-4 sm:px-6">
           <ul className="steps steps-horizontal w-full overflow-x-auto pb-1">
             {WIZARD_STEPS.map((s, i) => (
@@ -433,6 +536,7 @@ export function CreateCampaignForm({
                                   file
                                 );
                               setHeaderMediaId(id);
+                              setHeaderPreviewUrl(URL.createObjectURL(file));
                             } catch (err: unknown) {
                               setBindingFieldError(
                                 getApiError(err) ||
@@ -495,6 +599,11 @@ export function CreateCampaignForm({
                                     next[idx] = id;
                                     return next;
                                   });
+                                  setCarouselCardPreviewUrls((prev) => {
+                                    const next = [...prev];
+                                    next[idx] = URL.createObjectURL(file);
+                                    return next;
+                                  });
                                 } catch (err: unknown) {
                                   setBindingFieldError(
                                     getApiError(err) ||
@@ -552,9 +661,9 @@ export function CreateCampaignForm({
                 ))}
               </select>
               <p className="text-xs text-base-content/60">
-                Saved segments are filters you manage under{" "}
-                <Link href="/people/segments" className="link link-primary">
-                  People → Segments
+                Saved segments are filters you manage from the{" "}
+                <Link href="/people/contacts" className="link link-primary">
+                  Contacts page
                 </Link>
                 . To use one, pick{" "}
                 <span className="font-medium text-base-content/80">
@@ -621,12 +730,12 @@ export function CreateCampaignForm({
                     <p className="text-sm text-base-content/70">
                       No saved segments yet.{" "}
                       <Link
-                        href="/people/segments"
+                        href="/people/contacts"
                         className="link link-primary"
                       >
                         Create a segment
                       </Link>{" "}
-                      under People, then return here.
+                      from the Contacts page, then return here.
                     </p>
                   ) : (
                     <>
@@ -652,12 +761,12 @@ export function CreateCampaignForm({
                       </select>
                       <p className="text-xs text-base-content/55">
                         Uses the segment&apos;s filter at create time. Manage
-                        segments in{" "}
+                        segments from the{" "}
                         <Link
-                          href="/people/segments"
+                          href="/people/contacts"
                           className="link link-primary"
                         >
-                          People → Segments
+                          Contacts page
                         </Link>
                         .
                       </p>
@@ -704,16 +813,184 @@ export function CreateCampaignForm({
               </p>
             </div>
           )}
-          </div>
-          </div>
 
-          {/* Template preview sidebar */}
-          {versionDetail && (
-            <aside className="hidden w-64 shrink-0 lg:block">
-              <p className="op-label mb-2">Preview</p>
-              <WhatsAppTemplatePreviewFromVersion version={versionDetail} />
-            </aside>
+          {/* ── Step 4 — Review & send ── */}
+          {step === 4 && (
+            <div className="space-y-4">
+              {/* Audience */}
+              <ReviewSection
+                title="Audience"
+                onEdit={() => setStep(3)}
+              >
+                {previewLoading ? (
+                  <div className="flex items-center gap-2 text-[0.8125rem] text-base-content/55">
+                    <span className="loading loading-spinner loading-xs" />
+                    Resolving audience…
+                  </div>
+                ) : previewError ? (
+                  <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2">
+                    <span className="op-label mb-1 block text-error">error</span>
+                    <p className="text-[0.8125rem]">{previewError}</p>
+                  </div>
+                ) : preview ? (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-baseline gap-3">
+                      <span className="font-mono-op text-[1.625rem] font-semibold tabular-nums">
+                        {preview.audienceCount.toLocaleString()}
+                      </span>
+                      <span className="op-label">contacts will receive this</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-[0.71875rem]">
+                      <span className="rounded-[3px] border border-base-300 bg-base-100 px-1.5 py-[1px] font-mono-op tracking-[0.04em] uppercase text-base-content/65">
+                        {audienceType.toLowerCase()}
+                      </span>
+                      {audienceType === "SEGMENT" && selectedSegmentId ? (
+                        <span className="text-base-content/60">
+                          segment ·{" "}
+                          <span className="text-base-content">
+                            {segments.find((s) => s.id === selectedSegmentId)?.name ??
+                              selectedSegmentId}
+                          </span>
+                        </span>
+                      ) : null}
+                      {(preview.excludedBlocked > 0 || preview.excludedOptedOut > 0) && (
+                        <span className="text-warning">
+                          {preview.excludedBlocked > 0
+                            ? `${preview.excludedBlocked} blocked`
+                            : null}
+                          {preview.excludedBlocked > 0 && preview.excludedOptedOut > 0
+                            ? " · "
+                            : null}
+                          {preview.excludedOptedOut > 0
+                            ? `${preview.excludedOptedOut} opted out`
+                            : null}
+                          {" · skipped"}
+                        </span>
+                      )}
+                    </div>
+                    {preview.audienceCount === 0 ? (
+                      <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2">
+                        <span className="op-label mb-1 block text-warning">empty audience</span>
+                        <p className="text-[0.8125rem]">
+                          No sendable contacts match this configuration. Go back and pick a different audience.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="rounded-box border border-base-300 bg-base-200">
+                        <div className="border-b border-base-300 px-3 py-2">
+                          <span className="op-label">
+                            sample · first {preview.sample.length}
+                          </span>
+                        </div>
+                        <ul className="divide-y divide-base-300/50">
+                          {preview.sample.map((c) => (
+                            <li key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 text-[0.78125rem]">
+                              <span className="truncate font-medium">
+                                {c.name || "Unnamed"}
+                              </span>
+                              <span className="font-mono-op tabular-nums text-base-content/60">
+                                {c.phone}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </ReviewSection>
+
+              {/* Message */}
+              <ReviewSection
+                title="Message"
+                onEdit={() => setStep(1)}
+              >
+                {versionDetail ? (
+                  <div className="space-y-3">
+                    <div className="rounded-box border border-base-300 bg-base-100 p-3">
+                      <WhatsAppTemplatePreviewFromVersion
+                        version={
+                          headerPreviewUrl || carouselCardPreviewUrls.length > 0
+                            ? {
+                                ...versionDetail,
+                                ...(headerPreviewUrl ? { headerPreviewUrl } : {}),
+                                ...(carouselCardPreviewUrls.length > 0 &&
+                                Array.isArray(versionDetail.carouselCards)
+                                  ? {
+                                      carouselCards: versionDetail.carouselCards.map(
+                                        (c, i) => ({
+                                          ...c,
+                                          ...(carouselCardPreviewUrls[i]
+                                            ? { headerPreviewUrl: carouselCardPreviewUrls[i] }
+                                            : {}),
+                                        }),
+                                      ),
+                                    }
+                                  : {}),
+                              }
+                            : versionDetail
+                        }
+                      />
+                    </div>
+                    <p className="text-[0.6875rem] text-base-content/50">
+                      Variable placeholders ({"{{1}}"}, etc.) are filled by WhatsApp at send time using each contact&apos;s data + the template bindings configured for this campaign.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-[0.8125rem] text-base-content/55">
+                    Loading template preview…
+                  </div>
+                )}
+              </ReviewSection>
+
+              {/* Delivery */}
+              <ReviewSection
+                title="Delivery"
+                onEdit={() => setStep(3)}
+              >
+                {(() => {
+                  const cs = chunkSize.trim() ? Number(chunkSize) : 100;
+                  const tp = throttlePerMin.trim() ? Number(throttlePerMin) : 60;
+                  const count = preview?.audienceCount ?? 0;
+                  const minutes = tp > 0 ? Math.ceil(count / tp) : 0;
+                  const eta =
+                    count === 0
+                      ? "—"
+                      : minutes < 1
+                        ? "< 1 min"
+                        : minutes < 60
+                          ? `~${minutes} min`
+                          : `~${(minutes / 60).toFixed(1)} hr`;
+                  return (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 text-[0.8125rem]">
+                      <div>
+                        <span className="op-label block">Chunk size</span>
+                        <span className="font-mono-op mt-0.5 block tabular-nums text-base-content">
+                          {cs.toLocaleString()}
+                          <span className="ml-1 text-base-content/45">msgs/batch</span>
+                        </span>
+                      </div>
+                      <div>
+                        <span className="op-label block">Throttle</span>
+                        <span className="font-mono-op mt-0.5 block tabular-nums text-base-content">
+                          {tp.toLocaleString()}
+                          <span className="ml-1 text-base-content/45">msgs/min</span>
+                        </span>
+                      </div>
+                      <div>
+                        <span className="op-label block">Estimated duration</span>
+                        <span className="font-mono-op mt-0.5 block tabular-nums text-primary">
+                          {eta}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </ReviewSection>
+            </div>
           )}
+          </div>
+          </div>
         </div>
 
         <div className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-base-300 px-4 py-4 sm:px-6">
@@ -747,9 +1024,8 @@ export function CreateCampaignForm({
             <button
               type="button"
               className="btn btn-primary"
-              onClick={createCampaign}
+              onClick={() => setStep(4)}
               disabled={
-                loading ||
                 (audienceType === "SPECIFIC" &&
                   selectedContacts.length === 0) ||
                 (audienceType === "SEGMENT" &&
@@ -758,11 +1034,65 @@ export function CreateCampaignForm({
                     segments.length === 0))
               }
             >
-              Create
+              Review →
+            </button>
+          )}
+          {step === 4 && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={createCampaign}
+              disabled={
+                loading ||
+                previewLoading ||
+                !!previewError ||
+                preview?.audienceCount === 0 ||
+                (audienceType === "SPECIFIC" &&
+                  selectedContacts.length === 0) ||
+                (audienceType === "SEGMENT" &&
+                  (!selectedSegmentId ||
+                    segmentsLoading ||
+                    segments.length === 0))
+              }
+            >
+              {loading ? (
+                <>
+                  <span className="loading loading-spinner loading-xs" />
+                  Sending…
+                </>
+              ) : (
+                `Send campaign${preview?.audienceCount ? ` · ${preview.audienceCount.toLocaleString()}` : ""}`
+              )}
             </button>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReviewSection({
+  title,
+  onEdit,
+  children,
+}: {
+  title: string;
+  onEdit: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-box border border-base-300 bg-base-200">
+      <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-2.5 sm:px-5">
+        <h3 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">{title}</h3>
+        <button
+          type="button"
+          className="font-mono-op text-[0.625rem] tracking-[0.08em] uppercase text-base-content/55 transition-colors hover:text-primary"
+          onClick={onEdit}
+        >
+          Edit
+        </button>
+      </div>
+      <div className="px-4 py-3 sm:px-5">{children}</div>
     </div>
   );
 }

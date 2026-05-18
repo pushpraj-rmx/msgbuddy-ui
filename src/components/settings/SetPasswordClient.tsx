@@ -56,7 +56,7 @@ export function SetPasswordClient() {
               className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-4 py-3"
             >
               <span className="op-label mb-1 block text-success">password saved</span>
-              <p className="text-[13px] text-base-content">
+              <p className="text-[0.8125rem] text-base-content">
                 You can now sign in with email and password on any device. Other
                 sessions were signed out; you stay signed in here.
               </p>

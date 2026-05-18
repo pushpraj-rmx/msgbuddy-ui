@@ -65,21 +65,21 @@ export function OpsClient() {
       {error ? (
         <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
           <span className="op-label mb-1 block text-error">error</span>
-          <p className="text-[13px] text-base-content">{error}</p>
+          <p className="text-[0.8125rem] text-base-content">{error}</p>
         </div>
       ) : null}
 
       <div className="rounded-box border border-base-300 bg-base-200">
         <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Queue metrics</h2>
+            <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">Queue metrics</h2>
             <span className="op-label">raw metric · bullmq</span>
           </div>
           <button type="button" className="btn btn-sm btn-primary" onClick={() => void loadQueues()} disabled={loading}>
             {loading ? "Loading…" : "Refresh →"}
           </button>
         </div>
-        <pre className="max-h-80 overflow-auto bg-base-100 p-3 font-mono text-[11px] leading-relaxed text-base-content/85">
+        <pre className="max-h-80 overflow-auto bg-base-100 p-3 font-mono text-[0.6875rem] leading-relaxed text-base-content/85">
           {queueMetrics == null ? "No data loaded yet." : JSON.stringify(queueMetrics, null, 2)}
         </pre>
       </div>
@@ -87,7 +87,7 @@ export function OpsClient() {
       <div className="rounded-box border border-base-300 bg-base-200">
         <div className="flex items-center justify-between gap-2 border-b border-base-300 px-4 py-3">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Upload session monitor</h2>
+            <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">Upload session monitor</h2>
             <span className="op-label">session inspector</span>
           </div>
         </div>
@@ -105,7 +105,7 @@ export function OpsClient() {
             Cancel session
           </button>
         </div>
-        <pre className="max-h-80 overflow-auto bg-base-100 p-3 font-mono text-[11px] leading-relaxed text-base-content/85">
+        <pre className="max-h-80 overflow-auto bg-base-100 p-3 font-mono text-[0.6875rem] leading-relaxed text-base-content/85">
           {uploadSessionData == null
             ? "No session loaded."
             : JSON.stringify(uploadSessionData, null, 2)}

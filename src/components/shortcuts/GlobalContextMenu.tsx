@@ -16,6 +16,9 @@ function isNativeContextTarget(target: EventTarget | null): boolean {
   if (el.isContentEditable) return true;
   if (el.closest("a[href]")) return true;
   if (el.closest("[data-allow-native-context-menu]")) return true;
+  // Elements with their own context menu handle right-click themselves and
+  // suppress the native menu via preventDefault on the local listener.
+  if (el.closest("[data-local-context-menu]")) return true;
   return false;
 }
 

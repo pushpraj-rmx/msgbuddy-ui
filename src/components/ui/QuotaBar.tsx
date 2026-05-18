@@ -40,7 +40,7 @@ export function QuotaBar({
   return (
     <div className={className}>
       {label ? (
-        <div className="mb-2 flex items-baseline justify-between text-[12px]">
+        <div className="mb-2 flex items-baseline justify-between text-[0.75rem]">
           <span className="font-medium text-base-content">{label}</span>
           <span className="font-mono-op tabular-nums text-base-content/60">
             <span className="text-base-content">{formatValue(current)}</span>
@@ -62,7 +62,7 @@ export function QuotaBar({
         />
       </div>
       {(showFooterPct || footerMeta) ? (
-        <div className="font-mono-op mt-1.5 text-[10px] tracking-[0.04em] text-base-content/45">
+        <div className="font-mono-op mt-1.5 text-[0.625rem] tracking-[0.04em] text-base-content/45">
           {showFooterPct ? `${pct}%` : null}
           {showFooterPct && footerMeta ? " · " : null}
           {footerMeta}

@@ -19,7 +19,7 @@ export function OnboardingWabaClient() {
     return (
       <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
         <span className="op-label mb-1 block text-error">token missing</span>
-        <p className="text-[13px] text-base-content">
+        <p className="text-[0.8125rem] text-base-content">
           META_SYSTEM_ACCESS_TOKEN is not configured. Ask an administrator to configure
           Meta system token before using onboarding discovery.
         </p>
@@ -30,10 +30,10 @@ export function OnboardingWabaClient() {
   return (
     <div className="space-y-4">
       {owned.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(owned.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(owned.error)}</p></div>
       )}
       {client.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[13px] text-base-content">{getApiError(client.error)}</p></div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(client.error)}</p></div>
       )}
 
       <WabaSection
@@ -86,10 +86,10 @@ function WabaSection({
       <div className="border-b border-base-300 px-4 py-3 sm:px-5">
         <div className="flex items-baseline justify-between gap-3">
           <div className="flex items-baseline gap-3">
-            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">{title}</h2>
+            <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">{title}</h2>
             <span className="op-label">{description}</span>
           </div>
-          <span className="font-mono-op text-[11px] tabular-nums text-base-content/55">
+          <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
             count · {count}
           </span>
         </div>

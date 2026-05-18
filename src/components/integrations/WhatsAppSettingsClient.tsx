@@ -70,13 +70,13 @@ function ConnectionRow({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[15px] font-semibold tabular-nums tracking-tight truncate">
+            <span className="text-[0.9375rem] font-semibold tabular-nums tracking-tight truncate">
               {displayPhone}
             </span>
             {connection.isDefault && <span className="op-tag op-tag-ok">Default</span>}
             {connection.status && <span className={statusTag}>{connection.status}</span>}
           </div>
-          <div className="font-mono-op text-[10px] tracking-[0.04em] text-base-content/45 truncate">
+          <div className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/45 truncate">
             {connection.phoneNumberId}
             {connection.wabaId ? ` · ${connection.wabaId}` : ""}
           </div>
@@ -118,13 +118,13 @@ function ConnectionRow({
           <div className="skeleton h-5 w-16" />
         </div>
       ) : errorStatus === 404 ? (
-        <p className="text-[12px] text-base-content/50">
+        <p className="text-[0.75rem] text-base-content/50">
           Not found — number may not be connected yet.
         </p>
       ) : errorStatus === 422 ? (
-        <p className="text-[12px] text-warning">{errorMessage}</p>
+        <p className="text-[0.75rem] text-warning">{errorMessage}</p>
       ) : phoneStatusQuery.isError ? (
-        <p className="text-[12px] text-error/70">{errorMessage}</p>
+        <p className="text-[0.75rem] text-error/70">{errorMessage}</p>
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {statusData?.verifiedName && (
@@ -245,7 +245,7 @@ export function WhatsAppSettingsClient({
       <div>
         <span className="op-label">integration</span>
         <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">WhatsApp</h1>
-        <p className="mt-0.5 text-[13px] text-base-content/60">
+        <p className="mt-0.5 text-[0.8125rem] text-base-content/60">
           Connect and manage WhatsApp Business phone numbers for this workspace.
         </p>
       </div>
@@ -254,7 +254,7 @@ export function WhatsAppSettingsClient({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-box border border-base-300 bg-base-200 px-4 py-3">
         <div className="min-w-0">
           <span className="op-label">templates</span>
-          <p className="mt-0.5 text-[13px] text-base-content/70">
+          <p className="mt-0.5 text-[0.8125rem] text-base-content/70">
             Import existing WhatsApp templates from Meta into MsgBuddy.
           </p>
         </div>
@@ -271,8 +271,8 @@ export function WhatsAppSettingsClient({
         <span className="op-label">connect</span>
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold">Add WhatsApp number</p>
-            <p className="mt-0.5 text-[12px] text-base-content/55">
+            <p className="text-[0.875rem] font-semibold">Add WhatsApp number</p>
+            <p className="mt-0.5 text-[0.75rem] text-base-content/55">
               Connect a phone number using Meta Embedded Signup.
             </p>
           </div>
@@ -323,7 +323,7 @@ export function WhatsAppSettingsClient({
         ) : connectionsQuery.isError ? (
           <div className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
             <span className="op-label mb-1 block text-error">error</span>
-            <p className="text-[13px]">Failed to load WhatsApp connections.</p>
+            <p className="text-[0.8125rem]">Failed to load WhatsApp connections.</p>
             <button
               type="button"
               className="btn btn-outline btn-xs mt-2"
@@ -355,8 +355,8 @@ export function WhatsAppSettingsClient({
       <details className="group rounded-box border border-base-300 bg-base-200">
         <summary className="cursor-pointer select-none px-4 py-3 sm:px-5">
           <span className="op-label">advanced</span>
-          <p className="mt-0.5 text-[13px] font-semibold">Meta Cloud API</p>
-          <p className="text-[12px] text-base-content/55">
+          <p className="mt-0.5 text-[0.8125rem] font-semibold">Meta Cloud API</p>
+          <p className="text-[0.75rem] text-base-content/55">
             Manual token and ID configuration. Expand only if you know what you&apos;re doing.
           </p>
         </summary>
@@ -434,7 +434,7 @@ export function WhatsAppSettingsClient({
               )}
             </button>
             {cloudError && (
-              <p className="text-[12px] text-error">{cloudError}</p>
+              <p className="text-[0.75rem] text-error">{cloudError}</p>
             )}
           </form>
         </div>

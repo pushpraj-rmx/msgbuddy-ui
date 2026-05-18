@@ -465,7 +465,7 @@ function LimitCard({
 
   return (
     <div className="rounded-xl border border-base-300 bg-base-200/30 px-3 py-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-base-content/50">
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-base-content/50">
         {label}
       </div>
       <div className="mt-1 text-sm font-medium text-base-content">
@@ -498,7 +498,7 @@ function LimitCard({
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-base-300 bg-base-200/30 px-3 py-2.5">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-base-content/50">
+      <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-base-content/50">
         {label}
       </div>
       <div className="mt-1 text-sm font-medium text-base-content">{value}</div>

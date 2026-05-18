@@ -147,7 +147,7 @@ export function TeamClient({
       {error ? (
         <div role="alert" className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-100 px-4 py-3">
           <span className="op-label mb-1 block text-error">error</span>
-          <p className="text-[13px]">{error}</p>
+          <p className="text-[0.8125rem]">{error}</p>
         </div>
       ) : null}
 
@@ -202,7 +202,7 @@ export function TeamClient({
       )}
 
       <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-        <table className="w-full text-[12.5px]">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr className="border-b border-base-300 bg-base-100">
               <th className="op-label px-3 py-2.5 text-left font-medium">User</th>
@@ -231,7 +231,7 @@ export function TeamClient({
               return (
                 <tr key={member.id} className="border-b border-base-300 last:border-b-0">
                   <td className="px-3 py-2.5 align-top">
-                    <span className="text-[13px] font-medium block">
+                    <span className="text-[0.8125rem] font-medium block">
                       {member.user?.email || member.user?.name || "Unknown"}
                     </span>
                     {isSelf && <span className="op-tag op-tag-info ml-1">you</span>}
@@ -264,7 +264,7 @@ export function TeamClient({
 
                   <td className="px-3 py-2.5 align-top min-w-[12rem] max-w-[18rem]">
                     <p
-                      className="text-[11px] leading-snug text-base-content/55 line-clamp-2"
+                      className="text-[0.6875rem] leading-snug text-base-content/55 line-clamp-2"
                       title={
                         rolePermissions.length
                           ? rolePermissions.join("\n")

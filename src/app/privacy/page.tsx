@@ -12,10 +12,10 @@ export default async function PrivacyPolicyPage() {
                 <span className="op-section-title">Legal</span>
                 <span className="op-tag">Last Updated · 27/03/2026</span>
               </div>
-              <h1 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[40px]">
+              <h1 className="text-[2rem] font-semibold leading-[1.1] tracking-[-0.025em] sm:text-[2.5rem]">
                 Privacy Policy
               </h1>
-              <p className="max-w-3xl text-[14.5px] text-base-content/70">
+              <p className="max-w-3xl text-[0.90625rem] text-base-content/70">
                 This Privacy Policy describes how we collect, use, and protect
                 your information when you use the Service.
               </p>
@@ -41,7 +41,7 @@ export default async function PrivacyPolicyPage() {
 
               <article className="space-y-7">
                 <section id="information-we-collect" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">1. Information We Collect</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">1. Information We Collect</h2>
 
                   <div className="space-y-4">
                     <div className="card bg-base-100 border border-base-300 p-4">
@@ -89,7 +89,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="how-we-use" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">2. How We Use Information</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">2. How We Use Information</h2>
                   <p className="text-base-content/80">
                     We use your information to:
                   </p>
@@ -103,7 +103,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="messaging-data" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
                     3. Messaging &amp; Communication Data
                   </h2>
                   <p className="text-base-content/80">
@@ -116,7 +116,7 @@ export default async function PrivacyPolicyPage() {
                     </li>
                     <li>Provide analytics and delivery insights</li>
                   </ul>
-                  <div className="mt-3 rounded-box border border-info/30 bg-info/5 p-3 text-[13px] text-base-content/85">
+                  <div className="mt-3 rounded-box border border-info/30 bg-info/5 p-3 text-[0.8125rem] text-base-content/85">
                     <span className="text-sm">
                       We do not use message content for advertising purposes.
                     </span>
@@ -124,7 +124,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="user-responsibility" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
                     4. User Responsibility for Data
                   </h2>
                   <p className="text-base-content/80">You are responsible for:</p>
@@ -142,7 +142,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="sharing" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">5. Sharing of Information</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">5. Sharing of Information</h2>
                   <p className="text-base-content/80">
                     We may share information with:
                   </p>
@@ -176,7 +176,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="retention" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">6. Data Retention</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">6. Data Retention</h2>
                   <p className="text-base-content/80">
                     We retain information only as long as necessary to:
                   </p>
@@ -192,7 +192,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="security" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">7. Data Security</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">7. Data Security</h2>
                   <p className="text-base-content/80">
                     We implement reasonable technical and organizational measures
                     to protect your data.
@@ -204,7 +204,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="your-rights" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">8. Your Rights</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">8. Your Rights</h2>
                   <p className="text-base-content/80">
                     Depending on your jurisdiction, you may have rights to:
                   </p>
@@ -221,7 +221,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="cookies" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">9. Cookies &amp; Tracking</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">9. Cookies &amp; Tracking</h2>
                   <p className="text-base-content/80">
                     We may use cookies and similar technologies to:
                   </p>
@@ -236,7 +236,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="international-transfers" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
                     10. International Data Transfers
                   </h2>
                   <p className="text-base-content/80">
@@ -250,7 +250,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="third-party-links" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">11. Third-Party Links</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">11. Third-Party Links</h2>
                   <p className="text-base-content/80">
                     Our Service may contain links to third-party websites.
                   </p>
@@ -261,7 +261,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="children" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">12. Children’s Privacy</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">12. Children’s Privacy</h2>
                   <p className="text-base-content/80">
                     The Service is not intended for individuals under 18.
                   </p>
@@ -271,7 +271,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="changes" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">13. Changes to This Policy</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">13. Changes to This Policy</h2>
                   <p className="text-base-content/80">
                     We may update this Privacy Policy from time to time.
                   </p>
@@ -282,7 +282,7 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="contact" className="space-y-3">
-                  <h2 className="text-[17px] font-semibold tracking-[-0.015em]">14. Contact Information</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">14. Contact Information</h2>
                   <div className="card bg-base-100 border border-base-300 p-4">
                     <p className="text-sm text-base-content/80">
                       <span className="font-medium">Email:</span>{" "}
@@ -318,7 +318,7 @@ export default async function PrivacyPolicyPage() {
             <div className="sticky top-24 space-y-3">
               <div className="rounded-box border border-base-300 bg-base-200 p-4">
                 <p className="op-label mb-3">On this page</p>
-                <ul className="menu w-full p-0 text-[12.5px]">
+                <ul className="menu w-full p-0 text-[0.78125rem]">
                   <li>
                     <a href="#information-we-collect">1. Information We Collect</a>
                   </li>

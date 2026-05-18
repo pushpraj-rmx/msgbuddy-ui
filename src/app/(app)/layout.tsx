@@ -21,7 +21,7 @@ export default async function AppGroupLayout({
       <div className="min-h-[60dvh] flex items-center justify-center p-6">
         <div className="max-w-md w-full space-y-4 card bg-base-100 border border-base-300 p-6">
           <div className="space-y-1">
-            <h1 className="text-[17px] font-semibold tracking-[-0.015em]">Service temporarily unavailable</h1>
+            <h1 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">Service temporarily unavailable</h1>
             <p className="text-sm text-base-content/70">
               The server returned an error. Your session is fine — this is not a
               logout. Please wait a moment and try again.

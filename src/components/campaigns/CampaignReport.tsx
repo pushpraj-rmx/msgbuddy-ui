@@ -106,7 +106,7 @@ function Stat({
         {label}
         {hint ? <InfoTip tip={hint} /> : null}
       </p>
-      <p className={`mt-1 font-mono-op text-[22px] font-semibold tabular-nums ${cls}`}>{value}</p>
+      <p className={`mt-1 font-mono-op text-[1.375rem] font-semibold tabular-nums ${cls}`}>{value}</p>
     </div>
   );
 }

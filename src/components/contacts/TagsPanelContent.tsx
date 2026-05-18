@@ -95,7 +95,7 @@ export function TagsPanelContent({ canManage }: { canManage: boolean }) {
               ) : (
                 <span className="h-3 w-3 shrink-0 rounded-full border border-base-300 bg-base-300" />
               )}
-              <span className="flex-1 truncate text-[13px] font-medium">{tag.name}</span>
+              <span className="flex-1 truncate text-[0.8125rem] font-medium">{tag.name}</span>
               {canManage && (
                 <div className="flex items-center gap-0.5">
                   <div className="tooltip tooltip-left" data-tip="Edit">
@@ -171,7 +171,7 @@ function TagInlineForm({
         />
         <input
           type="text"
-          className="input input-bordered input-sm flex-1 font-mono-op text-[11px]"
+          className="input input-bordered input-sm flex-1 font-mono-op text-[0.6875rem]"
           value={color}
           onChange={(e) => setColor(e.target.value)}
           placeholder="#hex"

@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-query";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Search, Upload, Download, RefreshCw, UserPlus, Tag, Trash2, Copy, MessageSquare, Columns3, Check, Minus, LayoutGrid, Settings2 } from "lucide-react";
+import { Eye, Search, Upload, Download, UserPlus, Tag, Trash2, MessageSquare, Columns3, Check, Minus, LayoutGrid, Settings2, CalendarDays } from "lucide-react";
 import { TagsPanelContent } from "./TagsPanelContent";
 import { SegmentsPanelContent } from "./SegmentsPanelContent";
 import {
@@ -22,6 +22,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { contactsApi, type ContactsListSort, tagsApi, segmentsApi, customFieldsApi } from "@/lib/api";
 import { getApiError, getApiErrorStatus, getApiErrorData } from "@/lib/api-error";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 import {
@@ -32,12 +33,11 @@ import {
 import type { Contact, CustomFieldDef } from "@/lib/types";
 import { formatRelativeTime } from "@/lib/format";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
-import { InfoTip } from "@/components/ui/InfoTip";
-import { KpiCard } from "@/components/ui/KpiCard";
 import { ContactDetailPanelContent } from "./ContactDetailDrawer";
 import { ContactFormModal } from "./ContactFormModal";
-import { DuplicatesModal } from "./DuplicatesModal";
 import { ImportModal } from "./ImportModal";
+
+type TagsMatch = "all" | "any";
 
 const CONTACTS_LIST_QUERY_KEY = (
   segmentId: string | null,
@@ -45,7 +45,21 @@ const CONTACTS_LIST_QUERY_KEY = (
   sortKey: SortKey,
   sortDir: SortDir,
   tagIds: string[] = [],
-) => ["contacts", "list", segmentId ?? "all", search, sortKey, sortDir, tagIds.join(",") || "no-tags"] as const;
+  tagsMatch: TagsMatch = "all",
+  createdAfter: string | null = null,
+  createdBefore: string | null = null,
+) => [
+  "contacts",
+  "list",
+  segmentId ?? "all",
+  search,
+  sortKey,
+  sortDir,
+  tagIds.join(",") || "no-tags",
+  tagsMatch,
+  createdAfter ?? "any-after",
+  createdBefore ?? "any-before",
+] as const;
 const LIST_PAGE_SIZE = 50;
 
 const SERVER_SORT_KEYS: SortKey[] = [
@@ -162,7 +176,6 @@ export function ContactsListClient({
   const [editing, setEditing] = useState<Contact | null>(null);
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
-  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(
@@ -189,12 +202,17 @@ export function ContactsListClient({
   } | null>(null);
   const [localSegmentId, setLocalSegmentId] = useState<string | null>(null);
   const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [tagsMatch, setTagsMatch] = useState<TagsMatch>("all");
+  const [createdAfter, setCreatedAfter] = useState<string>("");
+  const [createdBefore, setCreatedBefore] = useState<string>("");
+  const [createdDropdownOpen, setCreatedDropdownOpen] = useState(false);
+  const createdDropdownRef = useRef<HTMLDivElement>(null);
+  const tagsDropdownRef = useRef<HTMLDivElement>(null);
   const [visibleFieldIds, setVisibleFieldIds] = useState<Set<string>>(new Set());
   const [tagsDropdownOpen, setTagsDropdownOpen] = useState(false);
   const canCreateContacts = roleHasWorkspacePermission(meRole, "contacts.create");
   const canImportContacts = roleHasWorkspacePermission(meRole, "contacts.import");
   const canExportContacts = roleHasWorkspacePermission(meRole, "contacts.export");
-  const canFindDuplicates = roleHasWorkspacePermission(meRole, "contacts.create");
   const canDeleteContacts = roleHasWorkspacePermission(meRole, "contacts.delete");
 
   const showManagePanel = useCallback(() => {
@@ -235,8 +253,20 @@ export function ContactsListClient({
   const listSort = useServerSortForList ? sortKey : "name";
   const listOrder = useServerSortForList ? sortDir : "asc";
 
+  const createdAfterIso = createdAfter ? `${createdAfter}T00:00:00.000Z` : null;
+  const createdBeforeIso = createdBefore ? `${createdBefore}T23:59:59.999Z` : null;
+
   const infiniteQuery = useInfiniteQuery({
-    queryKey: CONTACTS_LIST_QUERY_KEY(segmentId, searchParam, sortKey, sortDir, filterTagIds),
+    queryKey: CONTACTS_LIST_QUERY_KEY(
+      segmentId,
+      searchParam,
+      sortKey,
+      sortDir,
+      filterTagIds,
+      tagsMatch,
+      createdAfterIso,
+      createdBeforeIso,
+    ),
     queryFn: async ({ pageParam }) =>
       contactsApi.list({
         limit: LIST_PAGE_SIZE,
@@ -248,6 +278,9 @@ export function ContactsListClient({
         includeTotal: true,
         include: "tags,customFields",
         tagIds: filterTagIds.length ? filterTagIds.join(",") : undefined,
+        tagsMatch: filterTagIds.length ? tagsMatch : undefined,
+        createdAfter: createdAfterIso ?? undefined,
+        createdBefore: createdBeforeIso ?? undefined,
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -256,7 +289,9 @@ export function ContactsListClient({
       !searchParam &&
       sortKey === "name" &&
       sortDir === "asc" &&
-      initialContacts.length >= 0
+      filterTagIds.length === 0 &&
+      !createdAfterIso &&
+      !createdBeforeIso
         ? {
             pages: [
               {
@@ -311,7 +346,7 @@ export function ContactsListClient({
 
   useEffect(() => {
     setDisplayPageIndex(0);
-  }, [debouncedSearch, sortKey, sortDir, filterTagIds]);
+  }, [debouncedSearch, sortKey, sortDir, filterTagIds, tagsMatch, createdAfter, createdBefore]);
 
   // Auto-select first 2 custom field columns when definitions load
   const fieldDefsInitRef = useRef(false);
@@ -556,37 +591,15 @@ export function ContactsListClient({
           ? `Page ${displayPageIndex + 1} of ${displayPageIndex + 2}+`
           : `Page ${displayPageIndex + 1} of ${totalPagesFiltered}`;
 
-  const contactStats = useMemo(() => {
-    const now = Date.now();
-    const oneWeekMs = 7 * 24 * 60 * 60 * 1000;
-    const activeLastWeek = allLoadedContacts.filter((contact) => {
-      if (!contact.lastMessageAt) return false;
-      const ts = new Date(contact.lastMessageAt).getTime();
-      return Number.isFinite(ts) && now - ts <= oneWeekMs;
-    }).length;
-    const recentlyAdded = allLoadedContacts.filter((contact) => {
-      const ts = new Date(contact.createdAt).getTime();
-      return Number.isFinite(ts) && now - ts <= oneWeekMs;
-    }).length;
-    const healthBase = Math.max(1, allLoadedContacts.length);
-    const completeProfiles = allLoadedContacts.filter(
-      (contact) => !!contact.name?.trim() && (!!contact.email?.trim() || !!contact.phone?.trim())
-    ).length;
-    const healthPct = Math.round((completeProfiles / healthBase) * 100);
-    return {
-      total: totalCount ?? allLoadedContacts.length,
-      activeLastWeek,
-      recentlyAdded,
-      healthPct,
-    };
-  }, [allLoadedContacts, totalCount]);
-
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
+      // Date-like columns default to newest first; text columns default to A→Z.
+      const dateLike =
+        key === "lastMessageAt" || key === "createdAt" || key === "updatedAt";
       setSortKey(key);
-      setSortDir("asc");
+      setSortDir(dateLike ? "desc" : "asc");
     }
   };
 
@@ -742,11 +755,15 @@ export function ContactsListClient({
   // Column visibility — persisted to localStorage (swap to API when /user/preferences is built)
   const COL_VIS_KEY = "contacts-column-visibility";
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
+    let initial: VisibilityState = {};
     try {
       const stored = localStorage.getItem(COL_VIS_KEY);
-      if (stored) return JSON.parse(stored) as VisibilityState;
+      if (stored) initial = JSON.parse(stored) as VisibilityState;
     } catch { /* ignore */ }
-    return {};
+    // Default new columns to hidden if user hasn't explicitly set them.
+    if (!("createdAt" in initial)) initial.createdAt = false;
+    if (!("updatedAt" in initial)) initial.updatedAt = false;
+    return initial;
   });
   const handleColumnVisibilityChange = useCallback((updater: VisibilityState | ((prev: VisibilityState) => VisibilityState)) => {
     setColumnVisibility((prev) => {
@@ -776,6 +793,24 @@ export function ContactsListClient({
     document.addEventListener("mousedown", onPointerDown);
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [segDropdownOpen]);
+
+  useEffect(() => {
+    if (!createdDropdownOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!createdDropdownRef.current?.contains(e.target as Node)) setCreatedDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [createdDropdownOpen]);
+
+  useEffect(() => {
+    if (!tagsDropdownOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!tagsDropdownRef.current?.contains(e.target as Node)) setTagsDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [tagsDropdownOpen]);
 
   type ContactRow = (typeof displayed)[number];
   const tableColumns: ColumnDef<ContactRow>[] = useMemo(() => {
@@ -818,11 +853,11 @@ export function ContactsListClient({
               <ContactAvatar name={c.name} phone={c.phone} avatarUrl={c.avatarUrl} size="sm" />
               <div>
                 <div className="flex items-center gap-1.5">
-                  <p className="text-[13px] font-semibold text-base-content">{cName}</p>
+                  <p className="text-[0.8125rem] font-semibold text-base-content">{cName}</p>
                   {"isBlocked" in c && c.isBlocked && <span className="op-tag op-tag-danger">Blocked</span>}
                   {"isOptedOut" in c && c.isOptedOut && <span className="op-tag op-tag-warn">Opted out</span>}
                 </div>
-                {cDesignation && <p className="text-[11px] text-base-content/55">{cDesignation}</p>}
+                {cDesignation && <p className="text-[0.6875rem] text-base-content/55">{cDesignation}</p>}
               </div>
             </div>
           );
@@ -835,9 +870,9 @@ export function ContactsListClient({
         cell: ({ row }) => {
           const c = row.original;
           return "email" in c ? (
-            <span className="text-[13px] text-base-content/80">
+            <span className="text-[0.8125rem] text-base-content/80">
               {c.email || "—"}
-              {"emailLabel" in c && c.emailLabel && <span className="ml-1 text-[11px] text-base-content/50">({c.emailLabel})</span>}
+              {"emailLabel" in c && c.emailLabel && <span className="ml-1 text-[0.6875rem] text-base-content/50">({c.emailLabel})</span>}
             </span>
           ) : <span className="text-base-content/40">—</span>;
         },
@@ -849,9 +884,9 @@ export function ContactsListClient({
         cell: ({ row }) => {
           const c = row.original;
           return (
-            <span className="font-mono-op text-[12px] tabular-nums text-base-content/85">
+            <span className="font-mono-op text-[0.75rem] tabular-nums text-base-content/85">
               {c.phone}
-              {"phoneLabel" in c && c.phoneLabel && <span className="ml-1 font-sans text-[11px] text-base-content/50">({c.phoneLabel})</span>}
+              {"phoneLabel" in c && c.phoneLabel && <span className="ml-1 font-sans text-[0.6875rem] text-base-content/50">({c.phoneLabel})</span>}
             </span>
           );
         },
@@ -876,8 +911,38 @@ export function ContactsListClient({
         cell: ({ row }) => {
           const c = row.original;
           return (
-            <span className="font-mono-op text-[11px] tabular-nums text-base-content/55">
+            <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
               {"lastMessageAt" in c && c.lastMessageAt ? formatRelativeTime(c.lastMessageAt) : "—"}
+            </span>
+          );
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: "createdAt",
+        header: "Created",
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
+              {"createdAt" in c && (c as Contact).createdAt
+                ? formatRelativeTime((c as Contact).createdAt)
+                : "—"}
+            </span>
+          );
+        },
+        enableSorting: true,
+      },
+      {
+        accessorKey: "updatedAt",
+        header: "Updated",
+        cell: ({ row }) => {
+          const c = row.original;
+          return (
+            <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
+              {"updatedAt" in c && (c as Contact).updatedAt
+                ? formatRelativeTime((c as Contact).updatedAt as string)
+                : "—"}
             </span>
           );
         },
@@ -893,7 +958,7 @@ export function ContactsListClient({
         cell: ({ row }) => {
           const c = row.original;
           return (
-            <span className="text-[13px] text-base-content/80">
+            <span className="text-[0.8125rem] text-base-content/80">
               {formatFieldValue(
                 "customFields" in c ? (c as Contact).customFields?.[def.name] : undefined,
                 def
@@ -987,30 +1052,31 @@ export function ContactsListClient({
     <div className="grid grid-cols-1 gap-4">
       <div className="space-y-4 min-w-0">
       {bulkSseNotice ? (
-        <div role="status" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-3 py-2 text-sm">
-          <span>
-            Contacts updated from import: {bulkSseNotice.imported} imported
-            {bulkSseNotice.failed > 0
-              ? `, ${bulkSseNotice.failed} failed`
-              : ""}
-            .
-          </span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs"
-            aria-label="Dismiss"
-            onClick={() => setBulkSseNotice(null)}
-          >
-            ✕
-          </button>
+        <div role="status" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-3 py-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[0.8125rem]">
+              <span className="op-label mb-1 block text-success">import complete</span>
+              <span className="text-base-content">
+                <span className="font-mono-op tabular-nums font-semibold">{bulkSseNotice.imported}</span> imported
+                {bulkSseNotice.failed > 0 ? (
+                  <>
+                    {" · "}
+                    <span className="font-mono-op tabular-nums font-semibold text-error">{bulkSseNotice.failed}</span> failed
+                  </>
+                ) : null}
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs btn-circle"
+              aria-label="Dismiss"
+              onClick={() => setBulkSseNotice(null)}
+            >
+              ×
+            </button>
+          </div>
         </div>
       ) : null}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Total contacts" value={contactStats.total.toLocaleString()} />
-        <KpiCard label="Active this week" value={contactStats.activeLastWeek.toLocaleString()} />
-        <KpiCard label="New this week" value={`+${contactStats.recentlyAdded.toLocaleString()}`} />
-        <KpiCard label="Profile health" value={`${contactStats.healthPct}%`} hint={<>Contacts with name + phone or email <InfoTip tip="Percentage of contacts with both a name and phone number or email filled in" /></>} />
-      </div>
       <div className="rounded-box border border-base-300 bg-base-200 px-4 py-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative flex-1 max-w-sm">
@@ -1051,31 +1117,6 @@ export function ContactsListClient({
               </button>
             </div>
           ) : null}
-          {canFindDuplicates ? (
-            <div className="tooltip tooltip-bottom" data-tip="Find duplicate contacts">
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm btn-square"
-                onClick={() => setDuplicatesOpen(true)}
-              >
-                <Copy className="h-4 w-4" />
-              </button>
-            </div>
-          ) : null}
-          <div className="tooltip tooltip-bottom" data-tip="Refresh list">
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm btn-square"
-              onClick={() => invalidateContacts()}
-              disabled={loadingList}
-            >
-              {loadingList ? (
-                <span className="loading loading-spinner loading-xs" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-            </button>
-          </div>
           {/* Manage tags & segments */}
           <div className="tooltip tooltip-bottom" data-tip="Manage tags & segments">
             <button
@@ -1101,12 +1142,12 @@ export function ContactsListClient({
               <div className="absolute right-0 top-full z-20 mt-1 w-52 rounded-box border border-base-300 bg-base-200 p-2 shadow-lg">
                 <div className="mb-1.5 flex items-center justify-between px-2">
                   <span className="op-label">Columns</span>
-                  <span className="font-mono-op text-[9px] tracking-[0.08em] text-primary">saved</span>
+                  <span className="font-mono-op text-[0.5625rem] tracking-[0.08em] text-primary">saved</span>
                 </div>
                 {contactsTable.getAllLeafColumns()
                   .filter((col) => col.getCanHide())
                   .map((col) => (
-                    <label key={col.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-base-300/40">
+                    <label key={col.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[0.75rem] hover:bg-base-300/40">
                       <input
                         type="checkbox"
                         className="checkbox checkbox-xs"
@@ -1119,7 +1160,7 @@ export function ContactsListClient({
                 <div className="mt-1.5 border-t border-base-300 pt-1.5">
                   <button
                     type="button"
-                    className="w-full rounded-md px-2 py-1.5 text-left text-[12px] text-base-content/60 hover:bg-base-300/40 hover:text-base-content"
+                    className="w-full rounded-md px-2 py-1.5 text-left text-[0.75rem] text-base-content/60 hover:bg-base-300/40 hover:text-base-content"
                     onClick={() => {
                       handleColumnVisibilityChange({});
                     }}
@@ -1141,7 +1182,7 @@ export function ContactsListClient({
                   disabled={bulkAssignTagMutation.isPending}
                 >
                   <Tag className="h-3.5 w-3.5" />
-                  <span className="font-mono-op text-[10px] tabular-nums">{selectedContactIds.size}</span>
+                  <span className="font-mono-op text-[0.625rem] tabular-nums">{selectedContactIds.size}</span>
                 </button>
               </div>
               {canDeleteContacts ? (
@@ -1153,7 +1194,7 @@ export function ContactsListClient({
                     disabled={bulkDeleteMutation.isPending}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
-                    <span className="font-mono-op text-[10px] tabular-nums">{selectedContactIds.size}</span>
+                    <span className="font-mono-op text-[0.625rem] tabular-nums">{selectedContactIds.size}</span>
                   </button>
                 </div>
               ) : null}
@@ -1185,7 +1226,7 @@ export function ContactsListClient({
             {segDropdownOpen && (
               <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-box border border-base-300 bg-base-200 p-2 shadow-lg">
                 <span className="op-label mb-1.5 block px-2">Segments</span>
-                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-base-300/40">
+                <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[0.75rem] hover:bg-base-300/40">
                   <input
                     type="radio"
                     name="segment"
@@ -1196,7 +1237,7 @@ export function ContactsListClient({
                   All contacts
                 </label>
                 {allSegments.map((seg) => (
-                  <label key={seg.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-base-300/40">
+                  <label key={seg.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[0.75rem] hover:bg-base-300/40">
                     <input
                       type="radio"
                       name="segment"
@@ -1206,7 +1247,7 @@ export function ContactsListClient({
                     />
                     <span className="flex-1 truncate">{seg.name}</span>
                     {seg.contactCount != null ? (
-                      <span className="font-mono-op text-[10px] tabular-nums text-base-content/40">{seg.contactCount}</span>
+                      <span className="font-mono-op text-[0.625rem] tabular-nums text-base-content/40">{seg.contactCount}</span>
                     ) : null}
                   </label>
                 ))}
@@ -1216,7 +1257,7 @@ export function ContactsListClient({
 
           {/* Tags filter dropdown */}
           {allTags.length > 0 && (
-            <div className="dropdown">
+            <div className="relative" ref={tagsDropdownRef}>
               <div className="tooltip tooltip-bottom" data-tip="Filter by tags">
                 <button
                   type="button"
@@ -1226,14 +1267,16 @@ export function ContactsListClient({
                   <Tag className="h-3.5 w-3.5" />
                   Tags
                   {filterTagIds.length > 0 && (
-                    <span className="font-mono-op text-[10px] tabular-nums">{filterTagIds.length}</span>
+                    <span className="font-mono-op text-[0.625rem] tabular-nums">
+                      {filterTagIds.length} · {tagsMatch}
+                    </span>
                   )}
                 </button>
               </div>
               {tagsDropdownOpen && (
-                <div className="dropdown-content z-20 mt-1 w-64 rounded-box border border-base-300 bg-base-100 p-2 shadow-sm">
+                <div className="absolute right-0 top-full z-20 mt-1 w-64 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
                   <div className="flex items-center justify-between px-2 pb-1.5">
-                    <p className="text-xs font-medium text-base-content/50">Filter by tags</p>
+                    <span className="op-label">Filter by tags</span>
                     {filterTagIds.length > 0 && (
                       <button
                         type="button"
@@ -1244,6 +1287,27 @@ export function ContactsListClient({
                       </button>
                     )}
                   </div>
+                  <div className="flex items-center gap-1 rounded-md border border-base-300 bg-base-200 p-0.5">
+                    {(["all", "any"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`flex-1 rounded font-mono-op px-2 py-1 text-[0.625rem] tracking-[0.08em] uppercase transition-colors ${
+                          tagsMatch === m
+                            ? "bg-base-100 text-primary"
+                            : "text-base-content/55 hover:text-base-content"
+                        }`}
+                        onClick={() => setTagsMatch(m)}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mb-2 mt-1 px-1 text-[0.6875rem] text-base-content/55">
+                    {tagsMatch === "all"
+                      ? "Match contacts that have every selected tag."
+                      : "Match contacts that have at least one selected tag."}
+                  </p>
                   <div className="flex flex-wrap gap-1.5 px-1">
                     {allTags.map((tag) => {
                       const active = filterTagIds.includes(tag.id);
@@ -1251,7 +1315,7 @@ export function ContactsListClient({
                         <button
                           key={tag.id}
                           type="button"
-                          className={`op-tag cursor-pointer transition-colors ${active ? "border-primary bg-primary/10 text-primary" : ""}`}
+                          className={`op-tag cursor-pointer gap-1 transition-colors ${active ? "op-tag-ok font-semibold" : ""}`}
                           style={!active && tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
                           onClick={() =>
                             setFilterTagIds((prev) =>
@@ -1261,6 +1325,7 @@ export function ContactsListClient({
                             )
                           }
                         >
+                          {active ? <span aria-hidden>✓</span> : null}
                           {tag.name}
                         </button>
                       );
@@ -1271,82 +1336,84 @@ export function ContactsListClient({
             </div>
           )}
 
+          {/* Created date filter dropdown */}
+          <div className="relative" ref={createdDropdownRef}>
+            <div className="tooltip tooltip-bottom" data-tip="Filter by created date">
+              <button
+                type="button"
+                className={`btn btn-ghost btn-sm gap-1 ${createdAfter || createdBefore ? "text-primary" : ""}`}
+                onClick={() => setCreatedDropdownOpen((v) => !v)}
+              >
+                <CalendarDays className="h-3.5 w-3.5" />
+                Created
+                {(createdAfter || createdBefore) && (
+                  <span className="font-mono-op text-[0.625rem] tabular-nums">
+                    {createdAfter || "…"} → {createdBefore || "…"}
+                  </span>
+                )}
+              </button>
+            </div>
+            {createdDropdownOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-72 rounded-box border border-base-300 bg-base-100 p-3 shadow-lg">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="op-label">Created date</span>
+                  {(createdAfter || createdBefore) && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs text-base-content/50"
+                      onClick={() => {
+                        setCreatedAfter("");
+                        setCreatedBefore("");
+                      }}
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <span className="op-label block">From</span>
+                    <input
+                      type="date"
+                      className="input input-bordered input-sm w-full"
+                      value={createdAfter}
+                      max={createdBefore || undefined}
+                      onChange={(e) => setCreatedAfter(e.target.value)}
+                      aria-label="Created after"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <span className="op-label block">To</span>
+                    <input
+                      type="date"
+                      className="input input-bordered input-sm w-full"
+                      value={createdBefore}
+                      min={createdAfter || undefined}
+                      onChange={(e) => setCreatedBefore(e.target.value)}
+                      aria-label="Created before"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
 
       </div>
       </div>
 
       {error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>{error}</span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => setError(null)}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
-
-      {conflictContact && (
-        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>
-            A contact with this phone already exists
-            {conflictContact.name ? `: ${conflictContact.name}` : ""}
-            {" "}({conflictContact.phone})
-          </span>
-          <div className="flex gap-1">
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="text-[0.8125rem]">
+              <span className="op-label mb-1 block text-error">error</span>
+              <span className="text-base-content">{error}</span>
+            </div>
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setCreating(false);
-                setConflictContact(null);
-                setSelectedContactId(conflictContact.id);
-                const found = allLoadedContacts.find(
-                  (c) => c.id === conflictContact.id
-                );
-                if (found) setSelectedContactRow(found);
-              }}
-            >
-              View contact
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setConflictContact(null)}
+              className="btn btn-ghost btn-xs btn-circle"
+              onClick={() => setError(null)}
               aria-label="Dismiss"
             >
               ×
@@ -1355,10 +1422,51 @@ export function ContactsListClient({
         </div>
       )}
 
+      {conflictContact && (
+        <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2.5">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="text-[0.8125rem]">
+              <span className="op-label mb-1 block text-warning">duplicate phone</span>
+              <span className="text-base-content">
+                A contact with this phone already exists
+                {conflictContact.name ? `: ${conflictContact.name}` : ""}
+                {" "}
+                <span className="font-mono-op tabular-nums text-base-content/70">({conflictContact.phone})</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => {
+                  setCreating(false);
+                  setConflictContact(null);
+                  setSelectedContactId(conflictContact.id);
+                  const found = allLoadedContacts.find(
+                    (c) => c.id === conflictContact.id
+                  );
+                  if (found) setSelectedContactRow(found);
+                }}
+              >
+                View contact
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs btn-circle"
+                onClick={() => setConflictContact(null)}
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!loadingList && sorted.length === 0 && (
         <div className="rounded-box border border-base-300 bg-base-200 p-8 text-center">
           <p className="text-sm text-base-content/70">
-            {searchParam || filterTagIds.length > 0
+            {searchParam || filterTagIds.length > 0 || createdAfter || createdBefore
               ? "No contacts match the current search/filter combination."
               : segmentId
                 ? "No contacts in this segment. Try another list or add contacts."
@@ -1381,38 +1489,38 @@ export function ContactsListClient({
       {!loadingList && (totalCount > 0 || totalFiltered > 0) && <PaginationBar />}
 
       {loadingList && sorted.length === 0 && (
-        <div className="overflow-x-auto card bg-base-100 border border-base-300">
-          <table className="table table-sm">
+        <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+          <table className="w-full text-[0.78125rem]">
             <thead>
-              <tr>
-                <th>Summary</th>
-                <th>Email Address</th>
-                <th>Phone Number</th>
-                <th>Tags</th>
-                <th>Last active</th>
+              <tr className="border-b border-base-300 bg-base-100">
+                <th className="op-label px-3 py-2.5 text-left font-medium">Summary</th>
+                <th className="op-label px-3 py-2.5 text-left font-medium">Email</th>
+                <th className="op-label px-3 py-2.5 text-left font-medium">Phone</th>
+                <th className="op-label px-3 py-2.5 text-left font-medium">Tags</th>
+                <th className="op-label px-3 py-2.5 text-left font-medium">Last active</th>
                 {visibleDefs.map((def) => (
-                  <th key={def.id}>{def.label}</th>
+                  <th key={def.id} className="op-label px-3 py-2.5 text-left font-medium">{def.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}>
-                  <td>
-                    <div className="flex items-center gap-3">
-                      <div className="skeleton h-10 w-10 shrink-0 rounded-full" />
+                <tr key={i} className="border-b border-base-300/50 last:border-b-0">
+                  <td className="px-3 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="skeleton h-8 w-8 shrink-0 rounded-full" />
                       <div className="flex flex-col gap-1">
-                        <div className="skeleton h-4 w-24" />
-                        <div className="skeleton h-3 w-32" />
+                        <div className="skeleton h-3.5 w-24 rounded-sm" />
+                        <div className="skeleton h-3 w-32 rounded-sm" />
                       </div>
                     </div>
                   </td>
-                  <td><div className="skeleton h-4 w-28" /></td>
-                  <td><div className="skeleton h-4 w-24" /></td>
-                  <td><div className="skeleton h-6 w-20" /></td>
-                  <td><div className="skeleton h-4 w-16" /></td>
+                  <td className="px-3 py-3"><div className="skeleton h-3.5 w-28 rounded-sm" /></td>
+                  <td className="px-3 py-3"><div className="skeleton h-3.5 w-24 rounded-sm" /></td>
+                  <td className="px-3 py-3"><div className="skeleton h-5 w-20 rounded-sm" /></td>
+                  <td className="px-3 py-3"><div className="skeleton h-3.5 w-16 rounded-sm" /></td>
                   {visibleDefs.map((def) => (
-                    <td key={def.id}><div className="skeleton h-4 w-20" /></td>
+                    <td key={def.id} className="px-3 py-3"><div className="skeleton h-3.5 w-20 rounded-sm" /></td>
                   ))}
                 </tr>
               ))}
@@ -1423,13 +1531,20 @@ export function ContactsListClient({
 
       {!loadingList && sorted.length > 0 && (
         <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
-          <table className="w-full text-[12.5px]">
+          <table className="w-full text-[0.78125rem]">
             <thead>
               {contactsTable.getHeaderGroups().map((hg) => (
                 <tr key={hg.id} className="border-b border-base-300 bg-base-100">
                   {hg.headers.map((h) => {
-                    const sortable = ["name", "email", "phone", "lastMessageAt"].includes(h.id);
-                    const sortId = h.id === "name" ? "name" : h.id === "email" ? "email" : h.id === "phone" ? "phone" : h.id === "lastMessageAt" ? "lastMessageAt" : null;
+                    const sortable = ["name", "email", "phone", "lastMessageAt", "createdAt", "updatedAt"].includes(h.id);
+                    const sortId =
+                      h.id === "name" ? "name" :
+                      h.id === "email" ? "email" :
+                      h.id === "phone" ? "phone" :
+                      h.id === "lastMessageAt" ? "lastMessageAt" :
+                      h.id === "createdAt" ? "createdAt" :
+                      h.id === "updatedAt" ? "updatedAt" :
+                      null;
                     return (
                       <th
                         key={h.id}
@@ -1519,6 +1634,7 @@ export function ContactsListClient({
 
       {importing && (
         <ImportModal
+          workspaceId={workspaceId}
           onClose={() => setImporting(false)}
           onSuccess={() => {
             setImporting(false);
@@ -1529,69 +1645,82 @@ export function ContactsListClient({
         />
       )}
 
-      {duplicatesOpen && (
-        <DuplicatesModal
-          onClose={() => setDuplicatesOpen(false)}
-          onMerged={() => {
-            invalidateContacts();
-            invalidateSegmentPreview();
-          }}
-        />
-      )}
-
       {bulkTagOpen && (
         <dialog open className="modal modal-middle">
-          <div className="modal-box max-w-sm rounded-box">
-            <h3 className="text-lg font-semibold">
-              Add tag to {selectedContactIds.size} contact
-              {selectedContactIds.size !== 1 ? "s" : ""}
-            </h3>
-            <p className="mt-1 text-sm text-base-content/70">
-              Choose a tag to assign to all selected contacts.
-            </p>
-            <div className="mt-4 flex flex-wrap gap-2">
+          <div className="modal-box max-w-sm rounded-box border border-base-300 !bg-base-100 p-0">
+            <div className="flex items-start justify-between gap-3 border-b border-base-300 px-5 py-4">
+              <div>
+                <span className="op-label">tag · {selectedContactIds.size} selected</span>
+                <h3 className="mt-0.5 text-[1.0625rem] font-semibold tracking-[-0.015em]">Add tag</h3>
+                <p className="mt-1 text-[0.78125rem] text-base-content/55">
+                  Choose a tag to assign to all selected contacts.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-circle"
+                onClick={() => {
+                  setBulkTagOpen(false);
+                  setBulkTagSelectedId(null);
+                }}
+                aria-label="Close"
+                disabled={bulkAssignTagMutation.isPending}
+              >
+                ×
+              </button>
+            </div>
+            <div className="px-5 py-4">
               {allTags.length === 0 ? (
-                <p className="text-sm text-base-content/60">
+                <p className="text-[0.8125rem] text-base-content/55">
                   No tags yet.{" "}
-                  <Link
-                    href="/people/tags"
+                  <button
+                    type="button"
                     className="link link-primary"
-                    onClick={() => setBulkTagOpen(false)}
+                    onClick={() => {
+                      setBulkTagOpen(false);
+                      showManagePanel();
+                    }}
                   >
                     Create tags
-                  </Link>{" "}
+                  </button>{" "}
                   first.
                 </p>
               ) : (
-                allTags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    type="button"
-                    className={`btn btn-sm ${
-                      bulkTagSelectedId === tag.id ? "btn-primary" : "btn-ghost"
-                    }`}
-                    onClick={() =>
-                      setBulkTagSelectedId((prev) =>
-                        prev === tag.id ? null : tag.id
-                      )
-                    }
-                  >
-                    {tag.color && (
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                        aria-hidden
-                      />
-                    )}
-                    {tag.name}
-                  </button>
-                ))
+                <div className="flex flex-wrap gap-1.5">
+                  {allTags.map((tag) => {
+                    const active = bulkTagSelectedId === tag.id;
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        className={`op-tag flex items-center gap-1.5 transition-colors ${
+                          active ? "border-primary bg-primary/10 text-primary" : "hover:border-base-content/30"
+                        }`}
+                        style={!active && tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
+                        onClick={() =>
+                          setBulkTagSelectedId((prev) =>
+                            prev === tag.id ? null : tag.id
+                          )
+                        }
+                      >
+                        {tag.color && (
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: tag.color }}
+                            aria-hidden
+                          />
+                        )}
+                        {tag.name}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
-            <div className="modal-action">
+            <div className="flex justify-end gap-2 border-t border-base-300 px-5 py-3">
               <button
                 type="button"
-                className="btn btn-ghost"
+                className="btn btn-ghost btn-sm"
                 onClick={() => {
                   setBulkTagOpen(false);
                   setBulkTagSelectedId(null);
@@ -1602,7 +1731,7 @@ export function ContactsListClient({
               </button>
               <button
                 type="button"
-                className="btn btn-primary"
+                className="btn btn-primary btn-sm"
                 onClick={() => {
                   if (!bulkTagSelectedId) return;
                   bulkAssignTagMutation.mutate({
@@ -1617,7 +1746,7 @@ export function ContactsListClient({
                 }
               >
                 {bulkAssignTagMutation.isPending ? (
-                  <span className="loading loading-spinner loading-sm" />
+                  <span className="loading loading-spinner loading-xs" />
                 ) : (
                   "Add tag"
                 )}
@@ -1637,48 +1766,17 @@ export function ContactsListClient({
         </dialog>
       )}
 
-      {canDeleteContacts && bulkDeleteOpen && (
-        <dialog open className="modal modal-middle">
-          <div className="modal-box">
-            <h3 className="text-lg font-semibold">Delete selected contacts</h3>
-            <p className="mt-2 text-sm text-base-content/70">
-              Soft-delete {selectedContactIds.size} contact
-              {selectedContactIds.size !== 1 ? "s" : ""}? They will be marked as
-              deleted and will no longer appear in this list.
-            </p>
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setBulkDeleteOpen(false)}
-                disabled={bulkDeleteMutation.isPending}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-error"
-                onClick={() =>
-                  bulkDeleteMutation.mutate(Array.from(selectedContactIds))
-                }
-                disabled={bulkDeleteMutation.isPending}
-              >
-                {bulkDeleteMutation.isPending ? (
-                  <span className="loading loading-spinner loading-sm" />
-                ) : (
-                  "Delete"
-                )}
-              </button>
-            </div>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button
-              type="button"
-              onClick={() => setBulkDeleteOpen(false)}
-              aria-label="Close"
-            />
-          </form>
-        </dialog>
+      {canDeleteContacts && (
+        <ConfirmDialog
+          open={bulkDeleteOpen}
+          title="Delete selected contacts"
+          description={`Soft-delete ${selectedContactIds.size} contact${selectedContactIds.size !== 1 ? "s" : ""}? They will be marked as deleted and no longer appear in this list.`}
+          confirmLabel="Delete"
+          tone="danger"
+          loading={bulkDeleteMutation.isPending}
+          onConfirm={() => bulkDeleteMutation.mutate(Array.from(selectedContactIds))}
+          onClose={() => setBulkDeleteOpen(false)}
+        />
       )}
     </div>
   );

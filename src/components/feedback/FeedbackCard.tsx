@@ -103,7 +103,7 @@ export function FeedbackCard({ report, onClick, isOwn }: FeedbackCardProps) {
         )}
 
         <div className="flex items-center justify-between mt-1">
-          <span className="font-mono-op text-[11px] tabular-nums text-base-content/50">
+          <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/50">
             {report.submittedBy ? `${report.submittedBy} · ` : ""}
             {formatRelative(report.createdAt)}
           </span>
