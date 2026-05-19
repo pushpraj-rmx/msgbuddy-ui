@@ -23,6 +23,7 @@ import {
   DEFAULT_WHATSAPP_TEMPLATE_LANGUAGE,
   WHATSAPP_TEMPLATE_LANGUAGE_OPTIONS,
 } from "@/lib/whatsapp-template-languages";
+import { CopyableId } from "@/components/ui/CopyableId";
 import { getApiError } from "@/lib/api-error";
 import { WhatsAppTemplatePreview } from "@/components/templates/WhatsAppTemplatePreview";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
@@ -1110,10 +1111,29 @@ export const ChannelTemplateVersionEditor = forwardRef<
                 <span className="text-base-content/50">Meta category auto-match</span>{" "}
                 {version.allowCategoryChange === false ? "Off (no auto marketing reclass)" : "On"}
               </div>
+              {/* MsgBuddy id used as `channelTemplateVersionId` on POST /v2/messages.
+                  Rendered above the Meta-side `providerVersionId` and named distinctly
+                  so the two aren't confused — they look similar at a glance but only
+                  one of them is what the API wants. */}
+              <div className="col-span-2 pt-1">
+                <CopyableId
+                  value={version.id}
+                  label="channelTemplateVersionId"
+                  srLabel="channel template version id"
+                  className="min-w-0 max-w-full"
+                />
+                <p className="mt-0.5 font-mono-op text-[0.625rem] text-base-content/35">
+                  POST /v2/messages — this is the id your app sends with.
+                </p>
+              </div>
               {version.providerVersionId && (
                 <div className="col-span-2">
-                  <span className="text-base-content/50">Provider version ID</span>{" "}
+                  <span className="text-base-content/50">Provider version ID (Meta)</span>{" "}
                   <span className="font-mono break-all">{version.providerVersionId}</span>
+                  <p className="mt-0.5 font-mono-op text-[0.625rem] text-base-content/35">
+                    Meta-side id. For tracing in Meta Business Manager only — not
+                    used by the send API.
+                  </p>
                 </div>
               )}
               {version.syncedAt && (

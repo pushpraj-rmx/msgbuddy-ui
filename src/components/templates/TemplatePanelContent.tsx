@@ -17,6 +17,7 @@ import type { TemplateCategory } from "@/lib/types";
 import { WhatsAppTemplatePreviewFromVersion } from "./WhatsAppTemplatePreview";
 import { getApiError } from "@/lib/api-error";
 import { PanelBody, PanelSection } from "@/components/right-panel/PanelBody";
+import { CopyableId } from "@/components/ui/CopyableId";
 
 export function TemplatePanelContent({ templateId }: { templateId: string }) {
   const queryClient = useQueryClient();
@@ -116,6 +117,30 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
             v{version.version} · {version.status}
           </p>
         )}
+      </PanelSection>
+
+      {/* Integration ids — what an external app needs to send via this template. */}
+      <PanelSection label="Integration">
+        <div className="space-y-2">
+          <CopyableId
+            value={template.id}
+            label="template id"
+            srLabel="template id"
+            className="min-w-0 max-w-full"
+          />
+          {version ? (
+            <CopyableId
+              value={version.id}
+              label="channelTemplateVersionId"
+              srLabel="channel template version id"
+              className="min-w-0 max-w-full"
+            />
+          ) : null}
+        </div>
+        <p className="mt-2 font-mono-op text-[0.6875rem] tracking-[0.04em] text-base-content/40">
+          POST /v2/messages · pass channelTemplateVersionId to pin this exact
+          version. A future re-approval won&apos;t change the wire shape.
+        </p>
       </PanelSection>
 
       {/* No WhatsApp channel — prompt to add */}
