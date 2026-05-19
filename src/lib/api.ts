@@ -1869,6 +1869,59 @@ export const workspaceApi = {
   },
 };
 
+/** Workspace-scoped, long-lived API key for server-to-server integration. */
+export interface ApiKeyResponseDto {
+  id: string;
+  workspaceId: string;
+  label: string;
+  /** `mb_live` for production keys, `mb_test` for sandbox keys. */
+  prefix: "mb_live" | "mb_test";
+  /** Last four chars of the plaintext, for masked display (`mb_live_…abc4`). */
+  lastFour: string;
+  /** Permission scopes. Today only `["full"]` is enforced; schema is forward-compatible. */
+  scopes: string[];
+  createdByUserId: string | null;
+  createdAt: string;
+  /** Last time the key authenticated a request, or `null` if never used. */
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+  expiresAt: string | null;
+}
+
+/** Returned ONLY on POST /v2/api-keys — `plaintextKey` is shown once and never persisted. */
+export interface CreatedApiKeyResponseDto extends ApiKeyResponseDto {
+  plaintextKey: string;
+}
+
+export interface CreateApiKeyDto {
+  label: string;
+  /** `true` → `mb_test_*` prefix. Otherwise `mb_live_*`. */
+  test?: boolean;
+  /** Forward-compatible. Backend currently ignores anything outside `["full"]`. */
+  scopes?: string[];
+  /** ISO 8601 string. Null/undefined = no expiry. */
+  expiresAt?: string;
+}
+
+export const apiKeysApi = {
+  list: async (): Promise<ApiKeyResponseDto[]> => {
+    const response = await api.get<ApiKeyResponseDto[]>(endpoints.apiKeys.list);
+    return response.data;
+  },
+
+  create: async (body: CreateApiKeyDto): Promise<CreatedApiKeyResponseDto> => {
+    const response = await api.post<CreatedApiKeyResponseDto>(
+      endpoints.apiKeys.create,
+      body,
+    );
+    return response.data;
+  },
+
+  revoke: async (id: string): Promise<void> => {
+    await api.delete(endpoints.apiKeys.revoke(id));
+  },
+};
+
 export const whatsappApi = {
   fetchPhoneStatus: async (phoneNumberId: string): Promise<WhatsAppPhoneStatus> => {
     const response = await api.get<{ success: true; data: WhatsAppPhoneStatus }>(

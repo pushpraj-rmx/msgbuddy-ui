@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { Users, Puzzle, Lock, Settings } from "lucide-react";
+import { Users, Puzzle, Lock, Settings, KeyRound } from "lucide-react";
 
 export function SettingsGearMenu({
   memberCount,
   hasPassword,
   showTeamLink = true,
   showIntegrationsLink = true,
+  showDevelopersLink = true,
 }: {
   memberCount: number;
   hasPassword: boolean;
   showTeamLink?: boolean;
   showIntegrationsLink?: boolean;
+  showDevelopersLink?: boolean;
 }) {
   return (
     <div className="dropdown dropdown-end">
@@ -57,6 +59,22 @@ export function SettingsGearMenu({
                 className="h-4 w-4 shrink-0 opacity-70"
                              />
               Integrations
+            </Link>
+          </li>
+        ) : null}
+        {showDevelopersLink ? (
+          <li role="none">
+            <Link href="/settings/developers" className="gap-3" role="menuitem">
+              <KeyRound
+                className="h-4 w-4 shrink-0 opacity-70"
+                fontSize="inherit"
+              />
+              <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
+                <span>Developers</span>
+                <span className="text-xs font-normal text-base-content/50">
+                  API keys
+                </span>
+              </span>
             </Link>
           </li>
         ) : null}

@@ -49,6 +49,11 @@ export const endpoints = {
     cloudApi: (id: string) => `${P}/workspaces/${id}/cloud-api`,
     messagingConfig: (id: string) => `${P}/workspaces/${id}/messaging-config`,
   },
+  apiKeys: {
+    list: `${P}/api-keys`,
+    create: `${P}/api-keys`,
+    revoke: (id: string) => `${P}/api-keys/${id}`,
+  },
   conversations: {
     list: `${P}/conversations`,
     stats: `${P}/conversations/stats`,

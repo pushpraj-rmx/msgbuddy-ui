@@ -334,6 +334,35 @@ export function SettingsClient({
           </div>
         </section>
 
+        {/* ── Developers (API keys) ── */}
+        {canManageWorkspace ? (
+          <section id="developers" className="space-y-3">
+            <span className="op-section-title">Developers</span>
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.875rem] font-semibold">API keys</span>
+                    <span className="op-tag">
+                      mb_live_…  ●●●●  ????
+                    </span>
+                  </div>
+                  <p className="text-[0.75rem] text-base-content/55">
+                    Generate keys for external apps to send messages and
+                    receive webhook events on this workspace&apos;s behalf.
+                  </p>
+                </div>
+                <a
+                  href="/settings/developers"
+                  className="btn btn-outline btn-sm"
+                >
+                  Manage keys
+                </a>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
         {/* ── Chatbot ── */}
         {canManageWorkspace ? (
           <section id="chatbot" className="space-y-3">
