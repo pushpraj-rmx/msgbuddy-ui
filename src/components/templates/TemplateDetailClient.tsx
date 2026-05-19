@@ -19,6 +19,7 @@ import {
   isWhatsAppAccountRestriction,
 } from "@/lib/sseEvents";
 import { getApiError } from "@/lib/api-error";
+import { CopyableId } from "@/components/ui/CopyableId";
 
 function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
   const stateQuery = useChannelTemplateState(ct.id, { refetchInterval: 10_000 });
@@ -29,7 +30,7 @@ function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
   return (
     <div className="card bg-base-100 border border-base-300 p-4">
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="op-tag">{ct.channel}</span>
             {ct.category && <span className="op-tag">{ct.category}</span>}
@@ -55,6 +56,58 @@ function ChannelTemplateCard({ ct }: { ct: ChannelTemplate }) {
           Manage
         </Link>
       </div>
+
+      {/* Integration ids — what an external app needs to send via this template. */}
+      {state?.activeVersion || state?.latestVersion ? (
+        <div className="mt-3 rounded-box border border-base-300 bg-base-200 px-3 py-2.5">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="op-label">integration</span>
+            <span
+              className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/40"
+              title="Use channelTemplateVersionId on POST /v2/messages to send via this template version."
+            >
+              POST /v2/messages
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {state.activeVersion ? (
+              <div className="flex items-center gap-2">
+                <span
+                  className="op-tag op-tag-ok shrink-0"
+                  title="Currently active — used when an integrator pins to this template (not version-specific)."
+                >
+                  ACTIVE v{state.activeVersion.version}
+                </span>
+                <CopyableId
+                  value={state.activeVersion.id}
+                  srLabel="active channel template version id"
+                  className="min-w-0 flex-1"
+                />
+              </div>
+            ) : null}
+            {state.latestVersion &&
+            state.latestVersion.id !== state.activeVersion?.id ? (
+              <div className="flex items-center gap-2">
+                <span
+                  className="op-tag shrink-0"
+                  title="Latest version regardless of approval / activation state. Useful while iterating."
+                >
+                  LATEST v{state.latestVersion.version}
+                </span>
+                <CopyableId
+                  value={state.latestVersion.id}
+                  srLabel="latest channel template version id"
+                  className="min-w-0 flex-1"
+                />
+              </div>
+            ) : null}
+          </div>
+          <p className="mt-2 font-mono-op text-[0.6875rem] text-base-content/40">
+            channelTemplateVersionId · pin the exact version your app sends
+            with, so a future re-approval doesn&apos;t change the wire shape.
+          </p>
+        </div>
+      ) : null}
 
       {stateQuery.isError && (
         <div role="alert" className="mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
@@ -241,13 +294,26 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
 
       <div className="card bg-base-100 border border-base-300 p-4">
         <div className="flex items-start justify-between gap-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xl font-semibold">{template.name}</div>
             {template.description && (
               <div className="text-sm text-base-content/70 mt-1">
                 {template.description}
               </div>
             )}
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <CopyableId
+                value={template.id}
+                label="template id"
+                srLabel="template id"
+              />
+              <span
+                className="font-mono-op text-[0.6875rem] tracking-[0.04em] text-base-content/40"
+                title="Use the template id with GET /v2/templates/:id to fetch this template via the API."
+              >
+                GET /v2/templates/:id
+              </span>
+            </div>
           </div>
           <button className="btn btn-outline btn-sm" onClick={openEdit}>
             Edit
