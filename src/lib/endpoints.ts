@@ -54,6 +54,18 @@ export const endpoints = {
     create: `${P}/api-keys`,
     revoke: (id: string) => `${P}/api-keys/${id}`,
   },
+  webhookEndpoints: {
+    list: `${P}/webhook-endpoints`,
+    create: `${P}/webhook-endpoints`,
+    byId: (id: string) => `${P}/webhook-endpoints/${id}`,
+    rotateSecret: (id: string) => `${P}/webhook-endpoints/${id}/rotate-secret`,
+    test: (id: string) => `${P}/webhook-endpoints/${id}/test`,
+    deliveries: (id: string) => `${P}/webhook-endpoints/${id}/deliveries`,
+  },
+  webhookDeliveries: {
+    byId: (id: string) => `${P}/webhook-deliveries/${id}`,
+    replay: (id: string) => `${P}/webhook-deliveries/${id}/replay`,
+  },
   conversations: {
     list: `${P}/conversations`,
     stats: `${P}/conversations/stats`,

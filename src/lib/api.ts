@@ -1922,6 +1922,215 @@ export const apiKeysApi = {
   },
 };
 
+/** Lifecycle status for a webhook delivery row (Prisma enum mirror). */
+export type WebhookDeliveryStatus =
+  | "PENDING"
+  | "IN_FLIGHT"
+  | "SUCCESS"
+  | "FAILED";
+
+/** Workspace-scoped outbound-webhook destination. */
+export interface WebhookEndpointResponseDto {
+  id: string;
+  workspaceId: string;
+  /** HTTPS URL. SSRF-guarded — private / loopback / link-local IPs rejected. */
+  url: string;
+  /** Subscribed event wire-names, or `["*"]` for the wildcard. */
+  eventTypes: string[];
+  /** User-controlled toggle. Distinct from auto-disable — see disabledAt. */
+  enabled: boolean;
+  /** Envelope api-version override for this endpoint (`YYYY-MM-DD`). */
+  apiVersion: string;
+  description: string | null;
+  /** Last four chars of the signing secret, for masked display. */
+  lastFour: string;
+  consecutiveFailures: number;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  /** Set ONLY when auto-disabled. Distinguishes from user-disabled (`enabled=false`). */
+  disabledAt: string | null;
+  disabledReason: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Returned ONLY by POST /webhook-endpoints and the rotate-secret endpoint. */
+export interface CreatedWebhookEndpointResponseDto
+  extends WebhookEndpointResponseDto {
+  plaintextSecret: string;
+}
+
+export interface CreateWebhookEndpointDto {
+  url: string;
+  eventTypes: string[];
+  description?: string;
+  apiVersion?: string;
+  enabled?: boolean;
+}
+
+export interface UpdateWebhookEndpointDto {
+  url?: string;
+  eventTypes?: string[];
+  description?: string;
+  apiVersion?: string;
+  enabled?: boolean;
+}
+
+/** Single attempted delivery — the integrator-debug surface. */
+export interface WebhookDeliveryResponseDto {
+  id: string;
+  workspaceId: string;
+  endpointId: string;
+  /** Envelope id — integrators use this as their dedup key. */
+  eventId: string;
+  eventType: string;
+  apiVersion: string;
+  /** The exact JSON envelope sent on the wire. */
+  payload: Record<string, unknown>;
+  status: WebhookDeliveryStatus;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  responseStatus: number | null;
+  /** Response body truncated to 4 KB on the backend. */
+  responseBody: string | null;
+  error: string | null;
+  queuedAt: string;
+  firstAttemptAt: string | null;
+  lastAttemptAt: string | null;
+  completedAt: string | null;
+}
+
+export interface WebhookDeliveryListResponseDto {
+  items: WebhookDeliveryResponseDto[];
+  nextCursor: string | null;
+}
+
+export const webhooksApi = {
+  list: async (): Promise<WebhookEndpointResponseDto[]> => {
+    const response = await api.get<WebhookEndpointResponseDto[]>(
+      endpoints.webhookEndpoints.list,
+    );
+    return response.data;
+  },
+
+  create: async (
+    body: CreateWebhookEndpointDto,
+  ): Promise<CreatedWebhookEndpointResponseDto> => {
+    const response = await api.post<CreatedWebhookEndpointResponseDto>(
+      endpoints.webhookEndpoints.create,
+      body,
+    );
+    return response.data;
+  },
+
+  get: async (id: string): Promise<WebhookEndpointResponseDto> => {
+    const response = await api.get<WebhookEndpointResponseDto>(
+      endpoints.webhookEndpoints.byId(id),
+    );
+    return response.data;
+  },
+
+  update: async (
+    id: string,
+    body: UpdateWebhookEndpointDto,
+  ): Promise<WebhookEndpointResponseDto> => {
+    const response = await api.patch<WebhookEndpointResponseDto>(
+      endpoints.webhookEndpoints.byId(id),
+      body,
+    );
+    return response.data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(endpoints.webhookEndpoints.byId(id));
+  },
+
+  rotateSecret: async (
+    id: string,
+  ): Promise<CreatedWebhookEndpointResponseDto> => {
+    const response = await api.post<CreatedWebhookEndpointResponseDto>(
+      endpoints.webhookEndpoints.rotateSecret(id),
+    );
+    return response.data;
+  },
+
+  testFire: async (id: string): Promise<WebhookDeliveryResponseDto> => {
+    const response = await api.post<WebhookDeliveryResponseDto>(
+      endpoints.webhookEndpoints.test(id),
+    );
+    return response.data;
+  },
+
+  listDeliveries: async (
+    endpointId: string,
+    opts?: { limit?: number; cursor?: string },
+  ): Promise<WebhookDeliveryListResponseDto> => {
+    const params = new URLSearchParams();
+    if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+    if (opts?.cursor) params.set("cursor", opts.cursor);
+    const qs = params.toString();
+    const url =
+      endpoints.webhookEndpoints.deliveries(endpointId) +
+      (qs ? `?${qs}` : "");
+    const response = await api.get<WebhookDeliveryListResponseDto>(url);
+    return response.data;
+  },
+
+  getDelivery: async (
+    deliveryId: string,
+  ): Promise<WebhookDeliveryResponseDto> => {
+    const response = await api.get<WebhookDeliveryResponseDto>(
+      endpoints.webhookDeliveries.byId(deliveryId),
+    );
+    return response.data;
+  },
+
+  replayDelivery: async (
+    deliveryId: string,
+  ): Promise<WebhookDeliveryResponseDto> => {
+    const response = await api.post<WebhookDeliveryResponseDto>(
+      endpoints.webhookDeliveries.replay(deliveryId),
+    );
+    return response.data;
+  },
+};
+
+/**
+ * Public catalogue of outbound webhook event names.
+ *
+ * Hard-coded mirror of `webhook-events.ts` in the backend. The wire strings
+ * here are part of the API contract — they MUST match the backend exactly.
+ * Renames go through a 6-month deprecation window (both old and new fire);
+ * additions land in a minor release and integrators MUST default-branch on
+ * unknown event names.
+ */
+export const WEBHOOK_EVENT_CATALOGUE: ReadonlyArray<{
+  /** Wire string used as the subscription value and the envelope `event` field. */
+  value: string;
+  category: "MESSAGE" | "TEMPLATE" | "CONTACT" | "SYSTEM";
+  /** One-line, integrator-facing. */
+  hint: string;
+}> = [
+  // Message lifecycle
+  { value: "message.queued", category: "MESSAGE", hint: "Outbound message accepted and queued for the provider." },
+  { value: "message.sent", category: "MESSAGE", hint: "Provider acknowledged the send (single-tick / accepted)." },
+  { value: "message.delivered", category: "MESSAGE", hint: "Recipient device acknowledged receipt (double-tick)." },
+  { value: "message.read", category: "MESSAGE", hint: "Recipient read the message." },
+  { value: "message.failed", category: "MESSAGE", hint: "Delivery failed after provider retries. Includes errorKind, errorRetryable, providerCode." },
+  { value: "message.received", category: "MESSAGE", hint: "Inbound message landed from a contact." },
+  // Template
+  { value: "template.approval_status_changed", category: "TEMPLATE", hint: "WhatsApp template version status changed (PENDING / APPROVED / REJECTED / PAUSED)." },
+  // Contact
+  { value: "contact.opted_out", category: "CONTACT", hint: "Contact opted out of a channel (STOP keyword or dashboard)." },
+  { value: "contact.opted_in", category: "CONTACT", hint: "Contact re-opted in (START keyword or dashboard)." },
+  // System
+  { value: "webhook.disabled", category: "SYSTEM", hint: "Final delivery before the endpoint is auto-disabled after sustained failures." },
+];
+
+/** Wire wildcard sentinel — subscribe to every event including future additions. */
+export const WEBHOOK_WILDCARD = "*";
+
 export const whatsappApi = {
   fetchPhoneStatus: async (phoneNumberId: string): Promise<WhatsAppPhoneStatus> => {
     const response = await api.get<{ success: true; data: WhatsAppPhoneStatus }>(

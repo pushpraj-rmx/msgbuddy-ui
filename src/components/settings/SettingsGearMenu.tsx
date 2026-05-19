@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Users, Puzzle, Lock, Settings, KeyRound } from "lucide-react";
+import { Users, Puzzle, Lock, Settings, KeyRound, Webhook } from "lucide-react";
 
 export function SettingsGearMenu({
   memberCount,
@@ -9,12 +9,14 @@ export function SettingsGearMenu({
   showTeamLink = true,
   showIntegrationsLink = true,
   showDevelopersLink = true,
+  showWebhooksLink = true,
 }: {
   memberCount: number;
   hasPassword: boolean;
   showTeamLink?: boolean;
   showIntegrationsLink?: boolean;
   showDevelopersLink?: boolean;
+  showWebhooksLink?: boolean;
 }) {
   return (
     <div className="dropdown dropdown-end">
@@ -73,6 +75,22 @@ export function SettingsGearMenu({
                 <span>Developers</span>
                 <span className="text-xs font-normal text-base-content/50">
                   API keys
+                </span>
+              </span>
+            </Link>
+          </li>
+        ) : null}
+        {showWebhooksLink ? (
+          <li role="none">
+            <Link href="/settings/webhooks" className="gap-3" role="menuitem">
+              <Webhook
+                className="h-4 w-4 shrink-0 opacity-70"
+                fontSize="inherit"
+              />
+              <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
+                <span>Webhooks</span>
+                <span className="text-xs font-normal text-base-content/50">
+                  Outbound events
                 </span>
               </span>
             </Link>
