@@ -9,6 +9,11 @@ import {
   type ApiKeyResponseDto,
   type CreatedApiKeyResponseDto,
 } from "@/lib/api";
+import {
+  LastUsedDot,
+  absoluteUTC,
+  relativeShort,
+} from "@/lib/relative-time";
 
 type LifecycleStatus = "ACTIVE" | "REVOKED" | "EXPIRED";
 
@@ -16,35 +21,6 @@ function lifecycleStatus(k: ApiKeyResponseDto, now: number): LifecycleStatus {
   if (k.revokedAt) return "REVOKED";
   if (k.expiresAt && new Date(k.expiresAt).getTime() <= now) return "EXPIRED";
   return "ACTIVE";
-}
-
-/** Compact "12s / 4m / 3h / 2d / 6w / 8mo / 2y" — null returns null. */
-function relativeShort(iso: string | null, now: number): string | null {
-  if (!iso) return null;
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return null;
-  const diff = Math.max(0, now - then);
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return `${s}s ago`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  if (d < 7) return `${d}d ago`;
-  const w = Math.floor(d / 7);
-  if (w < 4) return `${w}w ago`;
-  const mo = Math.floor(d / 30);
-  if (mo < 12) return `${mo}mo ago`;
-  const y = Math.floor(d / 365);
-  return `${y}y ago`;
-}
-
-function absoluteUTC(iso: string | null): string | undefined {
-  if (!iso) return undefined;
-  const t = new Date(iso);
-  if (Number.isNaN(t.getTime())) return undefined;
-  return t.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
 }
 
 /**
@@ -94,57 +70,6 @@ function StatusPill({ status }: { status: LifecycleStatus }) {
       }}
     >
       {status}
-    </span>
-  );
-}
-
-/**
- * Last-used indicator. Six-pixel dot with a freshness gradient + relative
- * timestamp. Lets a user with three keys see which one is hot in production
- * right now without diving into the usage log.
- */
-function LastUsedDot({
-  lastUsedAt,
-  now,
-}: {
-  lastUsedAt: string | null;
-  now: number;
-}) {
-  if (!lastUsedAt) {
-    return <span className="font-mono-op text-base-content/30">—</span>;
-  }
-  const then = new Date(lastUsedAt).getTime();
-  const ageMs = now - then;
-  const hour = 3600_000;
-  const day = 24 * hour;
-  let bg: string;
-  let opacity = 1;
-  if (ageMs < hour) {
-    bg = "var(--op-accent)";
-  } else if (ageMs < day) {
-    bg = "var(--op-accent)";
-    opacity = 0.5;
-  } else {
-    bg = "var(--op-ink-dim)";
-    opacity = 0.65;
-  }
-  return (
-    <span
-      className="font-mono-op inline-flex items-center gap-2 text-[0.75rem] tabular-nums"
-      title={absoluteUTC(lastUsedAt)}
-    >
-      <span
-        aria-hidden="true"
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: "50%",
-          background: bg,
-          opacity,
-          flexShrink: 0,
-        }}
-      />
-      <span className="text-base-content/80">{relativeShort(lastUsedAt, now)}</span>
     </span>
   );
 }
