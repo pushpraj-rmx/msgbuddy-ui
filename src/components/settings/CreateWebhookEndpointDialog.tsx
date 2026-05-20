@@ -47,7 +47,13 @@ export function CreateWebhookEndpointDialog({
   const [created, setCreated] = useState<CreatedWebhookEndpointResponseDto | null>(
     null,
   );
-  const [copyStamp, setCopyStamp] = useState<string | null>(null);
+  /**
+   * Separate copy-stamps per card so a user can copy the signing secret
+   * then immediately copy the verify token without the first stamp
+   * disappearing on the second click.
+   */
+  const [secretCopyStamp, setSecretCopyStamp] = useState<string | null>(null);
+  const [tokenCopyStamp, setTokenCopyStamp] = useState<string | null>(null);
   const [savedConfirmed, setSavedConfirmed] = useState(false);
 
   // Open / close
@@ -74,7 +80,8 @@ export function CreateWebhookEndpointDialog({
     setSubmitting(false);
     setError(null);
     setCreated(null);
-    setCopyStamp(null);
+    setSecretCopyStamp(null);
+    setTokenCopyStamp(null);
     setSavedConfirmed(false);
   }, [open]);
 
@@ -132,19 +139,39 @@ export function CreateWebhookEndpointDialog({
     }
   };
 
-  const handleCopy = async () => {
+  const stamp = () => {
+    const now = new Date();
+    return [
+      String(now.getHours()).padStart(2, "0"),
+      String(now.getMinutes()).padStart(2, "0"),
+      String(now.getSeconds()).padStart(2, "0"),
+    ].join(":");
+  };
+
+  const handleCopySecret = async () => {
     if (!created) return;
     try {
       await navigator.clipboard.writeText(created.plaintextSecret);
-      const now = new Date();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const ss = String(now.getSeconds()).padStart(2, "0");
-      setCopyStamp(`${hh}:${mm}:${ss}`);
-      setTimeout(() => setCopyStamp(null), 4000);
+      const at = stamp();
+      setSecretCopyStamp(at);
+      setTimeout(() => setSecretCopyStamp(null), 4000);
     } catch {
       setError(
         "Clipboard unavailable. Select the secret above and copy it manually.",
+      );
+    }
+  };
+
+  const handleCopyVerifyToken = async () => {
+    if (!created?.plaintextVerifyToken) return;
+    try {
+      await navigator.clipboard.writeText(created.plaintextVerifyToken);
+      const at = stamp();
+      setTokenCopyStamp(at);
+      setTimeout(() => setTokenCopyStamp(null), 4000);
+    } catch {
+      setError(
+        "Clipboard unavailable. Select the token above and copy it manually.",
       );
     }
   };
@@ -184,12 +211,15 @@ export function CreateWebhookEndpointDialog({
         ) : (
           <RevealStage
             secret={created?.plaintextSecret ?? ""}
+            verifyToken={created?.plaintextVerifyToken ?? ""}
             url={created?.url ?? ""}
-            copyStamp={copyStamp}
+            secretCopyStamp={secretCopyStamp}
+            tokenCopyStamp={tokenCopyStamp}
             savedConfirmed={savedConfirmed}
             setSavedConfirmed={setSavedConfirmed}
             error={error}
-            onCopy={() => void handleCopy()}
+            onCopySecret={() => void handleCopySecret()}
+            onCopyVerifyToken={() => void handleCopyVerifyToken()}
             onDone={handleDone}
           />
         )}
@@ -364,23 +394,85 @@ function FormStage({
   );
 }
 
+function SecretCard({
+  label,
+  caption,
+  value,
+  stamp,
+  onCopy,
+  ariaLabel,
+  delayMs = 60,
+}: {
+  /** mono uppercase op-label above the card. */
+  label: string;
+  caption: string;
+  value: string;
+  stamp: string | null;
+  onCopy: () => void;
+  ariaLabel: string;
+  delayMs?: number;
+}) {
+  return (
+    <div
+      style={{
+        animation: `op-panel-fade-in 200ms ${delayMs}ms cubic-bezier(0.2, 0, 0, 1) backwards`,
+      }}
+    >
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="op-label">{label}</span>
+        <span className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/40">
+          {caption}
+        </span>
+      </div>
+      <div className="op-grain flex items-center gap-3 rounded-box border border-base-300 bg-[var(--op-bg-2)] px-5 py-4">
+        <code
+          className="flex-1 select-all break-all font-mono-op text-[1rem] tabular-nums tracking-tight text-base-content/95"
+          aria-label={ariaLabel}
+        >
+          {value}
+        </code>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="btn btn-sm shrink-0 border-base-300 bg-base-100 font-mono-op text-[0.75rem] tracking-[0.04em] text-base-content hover:bg-[var(--op-bg-hover)]"
+          style={{ minWidth: "11ch" }}
+        >
+          {stamp ? (
+            <span style={{ color: "var(--op-accent)" }}>
+              Copied {stamp}
+            </span>
+          ) : (
+            <>Copy</>
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RevealStage({
   secret,
+  verifyToken,
   url,
-  copyStamp,
+  secretCopyStamp,
+  tokenCopyStamp,
   savedConfirmed,
   setSavedConfirmed,
   error,
-  onCopy,
+  onCopySecret,
+  onCopyVerifyToken,
   onDone,
 }: {
   secret: string;
+  verifyToken: string;
   url: string;
-  copyStamp: string | null;
+  secretCopyStamp: string | null;
+  tokenCopyStamp: string | null;
   savedConfirmed: boolean;
   setSavedConfirmed: (v: boolean) => void;
   error: string | null;
-  onCopy: () => void;
+  onCopySecret: () => void;
+  onCopyVerifyToken: () => void;
   onDone: () => void;
 }) {
   return (
@@ -392,83 +484,91 @@ function RevealStage({
         className="mt-1 italic text-[1.25rem] leading-snug tracking-[-0.015em]"
         style={{ fontFamily: "var(--font-serif)" }}
       >
-        Here is your signing secret.
+        Save these two values.
       </h3>
       <p className="mt-2 break-all font-mono-op text-[0.78125rem] text-base-content/60">
         {url}
       </p>
+      <p className="mt-2 text-[0.8125rem] leading-relaxed text-base-content/70">
+        Your endpoint lands in <span className="font-mono-op">PENDING VERIFY</span>{" "}
+        until you deploy the verify handler and click Verify on the next screen.
+        Both secrets below are shown ONCE and can never be retrieved again.
+      </p>
 
-      <div
-        className="op-grain mt-5 flex items-center gap-3 rounded-box border border-base-300 bg-[var(--op-bg-2)] px-5 py-4"
-        style={{
-          animation:
-            "op-panel-fade-in 200ms 60ms cubic-bezier(0.2, 0, 0, 1) backwards",
-        }}
-      >
-        <code
-          className="flex-1 select-all break-all font-mono-op text-[1.0625rem] tabular-nums tracking-tight text-base-content/95"
-          aria-label="Signing secret value"
-        >
-          {secret}
-        </code>
-        <button
-          type="button"
-          onClick={onCopy}
-          className="btn btn-sm shrink-0 border-base-300 bg-base-100 font-mono-op text-[0.75rem] tracking-[0.04em] text-base-content hover:bg-[var(--op-bg-hover)]"
-          style={{ minWidth: "11ch" }}
-        >
-          {copyStamp ? (
-            <span style={{ color: "var(--op-accent)" }}>
-              Copied {copyStamp}
-            </span>
-          ) : (
-            <>Copy</>
-          )}
-        </button>
-      </div>
-
-      <div
-        className="mt-4 rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3"
-        style={{
-          animation:
-            "op-panel-fade-in 200ms 140ms cubic-bezier(0.2, 0, 0, 1) backwards",
-        }}
-      >
-        <span
-          className="op-label mb-1 block"
-          style={{ color: "var(--op-warn)" }}
-        >
-          one-time view
-        </span>
-        <p className="text-[0.8125rem] leading-relaxed">
-          MsgBuddy will sign every delivery with HMAC-SHA256 over the raw
-          request body and pass the result in{" "}
-          <code className="font-mono-op text-base-content/80">
-            X-MsgBuddy-Signature
-          </code>
-          . Save this secret in your verification code now — it cannot be
-          retrieved later, only rotated.
-        </p>
-      </div>
-
-      <label
-        className="mt-5 flex cursor-pointer items-start gap-3"
-        style={{
-          animation:
-            "op-panel-fade-in 200ms 220ms cubic-bezier(0.2, 0, 0, 1) backwards",
-        }}
-      >
-        <input
-          type="checkbox"
-          className="checkbox checkbox-sm mt-0.5"
-          checked={savedConfirmed}
-          onChange={(e) => setSavedConfirmed(e.target.checked)}
+      <div className="mt-5 max-h-[55vh] space-y-4 overflow-y-auto pr-1">
+        <SecretCard
+          label="signing secret"
+          caption="X-MsgBuddy-Signature"
+          value={secret}
+          stamp={secretCopyStamp}
+          onCopy={onCopySecret}
+          ariaLabel="Signing secret value"
+          delayMs={60}
         />
-        <span className="text-[0.8125rem] leading-relaxed">
-          I&apos;ve saved this secret in my verification code or secret
-          store.
-        </span>
-      </label>
+        <SecretCard
+          label="verification token"
+          caption="mb_verify_token"
+          value={verifyToken}
+          stamp={tokenCopyStamp}
+          onCopy={onCopyVerifyToken}
+          ariaLabel="Verification token value"
+          delayMs={140}
+        />
+
+        <div
+          className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3"
+          style={{
+            animation:
+              "op-panel-fade-in 200ms 220ms cubic-bezier(0.2, 0, 0, 1) backwards",
+          }}
+        >
+          <span
+            className="op-label mb-1 block"
+            style={{ color: "var(--op-warn)" }}
+          >
+            one-time view · what each does
+          </span>
+          <ul className="space-y-1 text-[0.8125rem] leading-relaxed">
+            <li>
+              <span className="font-mono-op text-base-content/80">
+                signing secret
+              </span>{" "}
+              — MsgBuddy HMAC-SHA256s the raw body of every delivery with this.
+              Verify on your server before trusting the payload.
+            </li>
+            <li>
+              <span className="font-mono-op text-base-content/80">
+                verification token
+              </span>{" "}
+              — hardcode this in your verify-GET handler. When MsgBuddy issues
+              the one-time handshake, your server compares the
+              <span className="font-mono-op"> mb_verify_token</span> query param
+              against this value and echoes the
+              <span className="font-mono-op"> mb_challenge</span> back if it
+              matches.
+            </li>
+          </ul>
+        </div>
+
+        <label
+          className="flex cursor-pointer items-start gap-3"
+          style={{
+            animation:
+              "op-panel-fade-in 200ms 300ms cubic-bezier(0.2, 0, 0, 1) backwards",
+          }}
+        >
+          <input
+            type="checkbox"
+            className="checkbox checkbox-sm mt-0.5"
+            checked={savedConfirmed}
+            onChange={(e) => setSavedConfirmed(e.target.checked)}
+          />
+          <span className="text-[0.8125rem] leading-relaxed">
+            I&apos;ve saved BOTH the signing secret and the verification token
+            in my server&apos;s secret store.
+          </span>
+        </label>
+      </div>
 
       {error ? (
         <div

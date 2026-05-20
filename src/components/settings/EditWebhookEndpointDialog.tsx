@@ -149,6 +149,20 @@ export function EditWebhookEndpointDialog({
               onChange={(e) => setUrl(e.target.value)}
               disabled={submitting}
             />
+            {endpoint && url.trim() !== endpoint.url ? (
+              <div className="mt-2 rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2">
+                <span
+                  className="op-label mb-1 block"
+                  style={{ color: "var(--op-warn)" }}
+                >
+                  url change resets verification
+                </span>
+                <p className="text-[0.75rem] leading-relaxed">
+                  Changing the URL invalidates the previous verification.
+                  Events will pause until you re-verify the new URL.
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <div>

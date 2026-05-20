@@ -60,6 +60,7 @@ export const endpoints = {
     byId: (id: string) => `${P}/webhook-endpoints/${id}`,
     rotateSecret: (id: string) => `${P}/webhook-endpoints/${id}/rotate-secret`,
     test: (id: string) => `${P}/webhook-endpoints/${id}/test`,
+    verify: (id: string) => `${P}/webhook-endpoints/${id}/verify`,
     deliveries: (id: string) => `${P}/webhook-endpoints/${id}/deliveries`,
   },
   webhookDeliveries: {
@@ -198,6 +199,7 @@ export const endpoints = {
     resume: (id: string) => `${P}/campaigns/${id}/resume`,
     cancel: (id: string) => `${P}/campaigns/${id}/cancel`,
     drainQueue: (id: string) => `${P}/campaigns/${id}/drain-queue`,
+    retryFailed: (id: string) => `${P}/campaigns/${id}/retry-failed`,
     duplicate: (id: string) => `${P}/campaigns/${id}/duplicate`,
     progress: (id: string) => `${P}/campaigns/${id}/progress`,
     runs: (id: string) => `${P}/campaigns/${id}/runs`,

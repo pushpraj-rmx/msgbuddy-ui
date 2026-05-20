@@ -12,6 +12,23 @@ function EndpointStatusBadge({
 }: {
   endpoint: WebhookEndpointResponseDto;
 }) {
+  // Status precedence: PENDING VERIFY > AUTO-DISABLED > DISABLED > ACTIVE.
+  // Verification gates everything, so an unverified row is always "PENDING"
+  // regardless of the enabled / disabledAt fields.
+  if (endpoint.verifiedAt === null) {
+    return (
+      <span
+        className="op-tag op-tag-warn"
+        style={{
+          borderLeftWidth: "2px",
+          borderLeftColor: "var(--op-warn)",
+          paddingLeft: "8px",
+        }}
+      >
+        PENDING VERIFY
+      </span>
+    );
+  }
   if (endpoint.disabledAt) {
     return (
       <span
@@ -54,6 +71,28 @@ function EndpointStatusBadge({
   );
 }
 
+/** Friendly english for the most-common verification failure reasons. */
+const VERIFY_REASON_HINT: Record<string, string> = {
+  CHALLENGE_MISMATCH:
+    'Your handler responded but did not echo the mb_challenge value. ' +
+    'Make sure you read mb_challenge from the query string and write it back as ' +
+    'the response body (text/plain, no JSON wrapping).',
+  NON_2XX_RESPONSE:
+    'Your handler responded with a non-200 status code.',
+  TIMEOUT:
+    'Your handler did not respond within 10 seconds.',
+  DNS_FAILURE:
+    'MsgBuddy could not resolve the URL. Check the hostname.',
+  TLS_FAILURE:
+    'The TLS handshake failed. Make sure the certificate is valid.',
+  EMPTY_BODY:
+    'Your handler responded 200 but with an empty body.',
+  RESPONSE_TOO_LARGE:
+    'Your handler responded with more than 4 KB of body. The handler should write only the mb_challenge value.',
+  URL_REJECTED_SSRF:
+    'URL resolves to a private / loopback / link-local IP and was rejected.',
+};
+
 export function WebhookDetailPanel({
   endpoint,
   workspaceDefaultApiVersion,
@@ -73,6 +112,46 @@ export function WebhookDetailPanel({
   const [reenabling, setReenabling] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [reenableError, setReenableError] = useState<string | null>(null);
+
+  const [verifying, setVerifying] = useState(false);
+  const [verifyError, setVerifyError] = useState<{
+    reason?: string;
+    detail?: string;
+    httpStatus?: number;
+  } | null>(null);
+
+  const handleVerify = async () => {
+    setVerifying(true);
+    setVerifyError(null);
+    try {
+      const updated = await webhooksApi.verify(endpoint.id);
+      onUpdated(updated);
+      // Once verified, the deliveries panel will start showing data on
+      // first test-fire — bump the reload token so the panel refreshes.
+      setReloadToken((t) => t + 1);
+    } catch (e) {
+      const err = e as {
+        response?: {
+          data?: {
+            message?: string;
+            details?: {
+              reason?: string;
+              detail?: string;
+              httpStatus?: number;
+            };
+          };
+        };
+      };
+      const details = err.response?.data?.details;
+      setVerifyError({
+        reason: details?.reason,
+        detail: details?.detail ?? err.response?.data?.message,
+        httpStatus: details?.httpStatus,
+      });
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const handleReenable = async () => {
     setReenabling(true);
@@ -207,6 +286,89 @@ export function WebhookDetailPanel({
         </div>
       </header>
 
+      {/* Pending-verify band — takes priority over auto-disabled because
+          an unverified endpoint can't have fired any deliveries yet.
+          Amber tone (not red) — verification is the user's next step, not
+          a failure they need to recover from. */}
+      {endpoint.verifiedAt === null ? (
+        <div className="rounded-box border border-warning/40 border-l-2 border-l-warning bg-base-200">
+          <div className="flex flex-wrap items-start justify-between gap-3 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <span
+                className="op-label mb-0.5 block"
+                style={{ color: "var(--op-warn)" }}
+              >
+                awaiting verification
+              </span>
+              <p className="text-[0.8125rem] leading-relaxed">
+                MsgBuddy will issue a single{" "}
+                <span className="font-mono-op text-base-content">
+                  GET {endpoint.url}
+                </span>{" "}
+                with{" "}
+                <span className="font-mono-op text-base-content">
+                  mb_verify_token
+                </span>{" "}
+                +{" "}
+                <span className="font-mono-op text-base-content">
+                  mb_challenge
+                </span>{" "}
+                query params. Your handler must echo{" "}
+                <span className="font-mono-op text-base-content">
+                  mb_challenge
+                </span>{" "}
+                as the plain-text response body. No events deliver until
+                this succeeds.
+              </p>
+              {endpoint.lastVerifyError ? (
+                <div className="mt-2 rounded-box border border-error/20 bg-base-100 px-3 py-2">
+                  <span className="op-label mb-1 block text-error">
+                    last attempt failed
+                  </span>
+                  <p className="font-mono-op text-[0.6875rem] text-error/85">
+                    {endpoint.lastVerifyError}
+                  </p>
+                  {VERIFY_REASON_HINT[endpoint.lastVerifyError] ? (
+                    <p className="mt-1 text-[0.75rem] leading-relaxed text-base-content/70">
+                      {VERIFY_REASON_HINT[endpoint.lastVerifyError]}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+              {verifyError ? (
+                <div className="mt-2 rounded-box border border-error/30 border-l-2 border-l-error bg-base-100 px-3 py-2">
+                  <span className="op-label mb-1 block text-error">
+                    verification failed
+                  </span>
+                  <p className="font-mono-op text-[0.6875rem] text-error/85">
+                    {verifyError.reason ?? "unknown"}
+                    {verifyError.httpStatus
+                      ? ` · http ${verifyError.httpStatus}`
+                      : ""}
+                  </p>
+                  {verifyError.detail ? (
+                    <p className="mt-1 text-[0.75rem] leading-relaxed text-base-content/70">
+                      {verifyError.detail}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm shrink-0"
+              onClick={() => void handleVerify()}
+              disabled={verifying}
+            >
+              {verifying ? (
+                <span className="loading loading-spinner loading-xs" />
+              ) : null}
+              {verifying ? "Verifying…" : "Verify endpoint"}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* Auto-disabled band */}
       {endpoint.disabledAt ? (
         <div className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200">
@@ -257,7 +419,14 @@ export function WebhookDetailPanel({
       {/* Deliveries panel */}
       <WebhookDeliveriesPanel
         endpointId={endpoint.id}
-        endpointEnabled={endpoint.enabled && !endpoint.disabledAt}
+        // Test-fire requires the endpoint to be enabled, not auto-disabled,
+        // AND verified — the backend returns 422 WEBHOOK_NOT_VERIFIED if
+        // verifiedAt is null, so we lock the button up here for clarity.
+        endpointEnabled={
+          endpoint.enabled &&
+          !endpoint.disabledAt &&
+          endpoint.verifiedAt !== null
+        }
         reloadToken={reloadToken}
       />
     </div>

@@ -1109,6 +1109,24 @@ export const campaignsApi = {
     const response = await api.post(endpoints.campaigns.drainQueue(id));
     return response.data as { campaignId: string; removedFromQueue: number };
   },
+  /**
+   * Re-run every FAILED job in a run. Flips the rows back to PENDING,
+   * decrements `failedJobs` and increments `pendingJobs`, revives a
+   * COMPLETED/FAILED run to RUNNING, and re-enqueues to the campaign queue.
+   * `runId` defaults to the latest run when omitted.
+   */
+  retryFailed: async (id: string, runId?: string) => {
+    const response = await api.post(
+      endpoints.campaigns.retryFailed(id),
+      runId ? { runId } : {},
+    );
+    return response.data as {
+      runId: string;
+      retriedCount: number;
+      enqueuedCount: number;
+      runStatus: string;
+    };
+  },
   duplicate: async (id: string) => {
     const response = await api.post(endpoints.campaigns.duplicate(id));
     return response.data;
@@ -1950,6 +1968,20 @@ export interface WebhookEndpointResponseDto {
   /** Set ONLY when auto-disabled. Distinguishes from user-disabled (`enabled=false`). */
   disabledAt: string | null;
   disabledReason: string | null;
+  /** Last four chars of the plaintext verification token, for masked display. */
+  verifyTokenLastFour: string | null;
+  /**
+   * Set the first time the URL successfully echoed `mb_challenge` in a
+   * verification GET. Null = pending verification. The event-bridge skips
+   * delivery while null. Reset to null on URL change via PATCH.
+   */
+  verifiedAt: string | null;
+  lastVerifyAttemptAt: string | null;
+  /**
+   * Reason from the most-recent failed verification attempt. Cleared on
+   * success. Mirrors the public {@link VerificationFailureReason} enum.
+   */
+  lastVerifyError: string | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -1959,7 +1991,24 @@ export interface WebhookEndpointResponseDto {
 export interface CreatedWebhookEndpointResponseDto
   extends WebhookEndpointResponseDto {
   plaintextSecret: string;
+  /**
+   * Returned ONLY by `POST /v2/webhook-endpoints`. NOT returned by the
+   * rotate-secret endpoint. Hardcode into the verify-GET handler; MsgBuddy
+   * passes this as `mb_verify_token` during the verification handshake.
+   */
+  plaintextVerifyToken?: string;
 }
+
+/** Public failure-reason enum surfaced on `lastVerifyError` + verify failures. */
+export type WebhookVerificationFailureReason =
+  | 'URL_REJECTED_SSRF'
+  | 'DNS_FAILURE'
+  | 'TLS_FAILURE'
+  | 'TIMEOUT'
+  | 'NON_2XX_RESPONSE'
+  | 'CHALLENGE_MISMATCH'
+  | 'EMPTY_BODY'
+  | 'RESPONSE_TOO_LARGE';
 
 export interface CreateWebhookEndpointDto {
   url: string;
@@ -2058,6 +2107,13 @@ export const webhooksApi = {
   testFire: async (id: string): Promise<WebhookDeliveryResponseDto> => {
     const response = await api.post<WebhookDeliveryResponseDto>(
       endpoints.webhookEndpoints.test(id),
+    );
+    return response.data;
+  },
+
+  verify: async (id: string): Promise<WebhookEndpointResponseDto> => {
+    const response = await api.post<WebhookEndpointResponseDto>(
+      endpoints.webhookEndpoints.verify(id),
     );
     return response.data;
   },

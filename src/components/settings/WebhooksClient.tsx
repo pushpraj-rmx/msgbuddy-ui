@@ -45,24 +45,36 @@ function EndpointCard({
   onSelect: () => void;
 }) {
   const isWildcard = endpoint.eventTypes.includes(WEBHOOK_WILDCARD);
-  const status: "active" | "disabled" | "auto-disabled" = endpoint.disabledAt
-    ? "auto-disabled"
-    : endpoint.enabled
-      ? "active"
-      : "disabled";
+  // Pending verify takes precedence — gates everything else.
+  const status:
+    | "pending-verify"
+    | "active"
+    | "disabled"
+    | "auto-disabled" = endpoint.verifiedAt === null
+    ? "pending-verify"
+    : endpoint.disabledAt
+      ? "auto-disabled"
+      : endpoint.enabled
+        ? "active"
+        : "disabled";
   const statusBar =
     status === "active"
       ? "var(--op-ok)"
       : status === "auto-disabled"
         ? "var(--op-danger)"
-        : "var(--op-ink-dim)";
-  const statusLabel = status.toUpperCase();
+        : status === "pending-verify"
+          ? "var(--op-warn)"
+          : "var(--op-ink-dim)";
+  const statusLabel =
+    status === "pending-verify" ? "PENDING VERIFY" : status.toUpperCase();
   const statusCls =
     status === "active"
       ? "op-tag op-tag-ok"
       : status === "auto-disabled"
         ? "op-tag op-tag-danger"
-        : "op-tag";
+        : status === "pending-verify"
+          ? "op-tag op-tag-warn"
+          : "op-tag";
 
   return (
     <button

@@ -540,7 +540,7 @@ export function WebhookDeliveriesPanel({
           title={
             endpointEnabled
               ? "Send a canned test event to this endpoint"
-              : "Re-enable the endpoint to send a test event"
+              : "Endpoint must be verified, enabled, and not auto-disabled to send a test event"
           }
         >
           {testing ? (
