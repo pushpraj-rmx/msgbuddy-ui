@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "@/lib/api-error";
-import { campaignsApi, contactsApi, channelTemplatesApi, segmentsApi } from "@/lib/api";
+import { campaignsApi, contactsApi, channelTemplatesApi, segmentsApi, usageApi } from "@/lib/api";
 import type { ChannelTemplateVersion, Segment } from "@/lib/types";
 import {
   isMediaHeaderType,
@@ -33,6 +33,13 @@ type Contact = {
 /** Matches API CampaignAudienceType. SEGMENT uses a saved segment's `query` as `audienceQuery`. */
 const AUDIENCE_TYPES = ["ALL", "SPECIFIC", "SEGMENT"] as const;
 
+/**
+ * Mirrors the backend's MAX_CAMPAIGN_AUDIENCE_SIZE (campaigns.service.ts). The
+ * server rejects starts above this; we surface it in the wizard so the user
+ * isn't surprised at Start time.
+ */
+const MAX_CAMPAIGN_AUDIENCE_SIZE = 500_000;
+
 const WIZARD_STEPS = [
   {
     short: "Template",
@@ -59,31 +66,88 @@ const WIZARD_STEPS = [
   },
 ] as const;
 
+/**
+ * Subset of GET /campaigns/:id fields the wizard hydrates from. Optional everything
+ * because a freshly-bootstrapped draft has almost no state yet.
+ */
+export type CampaignDraftSeed = {
+  id: string;
+  name?: string;
+  description?: string | null;
+  channelTemplateVersionId?: string | null;
+  channelTemplateVersion?: {
+    id: string;
+    channelTemplate?: {
+      id: string;
+      templateId?: string | null;
+    } | null;
+  } | null;
+  templateBindings?: Record<string, unknown> | null;
+  audienceType?: "ALL" | "SPECIFIC" | "SEGMENT";
+  audienceQuery?: Record<string, unknown> | null;
+  contactIds?: string[];
+  chunkSize?: number | null;
+  throttlePerMin?: number | null;
+};
+
 export function CreateCampaignForm({
   templates,
+  campaignId,
+  initialCampaign,
 }: {
   templates: CampaignCreateTemplate[];
+  /** The draft Campaign row this wizard operates on. Always required — the new-campaign route bootstraps a draft and redirects here. */
+  campaignId: string;
+  initialCampaign?: CampaignDraftSeed;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(1);
-  const [templateId, setTemplateId] = useState<string | null>(null);
-  const [audienceType, setAudienceType] =
-    useState<(typeof AUDIENCE_TYPES)[number]>("ALL");
+  const [name, setName] = useState<string>(initialCampaign?.name ?? "");
+  const [description, setDescription] = useState<string>(
+    initialCampaign?.description ?? "",
+  );
+  const [templateId, setTemplateId] = useState<string | null>(
+    initialCampaign?.channelTemplateVersion?.channelTemplate?.templateId ?? null,
+  );
+  const [audienceType, setAudienceType] = useState<
+    (typeof AUDIENCE_TYPES)[number]
+  >(initialCampaign?.audienceType ?? "ALL");
+  // Picker fetch state — replaces the old "load every contact upfront" model
+  // which would freeze the browser on workspaces with 10K+ contacts. We now
+  // fetch a paged + searchable view that scales to any audience size.
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactsLoaded, setContactsLoaded] = useState(false);
-  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
-  const [channelTemplateVersionId, setChannelTemplateVersionId] = useState("");
+  const [contactsCursor, setContactsCursor] = useState<string | null>(null);
+  const [contactsHasMore, setContactsHasMore] = useState(false);
+  const [contactsLoadingMore, setContactsLoadingMore] = useState(false);
+  const [contactsSearch, setContactsSearch] = useState("");
+  /** Display rows for already-selected contacts that don't appear in the current page (so the user can still untick them). */
+  const [selectedContactDetails, setSelectedContactDetails] = useState<
+    Record<string, Contact>
+  >({});
+  const [selectedContacts, setSelectedContacts] = useState<string[]>(
+    initialCampaign?.contactIds ?? [],
+  );
+  const [channelTemplateVersionId, setChannelTemplateVersionId] = useState(
+    initialCampaign?.channelTemplateVersionId ?? "",
+  );
   const [channelWaTemplateId, setChannelWaTemplateId] = useState<string | null>(
-    null
+    initialCampaign?.channelTemplateVersion?.channelTemplate?.id ?? null,
   );
   const [versionDetail, setVersionDetail] = useState<ChannelTemplateVersion | null>(
     null
   );
   const [versionDetailLoading, setVersionDetailLoading] = useState(false);
-  const [headerMediaId, setHeaderMediaId] = useState<string | null>(null);
+  const [headerMediaId, setHeaderMediaId] = useState<string | null>(
+    typeof initialCampaign?.templateBindings?.headerMediaId === "string"
+      ? (initialCampaign.templateBindings.headerMediaId as string)
+      : null,
+  );
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
   const [carouselCardMediaIds, setCarouselCardMediaIds] = useState<string[]>(
-    []
+    Array.isArray(initialCampaign?.templateBindings?.carouselCardMediaIds)
+      ? (initialCampaign!.templateBindings!.carouselCardMediaIds as string[])
+      : [],
   );
   const [carouselCardPreviewUrls, setCarouselCardPreviewUrls] = useState<
     string[]
@@ -92,10 +156,28 @@ export function CreateCampaignForm({
   const [bindingFieldError, setBindingFieldError] = useState<string | null>(
     null
   );
-  const [chunkSize, setChunkSize] = useState<string>("");
-  const [throttlePerMin, setThrottlePerMin] = useState<string>("");
+  const [chunkSize, setChunkSize] = useState<string>(
+    initialCampaign?.chunkSize != null ? String(initialCampaign.chunkSize) : "",
+  );
+  const [throttlePerMin, setThrottlePerMin] = useState<string>(
+    initialCampaign?.throttlePerMin != null
+      ? String(initialCampaign.throttlePerMin)
+      : "",
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+
+  /** Saved segment id if hydrating from an existing draft with audienceType=SEGMENT. */
+  const initialSegmentId =
+    initialCampaign?.audienceType === "SEGMENT" &&
+    initialCampaign.audienceQuery &&
+    typeof (initialCampaign.audienceQuery as Record<string, unknown>)
+      .segmentId === "string"
+      ? ((initialCampaign.audienceQuery as Record<string, unknown>)
+          .segmentId as string)
+      : null;
 
   // Review-step audience preview state — fetched on entering step 4.
   const [preview, setPreview] = useState<{
@@ -103,21 +185,37 @@ export function CreateCampaignForm({
     sample: Array<{ id: string; name: string | null; phone: string }>;
     excludedBlocked: number;
     excludedOptedOut: number;
+    /** MARKETING-only — contacts inside Meta's 24h cap window who'd be skipped at send time. */
+    excludedFrequencyCapped?: number;
   } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+
+  /** Message-quota probe for the review step — warns if audience > remaining quota. */
+  const [quota, setQuota] = useState<{
+    allowed: boolean;
+    current: number;
+    limit: number;
+    reason?: string | null;
+  } | null>(null);
 
   const [segments, setSegments] = useState<Segment[]>([]);
   const [segmentsLoading, setSegmentsLoading] = useState(false);
   const [segmentsLoadError, setSegmentsLoadError] = useState<string | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(
-    null
+    initialSegmentId,
   );
 
   const { setContent: setRightPanel, clearContent: clearRightPanel } = useRightPanel();
 
   const canUseSelectedTemplate =
     !!templateId && channelTemplateVersionId.trim().length > 0;
+
+  /** O(1) selected-contact lookup — array.includes was O(n²) per render at 5K+ contacts. */
+  const selectedContactsSet = useMemo(
+    () => new Set(selectedContacts),
+    [selectedContacts],
+  );
 
   // Push template preview into the app's right panel
   useEffect(() => {
@@ -160,18 +258,65 @@ export function CreateCampaignForm({
     return () => clearRightPanel("campaign-preview");
   }, [clearRightPanel]);
 
+  // Debounced search-driven contact fetch. Only fires when the user is on the
+  // audience step AND has chosen SPECIFIC — no point pre-fetching otherwise.
   useEffect(() => {
-    let cancelled = false;
-    void contactsApi.list({}).then((data) => {
-      if (!cancelled) {
-        setContacts(data.contacts ?? []);
-        setContactsLoaded(true);
+    if (step !== 3 || audienceType !== "SPECIFIC") return;
+    const handle = window.setTimeout(() => {
+      let cancelled = false;
+      setContactsLoaded(false);
+      void contactsApi
+        .list({ search: contactsSearch.trim() || undefined, limit: 50 })
+        .then((data) => {
+          if (cancelled) return;
+          setContacts(data.contacts ?? []);
+          setContactsCursor(data.nextCursor ?? null);
+          setContactsHasMore(!!data.nextCursor);
+          setContactsLoaded(true);
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setContacts([]);
+          setContactsCursor(null);
+          setContactsHasMore(false);
+          setContactsLoaded(true);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, 200);
+    return () => window.clearTimeout(handle);
+  }, [step, audienceType, contactsSearch]);
+
+  // Hydrate display details for any already-selected contacts that aren't in
+  // the current page (so the user can still see and untick them).
+  useEffect(() => {
+    for (const c of contacts) {
+      if (
+        selectedContacts.includes(c.id) &&
+        !selectedContactDetails[c.id]
+      ) {
+        setSelectedContactDetails((prev) => ({ ...prev, [c.id]: c }));
       }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    }
+  }, [contacts, selectedContacts, selectedContactDetails]);
+
+  const loadMoreContacts = async () => {
+    if (!contactsCursor || contactsLoadingMore) return;
+    setContactsLoadingMore(true);
+    try {
+      const data = await contactsApi.list({
+        search: contactsSearch.trim() || undefined,
+        limit: 50,
+        cursor: contactsCursor,
+      });
+      setContacts((prev) => [...prev, ...(data.contacts ?? [])]);
+      setContactsCursor(data.nextCursor ?? null);
+      setContactsHasMore(!!data.nextCursor);
+    } finally {
+      setContactsLoadingMore(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -309,9 +454,18 @@ export function CreateCampaignForm({
         : undefined;
     const contactIds =
       audienceType === "SPECIFIC" ? selectedContacts : undefined;
+    // For MARKETING templates, telling the backend the category surfaces
+    // `excludedFrequencyCapped` — contacts inside Meta's 24h marketing cap
+    // who'd be silently skipped at send time. Without this hint the count is
+    // always 0 and the user is surprised mid-run.
+    const templateCategory = versionDetail?.channelTemplate?.category as
+      | "MARKETING"
+      | "UTILITY"
+      | "AUTHENTICATION"
+      | undefined;
 
     void campaignsApi
-      .preview({ audienceType, contactIds, audienceQuery })
+      .preview({ audienceType, contactIds, audienceQuery, templateCategory })
       .then((data) => {
         if (cancelled) return;
         setPreview(data);
@@ -327,13 +481,130 @@ export function CreateCampaignForm({
     return () => {
       cancelled = true;
     };
-  }, [step, audienceType, selectedSegmentId, selectedContacts, segments]);
+  }, [step, audienceType, selectedSegmentId, selectedContacts, segments, versionDetail]);
 
-  const createCampaign = async () => {
-    if (!templateId || !channelTemplateVersionId.trim()) {
-      setError("Pick a message and provide a channelTemplateVersionId.");
+  // Quota probe — fires on review step so we can warn before the user hits Save.
+  useEffect(() => {
+    if (step !== 4) return;
+    let cancelled = false;
+    const audienceCount = preview?.audienceCount ?? 0;
+    if (audienceCount <= 0) {
+      setQuota(null);
       return;
     }
+    void usageApi
+      .checkMessages(audienceCount)
+      .then((data) => {
+        if (cancelled) return;
+        const d = data as {
+          allowed: boolean;
+          current: number;
+          limit: number;
+          reason?: string | null;
+        };
+        setQuota(d);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setQuota(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, preview?.audienceCount]);
+
+  /**
+   * Build the PUT payload from current state. Backend silently relaxes
+   * binding validation on DRAFT updates so incomplete state is allowed
+   * mid-wizard.
+   */
+  const buildDraftPayload = (): Record<string, unknown> => {
+    const templateBindings: Record<string, unknown> = {};
+    if (headerMediaId?.trim()) {
+      templateBindings.headerMediaId = headerMediaId.trim();
+    }
+    if (carouselCardCount > 0) {
+      templateBindings.carouselCardMediaIds = carouselCardMediaIds
+        .slice(0, carouselCardCount)
+        .map((id) => id.trim());
+    }
+
+    let audienceQuery: Record<string, unknown> | null | undefined;
+    if (audienceType === "SEGMENT" && selectedSegmentId) {
+      const segment = segments.find((s) => s.id === selectedSegmentId);
+      if (segment?.query && typeof segment.query === "object") {
+        // segmentId is embedded so hydration can re-select the segment when
+        // the user resumes this draft later.
+        audienceQuery = {
+          ...(segment.query as Record<string, unknown>),
+          segmentId: selectedSegmentId,
+        };
+      }
+    } else if (audienceType !== "SEGMENT") {
+      audienceQuery = null;
+    }
+
+    const parsedChunkSize = chunkSize.trim() ? Number(chunkSize) : undefined;
+    const parsedThrottlePerMin = throttlePerMin.trim()
+      ? Number(throttlePerMin)
+      : undefined;
+
+    return {
+      ...(name.trim() ? { name: name.trim() } : {}),
+      description,
+      ...(channelTemplateVersionId.trim()
+        ? { channelTemplateVersionId: channelTemplateVersionId.trim() }
+        : {}),
+      ...(Object.keys(templateBindings).length > 0
+        ? { templateBindings }
+        : {}),
+      audienceType,
+      ...(audienceQuery !== undefined ? { audienceQuery } : {}),
+      ...(audienceType === "SPECIFIC"
+        ? { contactIds: selectedContacts }
+        : {}),
+      ...(parsedChunkSize !== undefined && !isNaN(parsedChunkSize)
+        ? { chunkSize: parsedChunkSize }
+        : {}),
+      ...(parsedThrottlePerMin !== undefined && !isNaN(parsedThrottlePerMin)
+        ? { throttlePerMin: parsedThrottlePerMin }
+        : {}),
+    };
+  };
+
+  /** Persist current state. Throws on failure so callers decide whether to navigate. */
+  const saveDraft = async (): Promise<void> => {
+    if (savingDraft) return;
+    setSavingDraft(true);
+    setError(null);
+    try {
+      await campaignsApi.update(campaignId, buildDraftPayload());
+      setLastSavedAt(new Date());
+    } catch (err: unknown) {
+      setError(getApiError(err) || "Failed to save draft.");
+      throw err;
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  /** Save current state and return to the campaigns list. Draft stays in DRAFT. */
+  const saveAndExit = async () => {
+    try {
+      await saveDraft();
+    } catch {
+      return;
+    }
+    router.push("/campaigns");
+    router.refresh();
+  };
+
+  /**
+   * Final step: save draft and land on the campaign detail page where the
+   * existing Start button opens the review-and-confirm dialog before actually
+   * sending. We do NOT call /campaigns/:id/start here.
+   */
+  const finishDraft = async () => {
     if (audienceType === "SPECIFIC" && selectedContacts.length === 0) {
       setError("Select at least one contact, or choose audience \u201cAll contacts\u201d.");
       return;
@@ -360,49 +631,34 @@ export function CreateCampaignForm({
       return;
     }
     setLoading(true);
-    setError(null);
     try {
-      const friendlyName = `Campaign · ${new Date().toLocaleString(undefined, {
-        dateStyle: "medium",
-        timeStyle: "short",
-      })}`;
-      const templateBindings: Record<string, unknown> = {};
-      if (headerMediaId?.trim()) templateBindings.headerMediaId = headerMediaId.trim();
-      if (carouselCardCount > 0) {
-        templateBindings.carouselCardMediaIds = carouselCardMediaIds
-          .slice(0, carouselCardCount)
-          .map((id) => id.trim());
-      }
-      const segment =
-        audienceType === "SEGMENT"
-          ? segments.find((s) => s.id === selectedSegmentId)
-          : undefined;
-      const audienceQuery =
-        audienceType === "SEGMENT" && segment?.query
-          ? (segment.query as Record<string, unknown>)
-          : undefined;
-
-      const created = (await campaignsApi.create({
-        name: friendlyName,
-        channel: "WHATSAPP",
-        channelTemplateVersionId: channelTemplateVersionId.trim(),
-        ...(Object.keys(templateBindings).length > 0 && {
-          templateBindings,
-        }),
-        audienceType,
-        contactIds:
-          audienceType === "SPECIFIC" ? selectedContacts : undefined,
-        ...(audienceQuery != null ? { audienceQuery } : {}),
-        ...(parsedChunkSize !== undefined ? { chunkSize: parsedChunkSize } : {}),
-        ...(parsedThrottlePerMin !== undefined ? { throttlePerMin: parsedThrottlePerMin } : {}),
-      })) as { id: string };
-      router.push(`/campaigns?id=${encodeURIComponent(created.id)}`);
+      await saveDraft();
+      router.push(`/campaigns?id=${encodeURIComponent(campaignId)}`);
       router.refresh();
-    } catch (err: unknown) {
-      setError(getApiError(err) || "Failed to create campaign.");
+    } catch {
+      // saveDraft already populated `error` state
     } finally {
       setLoading(false);
     }
+  };
+
+  /** Step transitions auto-save. Stay on current step if save fails. */
+  const goNext = async (nextStep: number) => {
+    try {
+      await saveDraft();
+      setStep(nextStep);
+    } catch {
+      // error is shown in the alert; user can retry
+    }
+  };
+  /** Back is best-effort save — user shouldn't be trapped if save fails. */
+  const goBack = async (prevStep: number) => {
+    try {
+      await saveDraft();
+    } catch {
+      // ignore
+    }
+    setStep(prevStep);
   };
 
   const stepIndex = step - 1;
@@ -417,6 +673,26 @@ export function CreateCampaignForm({
       ) : null}
 
       <div className="flex min-h-[min(32rem,70vh)] flex-col card bg-base-100 border border-base-300 shadow-sm">
+        {/* Always-visible campaign name; persists to the draft on blur. */}
+        <div className="border-b border-base-300 px-4 py-3 sm:px-6">
+          <label className="block">
+            <span className="op-label mb-1 block">Campaign name</span>
+            <input
+              type="text"
+              className="input input-bordered input-sm w-full font-medium"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={() => {
+                if (name.trim() !== (initialCampaign?.name ?? "").trim()) {
+                  void saveDraft();
+                }
+              }}
+              placeholder="e.g. Holiday Promo 2026 — first wave"
+              maxLength={120}
+            />
+          </label>
+        </div>
+
         {/* Single view: stepper + one content region (no full "screen" swaps). */}
         <div className="border-b border-base-300 px-3 py-4 sm:px-6">
           <ul className="steps steps-horizontal w-full overflow-x-auto pb-1">
@@ -452,24 +728,27 @@ export function CreateCampaignForm({
             aria-label={currentMeta.title}
           >
           {step === 1 && (
-            <div className="space-y-2">
-              <select
-                className="select select-bordered w-full"
-                value={templateId || ""}
-                onChange={(event) => setTemplateId(event.target.value || null)}
-                disabled={templates.length === 0}
-              >
-                <option value="">
-                  {templates.length === 0
-                    ? "No approved WhatsApp templates"
-                    : "Select a message"}
-                </option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
+            <div className="space-y-4">
+              <label className="block">
+                <span className="op-label mb-1 block">Template</span>
+                <select
+                  className="select select-bordered w-full"
+                  value={templateId || ""}
+                  onChange={(event) => setTemplateId(event.target.value || null)}
+                  disabled={templates.length === 0}
+                >
+                  <option value="">
+                    {templates.length === 0
+                      ? "No approved WhatsApp templates"
+                      : "Select a message"}
                   </option>
-                ))}
-              </select>
+                  {templates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {templates.length === 0 && (
                 <p className="text-sm text-base-content/60">
                   Only templates with a live WhatsApp-approved version appear
@@ -484,6 +763,28 @@ export function CreateCampaignForm({
                   </span>
                 </div>
               )}
+
+              <label className="block">
+                <span className="op-label mb-1 block">
+                  Description <span className="text-base-content/45">(optional)</span>
+                </span>
+                <textarea
+                  className="textarea textarea-bordered w-full"
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onBlur={() => {
+                    if (
+                      description !==
+                      (initialCampaign?.description ?? "")
+                    ) {
+                      void saveDraft();
+                    }
+                  }}
+                  placeholder="Notes for your team — not sent to recipients."
+                  maxLength={500}
+                />
+              </label>
             </div>
           )}
           {step === 2 && (
@@ -685,35 +986,125 @@ export function CreateCampaignForm({
                 </div>
               ) : null}
               {audienceType === "SPECIFIC" && (
-                <div className="max-h-48 overflow-y-auto card bg-base-100 border border-base-300 p-2">
-                  {!contactsLoaded ? (
-                    <p className="text-sm text-base-content/60">
-                      Loading contacts…
-                    </p>
-                  ) : (
-                    contacts.map((contact) => (
-                      <label
-                        key={contact.id}
-                        className="flex items-center gap-2 py-1 text-sm"
-                      >
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-sm"
-                          checked={selectedContacts.includes(contact.id)}
-                          onChange={(event) => {
-                            setSelectedContacts((prev) =>
-                              event.target.checked
-                                ? [...prev, contact.id]
-                                : prev.filter((id) => id !== contact.id)
-                            );
-                          }}
-                        />
-                        <span>
-                          {contact.name || contact.phone} ({contact.phone})
-                        </span>
-                      </label>
-                    ))
-                  )}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="search"
+                      className="input input-bordered input-sm flex-1"
+                      placeholder="Search by name, phone, or email…"
+                      value={contactsSearch}
+                      onChange={(e) => setContactsSearch(e.target.value)}
+                      data-esc-clearable="true"
+                    />
+                    <span className="text-xs tabular-nums text-base-content/60">
+                      {selectedContacts.length.toLocaleString()} selected
+                    </span>
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto card bg-base-100 border border-base-300 p-2">
+                    {!contactsLoaded ? (
+                      <p className="text-sm text-base-content/60">
+                        Loading contacts…
+                      </p>
+                    ) : contacts.length === 0 ? (
+                      <p className="text-sm text-base-content/60">
+                        No contacts match{contactsSearch.trim() ? ` "${contactsSearch.trim()}"` : ""}.
+                      </p>
+                    ) : (
+                      <>
+                        {contacts.map((contact) => {
+                          const checked = selectedContactsSet.has(contact.id);
+                          return (
+                            <label
+                              key={contact.id}
+                              className="flex items-center gap-2 py-1 text-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                className="checkbox checkbox-sm"
+                                checked={checked}
+                                onChange={(event) => {
+                                  setSelectedContacts((prev) =>
+                                    event.target.checked
+                                      ? [...prev, contact.id]
+                                      : prev.filter((id) => id !== contact.id),
+                                  );
+                                  // Remember this contact's details so it
+                                  // remains identifiable even if the user
+                                  // searches away from it.
+                                  if (event.target.checked) {
+                                    setSelectedContactDetails((s) => ({
+                                      ...s,
+                                      [contact.id]: contact,
+                                    }));
+                                  }
+                                }}
+                              />
+                              <span>
+                                {contact.name || contact.phone} ({contact.phone})
+                              </span>
+                            </label>
+                          );
+                        })}
+                        {contactsHasMore ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm mt-1 w-full"
+                            onClick={() => void loadMoreContacts()}
+                            disabled={contactsLoadingMore}
+                          >
+                            {contactsLoadingMore ? (
+                              <>
+                                <span className="loading loading-spinner loading-xs" />
+                                Loading…
+                              </>
+                            ) : (
+                              "Load more"
+                            )}
+                          </button>
+                        ) : null}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Selected-but-not-on-screen tray — lets users untick
+                      contacts they searched away from without losing them. */}
+                  {selectedContacts.length > 0 ? (
+                    <details className="card bg-base-200 border border-base-300 p-2">
+                      <summary className="cursor-pointer text-xs font-medium text-base-content/70">
+                        Selected ({selectedContacts.length})
+                      </summary>
+                      <ul className="mt-2 max-h-40 overflow-y-auto space-y-1">
+                        {selectedContacts.map((id) => {
+                          const c = selectedContactDetails[id];
+                          return (
+                            <li
+                              key={id}
+                              className="flex items-center justify-between gap-2 text-xs"
+                            >
+                              <span className="truncate">
+                                {c
+                                  ? `${c.name || c.phone} (${c.phone})`
+                                  : id}
+                              </span>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                onClick={() =>
+                                  setSelectedContacts((prev) =>
+                                    prev.filter((x) => x !== id),
+                                  )
+                                }
+                                aria-label="Remove from selection"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </details>
+                  ) : null}
                 </div>
               )}
               {audienceType === "SEGMENT" ? (
@@ -853,21 +1244,46 @@ export function CreateCampaignForm({
                           </span>
                         </span>
                       ) : null}
-                      {(preview.excludedBlocked > 0 || preview.excludedOptedOut > 0) && (
+                      {(preview.excludedBlocked > 0 ||
+                        preview.excludedOptedOut > 0 ||
+                        (preview.excludedFrequencyCapped ?? 0) > 0) && (
                         <span className="text-warning">
-                          {preview.excludedBlocked > 0
-                            ? `${preview.excludedBlocked} blocked`
-                            : null}
-                          {preview.excludedBlocked > 0 && preview.excludedOptedOut > 0
-                            ? " · "
-                            : null}
-                          {preview.excludedOptedOut > 0
-                            ? `${preview.excludedOptedOut} opted out`
-                            : null}
+                          {[
+                            preview.excludedBlocked > 0
+                              ? `${preview.excludedBlocked} blocked`
+                              : null,
+                            preview.excludedOptedOut > 0
+                              ? `${preview.excludedOptedOut} opted out`
+                              : null,
+                            (preview.excludedFrequencyCapped ?? 0) > 0
+                              ? `${preview.excludedFrequencyCapped} in 24h cap`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
                           {" · skipped"}
                         </span>
                       )}
                     </div>
+                    {preview.audienceCount > MAX_CAMPAIGN_AUDIENCE_SIZE ? (
+                      <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2">
+                        <span className="op-label mb-1 block text-error">audience too large</span>
+                        <p className="text-[0.8125rem]">
+                          Max {MAX_CAMPAIGN_AUDIENCE_SIZE.toLocaleString()} contacts
+                          per run — split into segments or stage across multiple
+                          campaigns.
+                        </p>
+                      </div>
+                    ) : null}
+                    {quota && !quota.allowed ? (
+                      <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2">
+                        <span className="op-label mb-1 block text-warning">message quota</span>
+                        <p className="text-[0.8125rem]">
+                          {quota.reason ??
+                            `Your plan allows ${quota.limit.toLocaleString()} messages this period and you've used ${quota.current.toLocaleString()}. The campaign will start, but sends past the cap will fail.`}
+                        </p>
+                      </div>
+                    ) : null}
                     {preview.audienceCount === 0 ? (
                       <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2">
                         <span className="op-label mb-1 block text-warning">empty audience</span>
@@ -950,7 +1366,7 @@ export function CreateCampaignForm({
               >
                 {(() => {
                   const cs = chunkSize.trim() ? Number(chunkSize) : 100;
-                  const tp = throttlePerMin.trim() ? Number(throttlePerMin) : 60;
+                  const tp = throttlePerMin.trim() ? Number(throttlePerMin) : 4200;
                   const count = preview?.audienceCount ?? 0;
                   const minutes = tp > 0 ? Math.ceil(count / tp) : 0;
                   const eta =
@@ -993,78 +1409,109 @@ export function CreateCampaignForm({
           </div>
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-base-300 px-4 py-4 sm:px-6">
-          <Link href="/campaigns" className="btn btn-ghost">
-            Cancel
-          </Link>
-          {step > 1 && (
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-base-300 px-4 py-4 sm:px-6">
+          <div className="flex items-center gap-2 text-[0.6875rem] text-base-content/55">
+            {savingDraft ? (
+              <>
+                <span className="loading loading-spinner loading-xs" />
+                Saving draft…
+              </>
+            ) : lastSavedAt ? (
+              <>
+                Draft saved · {lastSavedAt.toLocaleTimeString()}
+              </>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/campaigns" className="btn btn-ghost">
+              Cancel
+            </Link>
             <button
               type="button"
-              className="btn btn-outline"
-              onClick={() => setStep((prev) => prev - 1)}
+              className="btn btn-ghost"
+              onClick={() => void saveAndExit()}
+              disabled={savingDraft || loading}
+              title="Saves your progress and returns to the campaigns list. You can resume any time."
             >
-              Back
+              Save & exit
             </button>
-          )}
-          {step < 3 && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setStep((prev) => prev + 1)}
-              disabled={
-                (step === 1 &&
-                  (!templateId || !canUseSelectedTemplate)) ||
-                (step === 2 && !bindingsStepReady)
-              }
-            >
-              Next
-            </button>
-          )}
-          {step === 3 && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => setStep(4)}
-              disabled={
-                (audienceType === "SPECIFIC" &&
-                  selectedContacts.length === 0) ||
-                (audienceType === "SEGMENT" &&
-                  (!selectedSegmentId ||
-                    segmentsLoading ||
-                    segments.length === 0))
-              }
-            >
-              Review →
-            </button>
-          )}
-          {step === 4 && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={createCampaign}
-              disabled={
-                loading ||
-                previewLoading ||
-                !!previewError ||
-                preview?.audienceCount === 0 ||
-                (audienceType === "SPECIFIC" &&
-                  selectedContacts.length === 0) ||
-                (audienceType === "SEGMENT" &&
-                  (!selectedSegmentId ||
-                    segmentsLoading ||
-                    segments.length === 0))
-              }
-            >
-              {loading ? (
-                <>
-                  <span className="loading loading-spinner loading-xs" />
-                  Sending…
-                </>
-              ) : (
-                `Send campaign${preview?.audienceCount ? ` · ${preview.audienceCount.toLocaleString()}` : ""}`
-              )}
-            </button>
-          )}
+            {step > 1 && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => void goBack(step - 1)}
+                disabled={savingDraft || loading}
+              >
+                Back
+              </button>
+            )}
+            {step < 3 && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void goNext(step + 1)}
+                disabled={
+                  savingDraft ||
+                  loading ||
+                  (step === 1 &&
+                    (!templateId || !canUseSelectedTemplate)) ||
+                  (step === 2 && !bindingsStepReady)
+                }
+              >
+                Next
+              </button>
+            )}
+            {step === 3 && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => void goNext(4)}
+                disabled={
+                  savingDraft ||
+                  loading ||
+                  (audienceType === "SPECIFIC" &&
+                    selectedContacts.length === 0) ||
+                  (audienceType === "SEGMENT" &&
+                    (!selectedSegmentId ||
+                      segmentsLoading ||
+                      segments.length === 0))
+                }
+              >
+                Review →
+              </button>
+            )}
+            {step === 4 && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={finishDraft}
+                disabled={
+                  loading ||
+                  savingDraft ||
+                  previewLoading ||
+                  !!previewError ||
+                  preview?.audienceCount === 0 ||
+                  (preview?.audienceCount ?? 0) > MAX_CAMPAIGN_AUDIENCE_SIZE ||
+                  (audienceType === "SPECIFIC" &&
+                    selectedContacts.length === 0) ||
+                  (audienceType === "SEGMENT" &&
+                    (!selectedSegmentId ||
+                      segmentsLoading ||
+                      segments.length === 0))
+                }
+                title="Saves the campaign as DRAFT and opens the campaign page where you can review and Start it."
+              >
+                {loading ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs" />
+                    Saving…
+                  </>
+                ) : (
+                  `Save draft${preview?.audienceCount ? ` · ${preview.audienceCount.toLocaleString()}` : ""}`
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

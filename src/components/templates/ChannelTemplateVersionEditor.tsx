@@ -50,109 +50,8 @@ const HEADER_TYPES: TemplateHeaderType[] = [
 
 /** Meta template button label limit (QUICK_REPLY / URL / PHONE_NUMBER) — official Meta cap. */
 const META_TEMPLATE_BUTTON_LABEL_MAX = 20;
-/** Meta carousel template card cap. */
-const CAROUSEL_CARDS_MAX = 10;
 /** Meta cap for template header media (IMAGE / VIDEO / DOCUMENT). */
 const HEADER_MEDIA_MAX_BYTES = 15 * 1024 * 1024;
-/** URL shorteners Meta rejects in button URLs — content review will instantly fail. */
-const URL_SHORTENER_HOSTS = new Set([
-  "bit.ly",
-  "tinyurl.com",
-  "t.co",
-  "goo.gl",
-  "ow.ly",
-  "buff.ly",
-  "is.gd",
-  "rebrand.ly",
-  "rb.gy",
-  "wa.me",
-  "shorturl.at",
-  "cutt.ly",
-  "lnkd.in",
-]);
-
-/** Returns the hostname of a button URL if it's a known shortener, else null. */
-function isShortenerUrl(raw: string): string | null {
-  const t = raw.trim();
-  if (!t) return null;
-  try {
-    const u = new URL(t);
-    const host = u.hostname.toLowerCase().replace(/^www\./, "");
-    return URL_SHORTENER_HOSTS.has(host) ? host : null;
-  } catch {
-    return null;
-  }
-}
-
-/** Bracket-style placeholders (e.g. `[NAME]`) — common mistake, Meta auto-rejects. */
-const BRACKET_PLACEHOLDER_RE = /\[[A-Za-z_][A-Za-z0-9_ -]*\]/;
-
-/** Extracts positional placeholder numbers from a string. `["1", "3", "1"]` → `[1, 3, 1]`. */
-function extractPositionalPlaceholders(s: string): number[] {
-  const out: number[] = [];
-  const re = /\{\{\s*(\d+)\s*\}\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(s)) !== null) out.push(Number(m[1]));
-  return out;
-}
-
-/** Returns true if the trimmed string begins or ends with a `{{...}}` placeholder. */
-function startsOrEndsWithPlaceholder(s: string): boolean {
-  const t = s.trim();
-  if (!t) return false;
-  return /^\{\{[^}]+\}\}/.test(t) || /\{\{[^}]+\}\}$/.test(t);
-}
-
-/** Luhn-validate a digit string (credit-card check). */
-function luhn(num: string): boolean {
-  let sum = 0;
-  let alt = false;
-  for (let i = num.length - 1; i >= 0; i--) {
-    let n = Number(num[i]);
-    if (Number.isNaN(n)) return false;
-    if (alt) {
-      n *= 2;
-      if (n > 9) n -= 9;
-    }
-    sum += n;
-    alt = !alt;
-  }
-  return sum % 10 === 0;
-}
-
-/** Returns the first sensitive-data label found in `text`, or null. Mirrors backend. */
-function detectSensitiveData(text: string): string | null {
-  // Credit card: 13-19 digit run that passes Luhn
-  const ccMatch = text.match(/\b(?:\d[ -]?){13,19}\b/g);
-  if (ccMatch) {
-    for (const m of ccMatch) {
-      const digits = m.replace(/[ -]/g, "");
-      if (digits.length >= 13 && digits.length <= 19 && luhn(digits)) {
-        return "looks like a credit card number";
-      }
-    }
-  }
-  // US SSN
-  if (/\b\d{3}-\d{2}-\d{4}\b/.test(text)) {
-    return "looks like a US Social Security Number (SSN)";
-  }
-  // Password / PIN disclosure
-  if (
-    /\b(password|pwd|pin\s*code)\b\s*[:=]/i.test(text) ||
-    /\b(your|the)\s+(password|pin|pin\s*code)\s+is\b/i.test(text)
-  ) {
-    return "asks for or includes a password / PIN";
-  }
-  // Payment / banking details
-  if (
-    /\b(credit\s*card|debit\s*card|cvv|cvc|bank\s*account|account\s*number|routing\s*number|iban)\b/i.test(
-      text
-    )
-  ) {
-    return "asks for full payment / banking details";
-  }
-  return null;
-}
 
 type CarouselButtonUiType = "QUICK_REPLY" | "URL" | "PHONE_NUMBER";
 
@@ -538,85 +437,11 @@ export const ChannelTemplateVersionEditor = forwardRef<
   const onSave = useCallback(async (silent = false): Promise<boolean> => {
     if (!editable) return true;
     if (!silent) setFormError(null);
-    const b = body.trim();
-    if (!b.length) {
-      setFormError("Body is required.");
-      return false;
-    }
-    if (b.length > BODY_MAX) {
-      setFormError(`Body must be at most ${BODY_MAX} characters.`);
-      return false;
-    }
-    if (footer.length > FOOTER_MAX) {
-      setFormError(`Footer must be at most ${FOOTER_MAX} characters.`);
-      return false;
-    }
 
-    // ── Meta policy lint ───────────────────────────────────────────────────
-    // Bracket-style placeholders like [NAME] — Meta auto-rejects.
-    if (BRACKET_PLACEHOLDER_RE.test(b)) {
-      setFormError(
-        "Body uses bracket-style placeholders (e.g. [NAME]). Use Meta variable syntax instead — {{1}} for positional, or {{name}} for named."
-      );
-      return false;
-    }
-    // Body must not start or end with a variable.
-    if (startsOrEndsWithPlaceholder(b)) {
-      setFormError(
-        "Body cannot begin or end with a variable. Add fixed text around {{...}} placeholders."
-      );
-      return false;
-    }
-    // Positional placeholders must start at 1 and be sequential.
-    if (parameterFormat === "POSITIONAL") {
-      const nums = extractPositionalPlaceholders(b);
-      if (nums.length > 0) {
-        const unique = Array.from(new Set(nums)).sort((a, b) => a - b);
-        for (let i = 0; i < unique.length; i++) {
-          if (unique[i] !== i + 1) {
-            setFormError(
-              `Positional variables must start at 1 and be sequential (no gaps). Found {{${unique.join("}}, {{")}}}.`
-            );
-            return false;
-          }
-        }
-      }
-    }
-    // Footer cannot contain variables (Meta rule).
-    if (footer && /\{\{[^}]+\}\}/.test(footer)) {
-      setFormError("Footer cannot contain variables — only fixed text is allowed there.");
-      return false;
-    }
-    // Sensitive data — Meta auto-rejects templates that look like they request or
-    // disclose card numbers, SSNs, passwords, or banking details.
-    {
-      const reason = detectSensitiveData(b);
-      if (reason) {
-        setFormError(
-          `Body ${reason}. Meta auto-rejects templates with this content — remove it from the template.`
-        );
-        return false;
-      }
-    }
-    if (layoutType === "STANDARD") {
-      if (headerType === "TEXT" && headerContent.length > HEADER_TEXT_MAX) {
-        setFormError(`Text header must be at most ${HEADER_TEXT_MAX} characters.`);
-        return false;
-      }
-      if (
-        headerType === "IMAGE" ||
-        headerType === "VIDEO" ||
-        headerType === "DOCUMENT"
-      ) {
-        if (!headerContent.trim()) {
-          setFormError(
-            "Upload a file or paste the media asset handle for this header."
-          );
-          return false;
-        }
-      }
-    }
-
+    // Drafts are a scratchpad — Meta-policy checks (placeholders, sensitive data,
+    // button counts, URL shorteners, length caps, etc.) run at Submit-for-approval
+    // time on the server. Here we only do what's needed to build a valid payload:
+    // JSON parse so we can serialise buttons/variables/carouselCards.
     const parsedButtons = parseJsonOptional(buttonsJson, "Buttons");
     if (!parsedButtons.ok) {
       setFormError(parsedButtons.error);
@@ -633,149 +458,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
       return false;
     }
 
-    if (layoutType === "STANDARD" && standardButtonRows && standardButtonRows.length > 0) {
-      const QUICK_REPLY_MAX = 3;
-      const CTA_MAX = 2;
-      let quickReplyCount = 0;
-      let ctaCount = 0;
-      for (let i = 0; i < standardButtonRows.length; i++) {
-        const r = standardButtonRows[i];
-        const label = r.text.trim();
-        if (!label) {
-          setFormError(`Button ${i + 1}: label is required.`);
-          return false;
-        }
-        if (label.length > META_TEMPLATE_BUTTON_LABEL_MAX) {
-          setFormError(
-            `Button ${i + 1}: label must be at most ${META_TEMPLATE_BUTTON_LABEL_MAX} characters.`
-          );
-          return false;
-        }
-        if (r.type === "QUICK_REPLY") {
-          quickReplyCount++;
-        } else {
-          ctaCount++;
-        }
-        if (r.type === "URL") {
-          if (!r.url.trim()) {
-            setFormError(`Button ${i + 1}: URL is required.`);
-            return false;
-          }
-          const placeholders = (r.url.match(/\{\{[^}]+\}\}/g) ?? []).length;
-          if (placeholders !== 1) {
-            setFormError(
-              `Button ${i + 1}: URL must contain exactly 1 placeholder (found ${placeholders}).`
-            );
-            return false;
-          }
-          const shortener = isShortenerUrl(r.url.replace(/\{\{[^}]+\}\}/g, "x"));
-          if (shortener) {
-            setFormError(
-              `Button ${i + 1}: URL shortener "${shortener}" is not allowed. Use the full destination URL.`
-            );
-            return false;
-          }
-        }
-        if (r.type === "PHONE_NUMBER" && !r.phone_number.trim()) {
-          setFormError(`Button ${i + 1}: phone number is required.`);
-          return false;
-        }
-      }
-      if (quickReplyCount > QUICK_REPLY_MAX) {
-        setFormError(`Too many quick-reply buttons (${quickReplyCount}); max is ${QUICK_REPLY_MAX}.`);
-        return false;
-      }
-      if (ctaCount > CTA_MAX) {
-        setFormError(`Too many CTA buttons (${ctaCount}); max is ${CTA_MAX}.`);
-        return false;
-      }
-    }
-
-    if (layoutType === "CAROUSEL") {
-      if (carouselCards.length === 0) {
-        setFormError("Add at least one carousel card.");
-        return false;
-      }
-      if (carouselCards.length > CAROUSEL_CARDS_MAX) {
-        setFormError(
-          `Carousel templates support at most ${CAROUSEL_CARDS_MAX} cards (currently ${carouselCards.length}).`
-        );
-        return false;
-      }
-      for (let i = 0; i < carouselCards.length; i++) {
-        const c = carouselCards[i];
-        if (!c?.body?.trim()) {
-          setFormError(`Card ${i + 1}: body is required.`);
-          return false;
-        }
-        if (BRACKET_PLACEHOLDER_RE.test(c.body)) {
-          setFormError(
-            `Card ${i + 1}: body uses bracket-style placeholders (e.g. [NAME]). Use {{1}} or {{name}} instead.`
-          );
-          return false;
-        }
-        if (startsOrEndsWithPlaceholder(c.body)) {
-          setFormError(
-            `Card ${i + 1}: body cannot begin or end with a variable.`
-          );
-          return false;
-        }
-        {
-          const cardSensitive = detectSensitiveData(c.body);
-          if (cardSensitive) {
-            setFormError(
-              `Card ${i + 1}: body ${cardSensitive}. Meta auto-rejects this.`
-            );
-            return false;
-          }
-        }
-        if (!c?.headerHandle?.trim()) {
-          setFormError(
-            `Card ${i + 1}: upload a header file or paste the asset handle (headerHandle).`
-          );
-          return false;
-        }
-        const rows = carouselButtonRowsByIndex[i] ?? [];
-        if (rows.length === 0) {
-          setFormError(`Card ${i + 1}: add at least one button.`);
-          return false;
-        }
-        for (let j = 0; j < rows.length; j++) {
-          const r = rows[j];
-          const label = r.text.trim();
-          if (!label) {
-            setFormError(`Card ${i + 1}, button ${j + 1}: label is required.`);
-            return false;
-          }
-          if (label.length > META_TEMPLATE_BUTTON_LABEL_MAX) {
-            setFormError(
-              `Card ${i + 1}, button ${j + 1}: label must be at most ${META_TEMPLATE_BUTTON_LABEL_MAX} characters (Meta).`
-            );
-            return false;
-          }
-          if (r.type === "URL") {
-            if (!r.url.trim()) {
-              setFormError(`Card ${i + 1}, button ${j + 1}: URL is required.`);
-              return false;
-            }
-            const shortener = isShortenerUrl(r.url.replace(/\{\{[^}]+\}\}/g, "x"));
-            if (shortener) {
-              setFormError(
-                `Card ${i + 1}, button ${j + 1}: URL shortener "${shortener}" is not allowed. Use the full destination URL.`
-              );
-              return false;
-            }
-          }
-          if (r.type === "PHONE_NUMBER" && !r.phone_number.trim()) {
-            setFormError(
-              `Card ${i + 1}, button ${j + 1}: phone number is required (E.164, e.g. +15551234567).`
-            );
-            return false;
-          }
-        }
-      }
-    }
-
+    const b = body;
     const tidiedFooter = tidyWhitespace(footer);
     const payload: ChannelTemplateVersionUpdatePayload = {
       body: tidyWhitespace(b),
@@ -864,7 +547,6 @@ export const ChannelTemplateVersionEditor = forwardRef<
     carouselJson,
     carouselCards,
     carouselButtonRowsByIndex,
-    standardButtonRows,
     channelTemplateId,
     version.version,
     updateMutation,
@@ -872,6 +554,8 @@ export const ChannelTemplateVersionEditor = forwardRef<
   ]);
 
   // Autosave: after manual "Save draft" succeeds, keep persisting edits with debounce.
+  // Mirrors the same permissive contract as onSave — only bail when the payload
+  // can't actually be built (in-flight upload, unparseable JSON).
   useEffect(() => {
     if (!editable) return;
     if (!autoSaveAfterManual) return;
@@ -879,53 +563,12 @@ export const ChannelTemplateVersionEditor = forwardRef<
     if (uploadBusy) return;
     if (Object.values(carouselUploadBusyByIndex).some(Boolean)) return;
 
-    const b = body.trim();
-    if (!b.length) return;
-    if (b.length > BODY_MAX) return;
-    if (footer.length > FOOTER_MAX) return;
-
-    // Header checks (keep in sync with onSave validation, but without setting UI errors).
-    if (layoutType === "STANDARD") {
-      if (headerType === "TEXT" && headerContent.length > HEADER_TEXT_MAX) return;
-      if (
-        (headerType === "IMAGE" ||
-          headerType === "VIDEO" ||
-          headerType === "DOCUMENT") &&
-        !headerContent.trim()
-      ) {
-        return;
-      }
-    }
-
-    const parsedButtons = parseJsonOptional(buttonsJson, "Buttons");
-    if (!parsedButtons.ok) return;
-    const parsedVars = parseJsonOptional(variablesJson, "Variables");
-    if (!parsedVars.ok) return;
-
-    const parsedCarousel = parseJsonOptional(carouselJson, "Carousel cards");
-    if (!parsedCarousel.ok) return;
-
-    if (layoutType === "CAROUSEL") {
-      if (carouselCards.length === 0) return;
-      for (let i = 0; i < carouselCards.length; i++) {
-        const c = carouselCards[i];
-        if (!c?.body?.trim()) return;
-        if (!c?.headerHandle?.trim()) return;
-        const rows = carouselButtonRowsByIndex[i] ?? [];
-        if (rows.length === 0) return;
-        for (let j = 0; j < rows.length; j++) {
-          const r = rows[j];
-          const label = r.text.trim();
-          if (!label) return;
-          if (label.length > META_TEMPLATE_BUTTON_LABEL_MAX) return;
-          if (r.type === "URL" && !r.url.trim()) return;
-          if (r.type === "PHONE_NUMBER" && !r.phone_number.trim()) return;
-        }
-      }
-    }
+    if (!parseJsonOptional(buttonsJson, "Buttons").ok) return;
+    if (!parseJsonOptional(variablesJson, "Variables").ok) return;
+    if (!parseJsonOptional(carouselJson, "Carousel cards").ok) return;
 
     const signature = JSON.stringify({
-      body: b,
+      body: body.trim(),
       footer: footer.trim(),
       headerType,
       headerContent: headerContent.trim(),

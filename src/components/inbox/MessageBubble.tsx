@@ -106,6 +106,9 @@ function formatMessageTimeShort(iso?: string | null): string | null {
 function bubbleClassName(message: InboxMessage, failed: boolean): string {
   if (failed) return "chat-bubble-error";
   if (isProcessingMessage(message)) return "chat-bubble-neutral";
+  // Stickers render transparent (no colored background) — WebP often carries
+  // alpha and a tinted bubble fights the artwork.
+  if (getMediaKind(message) === "sticker") return "!bg-transparent !p-0";
   if (message.direction === "OUTBOUND") return "chat-bubble-primary";
   return "chat-bubble-secondary";
 }
@@ -136,10 +139,24 @@ interface MessageBubbleProps {
   message: InboxMessage;
   onPin?: (message: InboxMessage) => void;
   onStar?: (message: InboxMessage) => void;
+  onReact?: (message: InboxMessage, emoji: string) => void;
+  onUnreact?: (message: InboxMessage) => void;
+  /** Used to identify which reaction belongs to the current agent for "remove on click own". */
+  currentUserId?: string | null;
   highlighted?: boolean;
 }
 
-export function MessageBubble({ message, onPin, onStar, highlighted = false }: MessageBubbleProps) {
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🙏"] as const;
+
+export function MessageBubble({
+  message,
+  onPin,
+  onStar,
+  onReact,
+  onUnreact,
+  currentUserId,
+  highlighted = false,
+}: MessageBubbleProps) {
   const failed = isFailedMessage(message);
   const processing = isProcessingMessage(message);
   const hint = getWhatsappDeliveryHint(message.errorCode);
@@ -354,6 +371,34 @@ export function MessageBubble({ message, onPin, onStar, highlighted = false }: M
       );
     }
 
+    if (kind === "STICKER") {
+      // Stickers render small (~140px), no frame/background — WebP often has
+      // an alpha channel and the bubble would compete visually. Skip the
+      // lightbox affordance (stickers aren't meant to be inspected).
+      if (processing && !resolvedMediaUrl) {
+        return (
+          <div className="flex flex-col items-center gap-2 py-2 min-w-[6rem]">
+            <span className="loading loading-spinner loading-sm" />
+            <span className="text-xs">Receiving sticker…</span>
+          </div>
+        );
+      }
+      if (resolvedMediaUrl && !imgBroken) {
+        return (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolvedMediaUrl}
+            alt="Sticker"
+            className="max-h-36 max-w-36 object-contain"
+            onError={() => setImgBroken(true)}
+          />
+        );
+      }
+      return (
+        <div className="text-xs text-base-content/55">Sticker unavailable</div>
+      );
+    }
+
     if (kind === "IMAGE") {
       if (processing && !resolvedMediaUrl) {
         return (
@@ -517,12 +562,107 @@ export function MessageBubble({ message, onPin, onStar, highlighted = false }: M
         }`}
       >
         <div
-          className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden text-sm leading-relaxed ${
+          className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden text-sm leading-relaxed group/bubble relative ${
             documentBubble ? "p-0" : richMedia ? "p-1.5" : "px-3 py-2.5"
           } ${bubbleClassName(message, failed)}`}
         >
           {body}
+          {/* Quick-react picker — visible on hover; positioned just above the
+              bubble. Click your existing reaction to remove; click another to
+              switch. Hidden on touch devices to avoid taking up real estate. */}
+          {onReact ? (
+            <div
+              className={`absolute -top-3 z-10 hidden md:group-hover/bubble:flex items-center gap-0.5 rounded-full border border-base-300 bg-base-100 px-1.5 py-0.5 shadow-sm ${
+                message.direction === "OUTBOUND" ? "right-2" : "left-2"
+              }`}
+              role="toolbar"
+              aria-label="React to message"
+            >
+              {QUICK_REACTIONS.map((e) => {
+                const mine = (message.reactions ?? []).find(
+                  (r) => r.actorUserId === currentUserId,
+                );
+                const isOwn = mine?.emoji === e;
+                return (
+                  <button
+                    key={e}
+                    type="button"
+                    className={`px-1 text-sm leading-none transition-transform hover:scale-125 ${
+                      isOwn ? "scale-110" : ""
+                    }`}
+                    onClick={(ev) => {
+                      ev.stopPropagation();
+                      if (isOwn && onUnreact) onUnreact(message);
+                      else onReact(message, e);
+                    }}
+                    title={isOwn ? "Remove your reaction" : `React with ${e}`}
+                  >
+                    {e}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
+        {/* Reaction chips — grouped by emoji, count + own-highlight. Single
+            row that wraps when several distinct emojis are present. Sits
+            inside the chat-* container so it inherits left/right alignment. */}
+        {(message.reactions ?? []).length > 0 ? (
+          <div
+            className={`mt-1 flex flex-wrap gap-1 text-xs ${
+              message.direction === "OUTBOUND"
+                ? "justify-end"
+                : "justify-start"
+            }`}
+          >
+            {(() => {
+              // Group reactions by emoji so multiple reactors of the same
+              // emoji collapse to a single "👍 3" chip.
+              const groups = new Map<
+                string,
+                { count: number; ownReactionId: string | null }
+              >();
+              for (const r of message.reactions ?? []) {
+                const g = groups.get(r.emoji) ?? {
+                  count: 0,
+                  ownReactionId: null,
+                };
+                g.count += 1;
+                if (r.actorUserId && r.actorUserId === currentUserId) {
+                  g.ownReactionId = r.id;
+                }
+                groups.set(r.emoji, g);
+              }
+              return Array.from(groups.entries()).map(([emoji, g]) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors ${
+                    g.ownReactionId
+                      ? "border-primary/40 bg-primary/10 text-primary hover:bg-primary/15"
+                      : "border-base-300 bg-base-100 hover:bg-base-200"
+                  }`}
+                  onClick={() => {
+                    if (g.ownReactionId && onUnreact) onUnreact(message);
+                    else if (!g.ownReactionId && onReact) onReact(message, emoji);
+                  }}
+                  title={
+                    g.ownReactionId
+                      ? "Click to remove your reaction"
+                      : `Click to react with ${emoji}`
+                  }
+                >
+                  <span>{emoji}</span>
+                  {g.count > 1 ? (
+                    <span className="tabular-nums text-[0.6875rem]">
+                      {g.count}
+                    </span>
+                  ) : null}
+                </button>
+              ));
+            })()}
+          </div>
+        ) : null}
         {failed ? (
           <div
             className={`mt-2 max-w-[min(85%,28rem)] ${

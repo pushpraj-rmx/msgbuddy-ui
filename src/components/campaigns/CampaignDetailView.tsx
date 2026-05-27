@@ -31,12 +31,16 @@ export type Campaign = {
   templateBindings?: Record<string, unknown> | null;
   scheduledAt?: string | null;
   timezone?: string;
+  throttlePerMin?: number;
 };
 
 type CampaignProgress = {
   progressPercent?: number;
   completedJobs?: number;
   totalJobs?: number;
+  pendingJobs?: number;
+  processingJobs?: number;
+  failedJobs?: number;
   status?: string;
   runNumber?: number;
 };
@@ -67,6 +71,33 @@ type CampaignRunJob = {
   processedAt?: string | null;
   createdAt?: string | null;
 };
+
+/**
+ * "Throttled at X/min — last send scheduled in ~Tm" hint. Returned only when
+ * the run is actively delivering and there's a backlog the throttle will pace
+ * out. Solves the "looks paused" UX: a campaign with throttle 60/min and 900
+ * pending recipients has its last job delayed 15 min in BullMQ's `delayed`
+ * set, which dashboards render as an empty/idle queue.
+ */
+function throttleHint(
+  throttlePerMin: number | undefined,
+  pendingJobs: number | undefined,
+): string | null {
+  if (!throttlePerMin || throttlePerMin <= 0) return null;
+  if (!pendingJobs || pendingJobs <= 0) return null;
+  const minutes = pendingJobs / throttlePerMin;
+  let window: string;
+  if (minutes < 1) {
+    window = "<1m";
+  } else if (minutes < 60) {
+    window = `~${Math.ceil(minutes)}m`;
+  } else {
+    const h = Math.floor(minutes / 60);
+    const m = Math.ceil(minutes - h * 60);
+    window = m > 0 ? `~${h}h ${m}m` : `~${h}h`;
+  }
+  return `Throttled at ${throttlePerMin}/min · last send scheduled ${window} from start`;
+}
 
 function isoToDatetimeLocalValue(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -304,6 +335,18 @@ export type CampaignDetailViewProps = {
       | "duplicate"
       | "delete"
   ) => void | Promise<void>;
+  /**
+   * Bulk-retry every FAILED job in the currently-selected run. Calls the
+   * counter-reconciling endpoint, then refreshes progress + runs + report.
+   */
+  handleRetryFailed: () => void | Promise<void>;
+  /**
+   * Recover CampaignJob rows stranded in PROCESSING — the failure mode
+   * where the DB and BullMQ have drifted and pause/resume can't unstick the
+   * run. Visible to operators only when there's evidence of the bug
+   * (active run with non-trivial processingJobs but stalled progress).
+   */
+  handleRecoverStuck: () => void | Promise<void>;
   onSaveSchedule: (payload: {
     scheduledAt: string | null;
     timezone: string;
@@ -343,6 +386,8 @@ export function CampaignDetailView({
   progressBarCaption,
   loading,
   handleAction,
+  handleRetryFailed,
+  handleRecoverStuck,
   onSaveSchedule,
   handleRename,
   loadProgress,
@@ -497,6 +542,21 @@ export function CampaignDetailView({
                     </div>
                   </div>
                 ) : null}
+
+                {tone === "running"
+                  ? (() => {
+                      const hint = throttleHint(
+                        selectedCampaign.throttlePerMin,
+                        progress?.pendingJobs,
+                      );
+                      return hint ? (
+                        <p className="mt-3 text-xs text-base-content/65">
+                          {hint}. Sends look idle while jobs wait their turn —
+                          this isn&apos;t a pause.
+                        </p>
+                      ) : null;
+                    })()
+                  : null}
               </div>
 
 
@@ -620,6 +680,31 @@ export function CampaignDetailView({
                       disabled={loading}
                     >
                       <span aria-hidden>⏸</span> Pause
+                    </button>
+                  ) : null}
+                  {(mergedMetrics.failed ?? 0) > 0 &&
+                  !showResume(selectedCampaign.status) ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-outline gap-1"
+                      onClick={() => void handleRetryFailed()}
+                      disabled={loading}
+                      title={`Re-queue failed job${(mergedMetrics.failed ?? 0) === 1 ? "" : "s"} from this run. Run counters reconcile.`}
+                    >
+                      <span aria-hidden>↻</span> Retry failed (
+                      {mergedMetrics.failed})
+                    </button>
+                  ) : null}
+                  {tone === "running" && (progress?.processingJobs ?? 0) > 0 ? (
+                    <button
+                      type="button"
+                      className="btn btn-warning btn-outline gap-1"
+                      onClick={() => void handleRecoverStuck()}
+                      disabled={loading}
+                      title="Reset jobs stranded in PROCESSING (worker crash, Redis eviction) back to PENDING and re-queue them. Use when progress is stalled but the run won't complete."
+                    >
+                      <span aria-hidden>⚠</span> Recover stuck (
+                      {progress?.processingJobs})
                     </button>
                   ) : null}
                   {showStopCampaign(selectedCampaign.status) ? (

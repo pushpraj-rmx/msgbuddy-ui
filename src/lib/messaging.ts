@@ -20,6 +20,18 @@ export type MessageStatus =
   | "CANCELLED";
 
 /** Shape returned by GET /messages/conversation/:id */
+/** Reaction row as returned over the wire by /messages/:id/react and SSE. */
+export type MessageReactionWire = {
+  id: string;
+  emoji: string;
+  /** Set when the reaction came from a customer; otherwise null. */
+  actorContactId: string | null;
+  /** Set when the reaction came from an agent; otherwise null. */
+  actorUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type InboxMessage = {
   id: string;
   conversationId: string;
@@ -48,6 +60,7 @@ export type InboxMessage = {
   isStarred?: boolean;
   starredAt?: string | null;
   sendAt?: string | null;
+  reactions?: MessageReactionWire[];
 };
 
 /** Shape returned by GET /messages/conversation/:id/media */
@@ -100,6 +113,7 @@ export type MediaKind =
   | "video"
   | "audio"
   | "document"
+  | "sticker"
   | "unknown";
 
 /** Normalized kind for UI (bubbles, icons). */
@@ -117,6 +131,8 @@ export function getMediaKind(message: InboxMessage): MediaKind {
       return "audio";
     case "DOCUMENT":
       return "document";
+    case "STICKER":
+      return "sticker";
     case "TEMPLATE":
     case "INTERACTIVE":
       return "text";
@@ -137,12 +153,57 @@ export function isProcessingMessage(message: InboxMessage): boolean {
 }
 
 /** Footer label for delivery pipeline — avoids showing "Sent" when status is explicit. */
+/**
+ * Human-readable absolute time for a future schedule. Pegs the relative
+ * window so "in 35 minutes" reads better than "Today 03:00 PM" for short
+ * horizons; longer ones get a date + time. Returns null when unparseable.
+ */
+function formatScheduledForLabel(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  const diffMs = d.getTime() - now.getTime();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow =
+    d.getFullYear() === tomorrow.getFullYear() &&
+    d.getMonth() === tomorrow.getMonth() &&
+    d.getDate() === tomorrow.getDate();
+
+  const timeStr = d.toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  if (diffMs > 0 && diffMs < 60 * 60 * 1000) {
+    const mins = Math.max(1, Math.round(diffMs / 60_000));
+    return `in ${mins} min`;
+  }
+  if (sameDay) return `today · ${timeStr}`;
+  if (isTomorrow) return `tomorrow · ${timeStr}`;
+  // Within a week → weekday name; further → date.
+  const withinWeek = diffMs > 0 && diffMs < 7 * 24 * 60 * 60 * 1000;
+  const dateStr = withinWeek
+    ? d.toLocaleDateString(undefined, { weekday: "short" })
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return `${dateStr} · ${timeStr}`;
+}
+
 export function formatDeliveryStatusLabel(message: InboxMessage): string {
   if (isFailedMessage(message)) return "Failed";
   const raw = message.status?.trim();
   if (!raw) return "Sent";
   const upper = raw.toUpperCase();
   switch (upper) {
+    case "SCHEDULED": {
+      const when = formatScheduledForLabel(message.sendAt);
+      return when ? `Scheduled · ${when}` : "Scheduled";
+    }
     case "PROCESSING":
       return message.direction === "INBOUND"
         ? "Receiving…"
@@ -157,6 +218,8 @@ export function formatDeliveryStatusLabel(message: InboxMessage): string {
       return "Delivered";
     case "READ":
       return "Read";
+    case "CANCELLED":
+      return "Cancelled";
     default:
       return upper
         .replace(/_/g, " ")

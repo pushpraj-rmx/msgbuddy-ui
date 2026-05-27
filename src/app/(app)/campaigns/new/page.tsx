@@ -1,9 +1,6 @@
 import Link from "next/link";
 import { CampaignsAccessDenied } from "@/components/campaigns/CampaignsAccessDenied";
-import {
-  CreateCampaignForm,
-  type CampaignCreateTemplate,
-} from "@/components/campaigns/CreateCampaignForm";
+import { NewCampaignBootstrap } from "@/components/campaigns/NewCampaignBootstrap";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { MeResponse } from "@/lib/api";
@@ -11,6 +8,11 @@ import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
 import { canAccessCampaigns } from "@/lib/workspace-access";
 
+/**
+ * Creates a DRAFT campaign on mount and redirects to /campaigns/[id]/edit.
+ * The wizard always operates on a known campaign id so every step can persist
+ * via PUT — the user can leave + resume any time.
+ */
 export default async function CampaignNewPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
 
@@ -24,17 +26,12 @@ export default async function CampaignNewPage() {
         </div>
         <PageHeader
           title="New campaign"
-          description="Create an outbound WhatsApp campaign in three steps."
+          description="Save your draft as you go. Sending only starts after you review and click Start on the campaign page."
         />
         <CampaignsAccessDenied workspaceName={me.workspace.name} />
       </PageContainer>
     );
   }
-
-  const templatesRes = await serverFetch<{ items: CampaignCreateTemplate[] }>(
-    `${endpoints.templates.list}?limit=100&hasWhatsAppSendableVersion=true`
-  );
-  const templates = templatesRes?.items ?? [];
 
   return (
     <PageContainer>
@@ -45,9 +42,9 @@ export default async function CampaignNewPage() {
       </div>
       <PageHeader
         title="New campaign"
-        description="Create an outbound WhatsApp campaign in three steps. Set an optional send time on the campaign page."
+        description="Save your draft as you go. Sending only starts after you review and click Start on the campaign page."
       />
-      <CreateCampaignForm templates={templates} />
+      <NewCampaignBootstrap />
     </PageContainer>
   );
 }

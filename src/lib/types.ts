@@ -3,6 +3,18 @@
 /** Tag shape when returned with contact list/detail include=tags */
 export type ContactTag = { id: string; name: string; color: string };
 
+/** Ordered funnel — keep in sync with Prisma `ContactLifecycleStage`. */
+export const CONTACT_LIFECYCLE_STAGES = [
+  "LEAD",
+  "ENGAGED",
+  "QUALIFIED",
+  "CUSTOMER",
+  "DORMANT",
+  "LOST",
+] as const;
+export type ContactLifecycleStage =
+  (typeof CONTACT_LIFECYCLE_STAGES)[number];
+
 export type Contact = {
   id: string;
   workspaceId: string;
@@ -16,6 +28,8 @@ export type Contact = {
   avatarUrl?: string | null;
   isBlocked: boolean;
   isOptedOut: boolean;
+  /** Null when the contact hasn't been classified yet. */
+  lifecycleStage?: ContactLifecycleStage | null;
   lastMessageAt?: string;
   createdAt: string;
   updatedAt: string;

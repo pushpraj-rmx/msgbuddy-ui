@@ -43,7 +43,7 @@ export const KEYBOARD_SHORTCUTS_CATALOG: ReadonlyArray<{
   {
     keys: "Esc",
     description:
-      "Close details pane when focus is not in a text field; also closes search dropdown, mobile search overlay, or context menu when one is open",
+      "Close the topmost dialog, context menu, or lightbox. In a search input, first press clears the text; second press blurs the field. Composer drafts are never cleared by Esc.",
   },
   {
     keys: "R",

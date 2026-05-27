@@ -80,7 +80,9 @@ export function ImportModal({
   onError: (message: string | null) => void;
 }) {
   const [step, setStep] = useState<Step>("upload");
+  const [source, setSource] = useState<"file" | "google-sheet">("file");
   const [file, setFile] = useState<File | null>(null);
+  const [sheetUrl, setSheetUrl] = useState("");
   const [fileSizeError, setFileSizeError] = useState<string | null>(null);
   const [defaultCountry, setDefaultCountry] = useState("IN");
   const [mode, setMode] = useState<ImportMode>("merge");
@@ -226,16 +228,26 @@ export function ImportModal({
     }, 600);
   };
 
+  const startJob = async (opts: { dryRun: boolean }) => {
+    const baseOpts = {
+      defaultCountry: defaultCountry || "IN",
+      mode,
+      dryRun: opts.dryRun,
+    };
+    if (source === "google-sheet") {
+      return contactsApi.startImportJobFromGoogleSheet(sheetUrl.trim(), baseOpts);
+    }
+    if (!file) throw new Error("No file selected");
+    return contactsApi.startImportJob(file, baseOpts);
+  };
+
   const handlePreview = async () => {
-    if (!file) return;
+    if (source === "file" && !file) return;
+    if (source === "google-sheet" && !sheetUrl.trim()) return;
     setStarting(true);
     onError(null);
     try {
-      const { jobId: id } = await contactsApi.startImportJob(file, {
-        defaultCountry: defaultCountry || "IN",
-        mode,
-        dryRun: true,
-      });
+      const { jobId: id } = await startJob({ dryRun: true });
       setJobId(id);
       // Seed empty job state so the analyzing screen can render before the first SSE arrives.
       setJob(null);
@@ -249,15 +261,12 @@ export function ImportModal({
   };
 
   const handleCommit = async () => {
-    if (!file) return;
+    if (source === "file" && !file) return;
+    if (source === "google-sheet" && !sheetUrl.trim()) return;
     setStarting(true);
     onError(null);
     try {
-      const { jobId: id } = await contactsApi.startImportJob(file, {
-        defaultCountry: defaultCountry || "IN",
-        mode,
-        dryRun: false,
-      });
+      const { jobId: id } = await startJob({ dryRun: false });
       setJobId(id);
       setJob(null);
       setStep("importing");
@@ -290,6 +299,8 @@ export function ImportModal({
   const handleClose = () => {
     if (starting || cancelling) return;
     setFile(null);
+    setSheetUrl("");
+    setSource("file");
     setJobId(null);
     setJob(null);
     setStep("upload");
@@ -339,8 +350,12 @@ export function ImportModal({
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {step === "upload" && (
             <UploadStep
+              source={source}
+              setSource={setSource}
               file={file}
               setFile={handleFileSelect}
+              sheetUrl={sheetUrl}
+              setSheetUrl={setSheetUrl}
               fileSizeError={fileSizeError}
               defaultCountry={defaultCountry}
               setDefaultCountry={setDefaultCountry}
@@ -383,7 +398,11 @@ export function ImportModal({
                 type="button"
                 className="btn btn-primary btn-sm"
                 onClick={handlePreview}
-                disabled={!file || starting || !!fileSizeError}
+                disabled={
+                  starting ||
+                  (source === "file" && (!file || !!fileSizeError)) ||
+                  (source === "google-sheet" && !sheetUrl.trim())
+                }
               >
                 {starting ? (
                   <>
@@ -486,8 +505,12 @@ export function ImportModal({
 // ─────────────────────────────────────────────────────────────────────────
 
 function UploadStep({
+  source,
+  setSource,
   file,
   setFile,
+  sheetUrl,
+  setSheetUrl,
   fileSizeError,
   defaultCountry,
   setDefaultCountry,
@@ -495,8 +518,12 @@ function UploadStep({
   setMode,
   disabled,
 }: {
+  source: "file" | "google-sheet";
+  setSource: (s: "file" | "google-sheet") => void;
   file: File | null;
   setFile: (f: File | null) => void;
+  sheetUrl: string;
+  setSheetUrl: (s: string) => void;
   fileSizeError: string | null;
   defaultCountry: string;
   setDefaultCountry: (s: string) => void;
@@ -506,32 +533,77 @@ function UploadStep({
 }) {
   return (
     <div className="space-y-4">
-      <div className="space-y-1.5">
-        <span className="op-label block">File</span>
-        <input
-          type="file"
-          accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-          className="file-input file-input-bordered file-input-sm w-full text-[0.8125rem]"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+      <div role="tablist" className="tabs tabs-bordered">
+        <button
+          role="tab"
+          type="button"
+          className={`tab ${source === "file" ? "tab-active" : ""}`}
+          onClick={() => setSource("file")}
           disabled={disabled}
-        />
-        {fileSizeError ? (
-          <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2">
-            <span className="op-label mb-1 block text-error">file too large</span>
-            <p className="text-[0.8125rem] text-base-content">{fileSizeError}</p>
-          </div>
-        ) : file ? (
-          <p className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
-            {file.name} · {formatBytes(file.size)}
-          </p>
-        ) : null}
-        <p className="text-[0.6875rem] text-base-content/50">
-          Required column:{" "}
-          <span className="font-mono-op rounded-[3px] border border-base-300 bg-base-200 px-1 py-[1px] text-[0.625rem] tracking-[0.04em] text-base-content">phone</span>.
-          Optional: name, designation, email, phoneLabel, emailLabel, tags, plus any custom field columns.
-          Maximum size: <strong>{MAX_LABEL}</strong> (~200K rows, processed in the background).
-        </p>
+        >
+          Upload file
+        </button>
+        <button
+          role="tab"
+          type="button"
+          className={`tab ${source === "google-sheet" ? "tab-active" : ""}`}
+          onClick={() => setSource("google-sheet")}
+          disabled={disabled}
+        >
+          From Google Sheet
+        </button>
       </div>
+
+      {source === "file" ? (
+        <div className="space-y-1.5">
+          <span className="op-label block">File</span>
+          <input
+            type="file"
+            accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+            className="file-input file-input-bordered file-input-sm w-full text-[0.8125rem]"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            disabled={disabled}
+          />
+          {fileSizeError ? (
+            <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2">
+              <span className="op-label mb-1 block text-error">file too large</span>
+              <p className="text-[0.8125rem] text-base-content">{fileSizeError}</p>
+            </div>
+          ) : file ? (
+            <p className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
+              {file.name} · {formatBytes(file.size)}
+            </p>
+          ) : null}
+          <p className="text-[0.6875rem] text-base-content/50">
+            Required column:{" "}
+            <span className="font-mono-op rounded-[3px] border border-base-300 bg-base-200 px-1 py-[1px] text-[0.625rem] tracking-[0.04em] text-base-content">phone</span>.
+            Optional: name, designation, email, phoneLabel, emailLabel, tags, plus any custom field columns.
+            Maximum size: <strong>{MAX_LABEL}</strong> (~200K rows, processed in the background).
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <span className="op-label block">Google Sheet URL</span>
+          <input
+            type="url"
+            className="input input-bordered input-sm w-full font-mono-op text-[0.75rem]"
+            placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=0"
+            value={sheetUrl}
+            onChange={(e) => setSheetUrl(e.target.value)}
+            disabled={disabled}
+          />
+          <div className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2">
+            <span className="op-label mb-1 block text-warning">sharing required</span>
+            <p className="text-[0.78125rem] text-base-content">
+              In Google Sheets, click <strong>Share → General access</strong> and set it to
+              {" "}<strong>“Anyone with the link”</strong> (Viewer is enough). Private sheets cannot be imported this way.
+            </p>
+          </div>
+          <p className="text-[0.6875rem] text-base-content/50">
+            We read the active tab (or the <code className="font-mono-op">gid</code> from the URL) as CSV. Same column requirements as file upload — first row is the header.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <span className="op-label block">Default country</span>

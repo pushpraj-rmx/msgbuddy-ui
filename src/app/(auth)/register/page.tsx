@@ -40,8 +40,18 @@ const registerFeatureSlides = [
   },
 ] as const;
 
+/** Same-origin-pathname allowlist for `?next=` — see login/page.tsx for context. */
+function safeNextPath(): string | null {
+  if (typeof window === "undefined") return null;
+  const raw = new URLSearchParams(window.location.search).get("next");
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return null;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
+  // Capture `?next=` first — the error initializer below replaceStates the URL.
+  const [nextPath] = useState<string | null>(() => safeNextPath());
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -122,7 +132,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  onClick={() => router.push("/login")}
+                  onClick={() => router.push(nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login")}
                 >
                   Go to sign in
                 </button>
@@ -227,7 +237,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   className="btn btn-ghost w-full"
-                  onClick={() => router.push("/login")}
+                  onClick={() => router.push(nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login")}
                 >
                   Already have an account? Sign in
                 </button>

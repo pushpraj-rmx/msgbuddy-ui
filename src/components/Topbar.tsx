@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { X, PanelLeft, Bell, Search, FileText } from "lucide-react";
-import type { MeResponse } from "@/lib/api";
+import { X, PanelLeft, Bell, Search, FileText, Bug, ListChecks } from "lucide-react";
+import type { MeResponse, TaskCounts } from "@/lib/api";
+import { tasksApi } from "@/lib/api";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { logoutAction } from "@/app/actions/auth";
 import { clearToken } from "@/lib/auth";
@@ -51,6 +52,37 @@ export function Topbar({
 
   const unreadCount = unreadCountQuery.data?.count ?? 0;
   const notifications = listQuery.data?.items ?? [];
+
+  // Tasks badge — light-touch polling of /tasks/counts so the agent sees
+  // overdue / due-today numbers without opening the page. Polled every 60s
+  // and re-fetched when the tab becomes visible; SSE wiring is a follow-up.
+  const [taskCounts, setTaskCounts] = useState<TaskCounts | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      void tasksApi
+        .counts()
+        .then((c) => {
+          if (!cancelled) setTaskCounts(c);
+        })
+        .catch(() => {
+          // non-fatal — leaves the previous value (or null) in place
+        });
+    };
+    refresh();
+    const intervalId = window.setInterval(refresh, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+  const dueTaskCount =
+    (taskCounts?.mineOverdue ?? 0) + (taskCounts?.mineDueToday ?? 0);
 
   useEffect(() => {
     const onOpenSearchShortcut = () => {
@@ -143,6 +175,40 @@ export function Topbar({
         >
           <Search className="h-5 w-5" />
         </button>
+        <div
+          className="tooltip tooltip-bottom"
+          data-tip={
+            dueTaskCount > 0
+              ? `${dueTaskCount} task${dueTaskCount === 1 ? "" : "s"} due`
+              : "Tasks"
+          }
+        >
+          <Link
+            href="/tasks"
+            className="btn btn-ghost btn-square relative"
+            aria-label={
+              dueTaskCount > 0
+                ? `${dueTaskCount} tasks due — open tasks page`
+                : "Tasks"
+            }
+          >
+            <ListChecks className="h-5 w-5" />
+            {dueTaskCount > 0 ? (
+              <span className="font-mono-op absolute -right-0.5 -top-0.5 flex min-w-[18px] items-center justify-center rounded-[3px] bg-warning px-1 text-[0.625rem] font-semibold leading-[16px] text-warning-content tabular-nums">
+                {dueTaskCount > 99 ? "99+" : dueTaskCount}
+              </span>
+            ) : null}
+          </Link>
+        </div>
+        <div className="tooltip tooltip-bottom" data-tip="Report a bug">
+          <Link
+            href="/feedback"
+            className="btn btn-ghost btn-square"
+            aria-label="Report a bug or send feedback"
+          >
+            <Bug className="h-5 w-5" />
+          </Link>
+        </div>
         <ThemeToggle />
         {rightPanel?.content ? (
           <div className="tooltip tooltip-bottom" data-tip="Toggle details (.)" >

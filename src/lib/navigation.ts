@@ -2,12 +2,12 @@ import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
   Bell,
-  Bug,
   CreditCard,
   FileText,
   Home,
   Image,
   Layers,
+  ListChecks,
   MessageSquare,
   Rocket,
   Settings,
@@ -47,9 +47,11 @@ export function getAppNav(
     },
     { href: "/campaigns", label: "Campaigns", Icon: Rocket, showInDock: true },
     { href: "/templates", label: "Templates", Icon: FileText, showInDock: true },
+    { href: "/tasks", label: "Tasks", Icon: ListChecks },
     { href: "/media", label: "Media", Icon: Image },
     { href: "/notifications", label: "Notifications", Icon: Bell },
-    { href: "/feedback", label: "Feedback", Icon: Bug },
+    // Feedback / bug report — surfaced as a topbar button (see Topbar.tsx) so
+    // agents can report from anywhere in the app, not just from the sidebar.
     { href: "/usage", label: "Usage", Icon: Layers },
     { href: "/billing", label: "Billing", Icon: CreditCard },
     {
@@ -93,6 +95,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/campaigns/new")) return "New campaign";
   if (pathname.startsWith("/campaigns")) return "Campaigns";
   if (pathname.startsWith("/templates")) return "Templates";
+  if (pathname.startsWith("/tasks")) return "Tasks";
   if (pathname.startsWith("/media")) return "Media";
   if (pathname.startsWith("/settings/integrations/whatsapp")) return "WhatsApp";
   if (pathname.startsWith("/settings/integrations")) return "Integrations";

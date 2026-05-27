@@ -31,6 +31,9 @@ const OWNER_PERMISSIONS: readonly string[] = [
   "settings.manage",
   "analytics.view",
   "analytics.export",
+  "automations.manage",
+  "tasks.view",
+  "tasks.manage",
 ];
 
 const ADMIN_PERMISSIONS: readonly string[] = [...OWNER_PERMISSIONS];
@@ -50,6 +53,8 @@ const SUPERVISOR_PERMISSIONS: readonly string[] = [
   "templates.sync",
   "analytics.view",
   "members.view",
+  "tasks.view",
+  "tasks.manage",
 ];
 
 const AGENT_PERMISSIONS: readonly string[] = [
@@ -63,6 +68,8 @@ const AGENT_PERMISSIONS: readonly string[] = [
   "media.read",
   "media.write",
   "templates.view",
+  "tasks.view",
+  "tasks.manage",
 ];
 
 const AUDITOR_PERMISSIONS: readonly string[] = [
@@ -75,6 +82,7 @@ const AUDITOR_PERMISSIONS: readonly string[] = [
   "analytics.view",
   "analytics.export",
   "members.view",
+  "tasks.view",
 ];
 
 const VIEWER_PERMISSIONS: readonly string[] = [
@@ -82,6 +90,7 @@ const VIEWER_PERMISSIONS: readonly string[] = [
   "messages.read",
   "contacts.view",
   "media.read",
+  "tasks.view",
 ];
 
 const BY_ROLE: Record<WorkspaceRole, readonly string[]> = {

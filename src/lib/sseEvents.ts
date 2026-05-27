@@ -8,6 +8,7 @@ import type { InboxMessage } from "./messaging";
 export const SseWireType = {
   messageCreated: "message.created",
   messageStatusUpdated: "message.status_updated",
+  messageReactionChanged: "message.reaction.changed",
   conversationUpdated: "conversation.updated",
   conversationPresenceUpdated: "conversation.presence.updated",
   contactUpdated: "contact.updated",
@@ -133,6 +134,13 @@ export function isMessageStatusUpdated(type: string): boolean {
     type === "MESSAGE_STATUS_UPDATED" ||
     type === "MESSAGE_UPDATED" ||
     type === "MESSAGE_STATUS_CHANGED"
+  );
+}
+
+export function isMessageReactionChanged(type: string): boolean {
+  return (
+    type === SseWireType.messageReactionChanged ||
+    type === "MESSAGE_REACTION_CHANGED"
   );
 }
 

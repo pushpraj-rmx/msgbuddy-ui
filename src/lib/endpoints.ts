@@ -41,6 +41,7 @@ export const endpoints = {
     list: `${P}/workspaces`,
     byId: (id: string) => `${P}/workspaces/${id}`,
     members: (id: string) => `${P}/workspaces/${id}/members`,
+    membersByEmail: (id: string) => `${P}/workspaces/${id}/members/by-email`,
     memberRole: (id: string, memberId: string) =>
       `${P}/workspaces/${id}/members/${memberId}/role`,
     memberById: (id: string, memberId: string) =>
@@ -53,6 +54,15 @@ export const endpoints = {
     list: `${P}/api-keys`,
     create: `${P}/api-keys`,
     revoke: (id: string) => `${P}/api-keys/${id}`,
+  },
+  workspaceInvitations: {
+    list: `${P}/workspace-invitations`,
+    create: `${P}/workspace-invitations`,
+    revoke: (id: string) => `${P}/workspace-invitations/${id}`,
+  },
+  invitations: {
+    lookup: (token: string) => `${P}/invitations/${token}`,
+    accept: (token: string) => `${P}/invitations/${token}/accept`,
   },
   webhookEndpoints: {
     list: `${P}/webhook-endpoints`,
@@ -97,6 +107,7 @@ export const endpoints = {
     updateStatus: (id: string) => `${P}/messages/${id}/status`,
     pin: (id: string) => `${P}/messages/${id}/pin`,
     star: (id: string) => `${P}/messages/${id}/star`,
+    react: (id: string) => `${P}/messages/${id}/react`,
     starred: `${P}/messages/starred`,
     scheduled: `${P}/messages/scheduled`,
   },
@@ -117,6 +128,7 @@ export const endpoints = {
     list: `${P}/contacts`,
     create: `${P}/contacts`,
     import: `${P}/contacts/import`,
+    importGoogleSheet: `${P}/contacts/import/google-sheet`,
     importJob: (id: string) => `${P}/contacts/import/jobs/${id}`,
     importJobCancel: (id: string) => `${P}/contacts/import/jobs/${id}/cancel`,
     export: `${P}/contacts/export`,
@@ -199,6 +211,7 @@ export const endpoints = {
     resume: (id: string) => `${P}/campaigns/${id}/resume`,
     cancel: (id: string) => `${P}/campaigns/${id}/cancel`,
     drainQueue: (id: string) => `${P}/campaigns/${id}/drain-queue`,
+    recoverStuck: (id: string) => `${P}/campaigns/${id}/recover-stuck`,
     retryFailed: (id: string) => `${P}/campaigns/${id}/retry-failed`,
     duplicate: (id: string) => `${P}/campaigns/${id}/duplicate`,
     progress: (id: string) => `${P}/campaigns/${id}/progress`,
@@ -257,6 +270,27 @@ export const endpoints = {
     notes: `${P}/internal/notes`,
     noteById: (id: string) => `${P}/internal/notes/${id}`,
     toggleNotePin: (id: string) => `${P}/internal/notes/${id}/toggle-pin`,
+  },
+  automation: {
+    rules: `${P}/automation-rules`,
+    ruleById: (id: string) => `${P}/automation-rules/${id}`,
+    toggleRule: (id: string) => `${P}/automation-rules/${id}/toggle`,
+    businessHours: `${P}/business-hours`,
+  },
+  cannedResponses: {
+    list: `${P}/canned-responses`,
+    create: `${P}/canned-responses`,
+    byId: (id: string) => `${P}/canned-responses/${id}`,
+    use: (id: string) => `${P}/canned-responses/${id}/use`,
+  },
+  tasks: {
+    list: `${P}/tasks`,
+    create: `${P}/tasks`,
+    byId: (id: string) => `${P}/tasks/${id}`,
+    complete: (id: string) => `${P}/tasks/${id}/complete`,
+    snooze: (id: string) => `${P}/tasks/${id}/snooze`,
+    reopen: (id: string) => `${P}/tasks/${id}/reopen`,
+    counts: `${P}/tasks/counts`,
   },
   notifications: {
     list: `${P}/notifications`,

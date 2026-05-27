@@ -367,6 +367,7 @@ export function mergeReportWithProgress(
   progress: {
     completedJobs?: number;
     totalJobs?: number;
+    failedJobs?: number;
     progressPercent?: number;
   } | null
 ): ReportMetrics {
@@ -375,6 +376,7 @@ export function mergeReportWithProgress(
     ...metrics,
     totalJobs: metrics.totalJobs ?? progress.totalJobs,
     completed: metrics.completed ?? progress.completedJobs,
+    failed: metrics.failed ?? progress.failedJobs,
     extras: metrics.extras,
   };
 }

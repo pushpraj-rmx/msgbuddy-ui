@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Users, Puzzle, Lock, Settings, KeyRound, Webhook } from "lucide-react";
+import { Users, Puzzle, Lock, Settings, KeyRound, Webhook, MessageSquareText } from "lucide-react";
 
 export function SettingsGearMenu({
   memberCount,
@@ -96,6 +96,24 @@ export function SettingsGearMenu({
             </Link>
           </li>
         ) : null}
+        <li role="none">
+          <Link
+            href="/settings/canned-responses"
+            className="gap-3"
+            role="menuitem"
+          >
+            <MessageSquareText
+              className="h-4 w-4 shrink-0 opacity-70"
+              fontSize="inherit"
+            />
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
+              <span>Canned responses</span>
+              <span className="text-xs font-normal text-base-content/50">
+                /shortcut quick replies
+              </span>
+            </span>
+          </Link>
+        </li>
         <li role="none">
           <Link href="/settings/password" className="gap-3" role="menuitem">
             <Lock className="h-4 w-4 shrink-0 opacity-70" fontSize="inherit" />

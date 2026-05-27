@@ -327,6 +327,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
               className="input input-bordered input-sm w-full pl-8"
               value={search}
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              data-esc-clearable="true"
             />
           </div>
           {/* Filters */}

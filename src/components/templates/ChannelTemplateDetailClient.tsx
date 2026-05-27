@@ -399,6 +399,7 @@ export function ChannelTemplateDetailClient({
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
   const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -441,6 +442,12 @@ export function ChannelTemplateDetailClient({
   const updateChannelTemplateMutation = useUpdateChannelTemplate();
 
   const editorRef = useRef<ChannelTemplateVersionEditorHandle | null>(null);
+
+  // Clear any submit error when the visible version changes — stale message would
+  // otherwise persist when the user clicks a different version in the list.
+  useEffect(() => {
+    setSubmitError(null);
+  }, [defaultSelected]);
 
   const anyMutationPending =
     activateMutation.isPending ||
@@ -618,24 +625,35 @@ export function ChannelTemplateDetailClient({
 
   const onSubmitAndApprove = useCallback(async () => {
     if (!version) return;
+    setSubmitError(null);
     // Persist any unsaved local edits first. submitForApproval on the server
     // takes no body — without this, in-flight keystrokes would be silently
     // dropped and the version locked on PENDING → APPROVED.
     const saved = await editorRef.current?.save();
-    if (saved === false) return; // validation/API failed; error is shown in the editor
+    if (saved === false) return; // save error already shown in the editor
     submitMutation.mutate(
       { id: channelTemplateId, version: version.version },
       {
         onSuccess: () => {
-          approveMutation.mutate({ id: channelTemplateId, version: version.version });
+          approveMutation.mutate(
+            { id: channelTemplateId, version: version.version },
+            {
+              onError: (err) => setSubmitError(getApiError(err)),
+            },
+          );
         },
+        onError: (err) => setSubmitError(getApiError(err)),
       }
     );
   }, [submitMutation, approveMutation, channelTemplateId, version]);
 
   const onApprove = useCallback(() => {
     if (!version) return;
-    approveMutation.mutate({ id: channelTemplateId, version: version.version });
+    setSubmitError(null);
+    approveMutation.mutate(
+      { id: channelTemplateId, version: version.version },
+      { onError: (err) => setSubmitError(getApiError(err)) },
+    );
   }, [approveMutation, channelTemplateId, version]);
 
   const onReject = useCallback(() => {
@@ -1033,6 +1051,13 @@ export function ChannelTemplateDetailClient({
               setCreateOpen(true);
             }}
           />
+
+          {submitError && (
+            <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+              <span className="op-label mb-1 block text-error">submit blocked — fix and retry</span>
+              <span className="text-sm">{submitError}</span>
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-2">
             <button

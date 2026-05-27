@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import { CircleUser, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical, Phone, Mail, Search as SearchIcon, Image as ImageIcon, StickyNote, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { CircleUser, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical, Phone, Mail, Search as SearchIcon, Image as ImageIcon, StickyNote, ExternalLink, ChevronLeft, ChevronRight, Tag as TagIcon, ArrowUpDown, Clock, X as XIcon } from "lucide-react";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -22,14 +22,21 @@ import {
   channelTemplatesApi,
   workspaceApi,
   tagsApi,
+  cannedResponsesApi,
+  type CannedResponse,
   type WorkspaceMemberResponseDto,
   type ConversationSendPolicyDto,
   type WhatsAppOutboundMediaType,
 } from "@/lib/api";
 import type { Tag } from "@/lib/types";
+import {
+  CONTACT_LIFECYCLE_STAGES,
+  type ContactLifecycleStage,
+} from "@/lib/types";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { MessageBubble } from "@/components/inbox/MessageBubble";
 import { InternalNotesPanel } from "@/components/inbox/InternalNotesPanel";
+import { TasksPanel } from "@/components/inbox/TasksPanel";
 import { DateSeparator, formatDateLabel, getDateKey } from "@/components/inbox/DateSeparator";
 import { MediaGallery } from "@/components/inbox/MediaGallery";
 import {
@@ -53,11 +60,13 @@ import {
   isConversationUpdated,
   inboxMessageFromSseWire,
   isMessageCreated,
+  isMessageReactionChanged,
   isMessageStatusUpdated,
   parseWorkspaceSseEvent,
 } from "@/lib/sseEvents";
 import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 export type Conversation = {
@@ -80,10 +89,21 @@ export type Conversation = {
     failedAt?: string;
   };
   contact?: {
+    id?: string;
     name?: string;
     phone?: string;
     email?: string;
     avatarUrl?: string | null;
+    isOptedOut?: boolean;
+    isBlocked?: boolean;
+    lifecycleStage?:
+      | "LEAD"
+      | "ENGAGED"
+      | "QUALIFIED"
+      | "CUSTOMER"
+      | "DORMANT"
+      | "LOST"
+      | null;
   };
   mode?: "solo" | "collaborative" | "queue";
   assignedUser?: {
@@ -149,6 +169,15 @@ const STATUS_LABELS: Record<Conversation["status"], string> = {
   OPEN: "Open",
   CLOSED: "Closed",
   ARCHIVED: "Archived",
+};
+
+const LIFECYCLE_STAGE_LABELS: Record<ContactLifecycleStage, string> = {
+  LEAD: "Lead",
+  ENGAGED: "Engaged",
+  QUALIFIED: "Qualified",
+  CUSTOMER: "Customer",
+  DORMANT: "Dormant",
+  LOST: "Lost",
 };
 
 type ChannelFilter = "WHATSAPP" | "TELEGRAM" | "EMAIL" | "SMS";
@@ -221,6 +250,14 @@ export function InboxClient({
   const [scheduledMessages, setScheduledMessages] = useState<InboxMessage[]>([]);
   const [scheduledCursor, setScheduledCursor] = useState<string | null>(null);
   const [scheduledLoading, setScheduledLoading] = useState(false);
+  /**
+   * Conversation sort mode for the queue. Default newest-first; SLA-triage
+   * mode (oldestUnreadFirst) floats unread conversations to the top ordered
+   * by longest-waiting. Backend is `conversations.service.ts:list#sort`.
+   */
+  const [sortMode, setSortMode] = useState<
+    "lastMessageAt" | "oldestUnreadFirst"
+  >("lastMessageAt");
   const [queueFilter, setQueueFilter] = useState<
     "all" | "awaiting" | "unread" | "snoozed"
   >("all");
@@ -287,6 +324,7 @@ export function InboxClient({
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const draftInputRef = useRef<HTMLTextAreaElement>(null);
+  const scheduleInputRef = useRef<HTMLInputElement>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const voiceRecorder = useVoiceRecorder();
   const messagesScrollRef = useRef<HTMLDivElement>(null);
@@ -359,6 +397,54 @@ export function InboxClient({
   const [pinnedBannerExpanded, setPinnedBannerExpanded] = useState(true);
   const [messageMutationBusy, setMessageMutationBusy] = useState(false);
   const [scheduleAt, setScheduleAt] = useState<string>("");
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+
+  /** Format a Date as `YYYY-MM-DDTHH:mm` in the user's local timezone —
+   *  the format an `<input type="datetime-local">` needs. `toISOString()`
+   *  is UTC, which shifts the displayed time on every render and breaks
+   *  presets like "Tomorrow 9 AM". */
+  const toLocalInputValue = useCallback((d: Date): string => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  }, []);
+
+  /** Quick-pick presets — pickers alone make scheduling a chore. Mirrors
+   *  Gmail/Slack "Send later" affordances; absolute hour targets respect
+   *  the user's local clock. */
+  const schedulePresets = useMemo(() => {
+    const now = new Date();
+    const inMinutes = (m: number) => {
+      const d = new Date(now);
+      d.setMinutes(d.getMinutes() + m);
+      return d;
+    };
+    const tomorrowAt = (hour: number) => {
+      const d = new Date(now);
+      d.setDate(d.getDate() + 1);
+      d.setHours(hour, 0, 0, 0);
+      return d;
+    };
+    const nextWeekday = (targetDay: number, hour: number) => {
+      // targetDay: 0=Sun, 1=Mon, … 6=Sat. Always picks the next occurrence,
+      // skipping today even if today matches.
+      const d = new Date(now);
+      const diff = ((targetDay - d.getDay() + 7) % 7) || 7;
+      d.setDate(d.getDate() + diff);
+      d.setHours(hour, 0, 0, 0);
+      return d;
+    };
+    return [
+      { label: "+30 min", date: inMinutes(30) },
+      { label: "+1 hour", date: inMinutes(60) },
+      { label: "+2 hours", date: inMinutes(120) },
+      { label: "Tomorrow 9 AM", date: tomorrowAt(9) },
+      { label: "Tomorrow 6 PM", date: tomorrowAt(18) },
+      { label: "Monday 9 AM", date: nextWeekday(1, 9) },
+    ];
+  }, [showSchedulePicker]); // recompute when reopened so "now" is fresh
   const [viewersByConversation, setViewersByConversation] = useState<
     Record<string, string[]>
   >({});
@@ -369,6 +455,28 @@ export function InboxClient({
       ? {}
       : readInboxDraftsFromStorage(draftsStorageKey)
   );
+
+  /**
+   * Canned responses — loaded once per session. The composer triggers on
+   * `/shortcut` and surfaces matching snippets in a popover.
+   */
+  const [cannedResponses, setCannedResponses] = useState<CannedResponse[]>([]);
+  const [cannedSelectedIdx, setCannedSelectedIdx] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void cannedResponsesApi
+      .list()
+      .then((list) => {
+        if (!cancelled) setCannedResponses(list);
+      })
+      .catch(() => {
+        // non-fatal; suggestions just stay empty
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   //  const isLgUp = useMediaQuery("(min-width: 1024px)");
   const isLgUp = useMediaQuery(LG_MEDIA_QUERY);
@@ -599,14 +707,51 @@ export function InboxClient({
 
   const sortedMessages = useMemo(
     () =>
-      [...messages].sort((a, b) => {
-        if (a.createdAt && b.createdAt) {
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        }
-        return a.id.localeCompare(b.id);
-      }),
+      [...messages]
+        // Scheduled messages never appear in the inline thread — they live
+        // in the per-contact "scheduled" strip above the composer and join
+        // the timeline only when they actually fire. Without this filter
+        // the bubble shows up at the moment the agent created it, which
+        // doesn't match what the recipient sees.
+        .filter((m) => (m.status ?? "").toUpperCase() !== "SCHEDULED")
+        .sort((a, b) => {
+          if (a.createdAt && b.createdAt) {
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          }
+          return a.id.localeCompare(b.id);
+        }),
     [messages]
   );
+
+  /**
+   * Scheduled messages addressed to the currently-open conversation.
+   * Reuses the workspace-wide `scheduledMessages` cache (already populated
+   * by the sidebar) and filters client-side — the set is small (~per-user
+   * scheduled volume) so server-side filtering isn't worth a new endpoint.
+   */
+  const scheduledForActiveContact = useMemo(() => {
+    if (!selectedConversation) return [] as InboxMessage[];
+    const cid = selectedConversation.contactId;
+    return scheduledMessages
+      .filter((m) => {
+        const status = (m.status ?? "").toUpperCase();
+        if (status !== "SCHEDULED") return false;
+        // The wire shape on listScheduled includes `conversationId`; some
+        // older payloads only carry contactId. Match either to be safe.
+        const mAny = m as InboxMessage & { contactId?: string };
+        return (
+          m.conversationId === selectedConversation.id ||
+          mAny.contactId === cid
+        );
+      })
+      .sort((a, b) => {
+        const aT = a.sendAt ? new Date(a.sendAt).getTime() : 0;
+        const bT = b.sendAt ? new Date(b.sendAt).getTime() : 0;
+        return aT - bT;
+      });
+  }, [scheduledMessages, selectedConversation]);
+
+  const [showScheduledStrip, setShowScheduledStrip] = useState(false);
 
   /** Messages grouped by calendar date, in order. */
   const groupedMessages = useMemo(() => {
@@ -662,10 +807,9 @@ export function InboxClient({
         if (container) {
           container.scrollTo({ top: 0, behavior: "auto" });
         }
-        void conversationsApi.read(selectedId).catch(() => { });
-        setConversations((prev) =>
-          prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
-        );
+        // Read state is now driven by the 1s focus+visibility dwell effect
+        // below — not by conversation open. Avoids the "clicked a notification
+        // by accident" false-read and lets us defer the WhatsApp blue-tick.
       }
       return;
     }
@@ -677,10 +821,6 @@ export function InboxClient({
     if (intent === "auto") {
       scrollThreadIntentRef.current = "none";
       if (!pendingScrollMessageId) scrollToBottom("auto");
-      void conversationsApi.read(selectedId).catch(() => { });
-      setConversations((prev) =>
-        prev.map((c) => (c.id === selectedId ? { ...c, unreadCount: 0 } : c))
-      );
       return;
     }
     if (intent === "smooth") {
@@ -689,6 +829,70 @@ export function InboxClient({
       return;
     }
   }, [selectedId, sortedMessages, messageLoading, pendingScrollMessageId]);
+
+  /**
+   * Dwell-gated "mark as read" — fires `/conversations/:id/read` (which also
+   * sends the WhatsApp blue-tick to Meta) after the conversation has been
+   * focused AND visible for a full second. Cancels on conversation switch,
+   * tab blur, or page hide so accidental clicks / quick alt-tabs don't get
+   * counted as a real read.
+   *
+   * Scroll-to-bottom and new-message arrival paths still fire immediately —
+   * those are explicit engagement signals, no dwell needed.
+   */
+  useEffect(() => {
+    if (!selectedId) return;
+    if (typeof document === "undefined") return;
+    const READ_DWELL_MS = 1000;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const fire = () => {
+      void conversationsApi.read(selectedId).catch(() => { });
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === selectedId ? { ...c, unreadCount: 0 } : c,
+        ),
+      );
+    };
+
+    const isEligible = () =>
+      document.visibilityState === "visible" && document.hasFocus();
+
+    const start = () => {
+      if (timer || !isEligible()) return;
+      timer = setTimeout(() => {
+        timer = null;
+        fire();
+      }, READ_DWELL_MS);
+    };
+
+    const stop = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const onVisibility = () => {
+      if (isEligible()) start();
+      else stop();
+    };
+    const onFocus = () => start();
+    const onBlur = () => stop();
+
+    start();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("blur", onBlur);
+
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [selectedId]);
 
   useEffect(() => {
     const container = messagesScrollRef.current;
@@ -1013,7 +1217,7 @@ export function InboxClient({
             cursor: nextCursor || undefined,
             ...queueFilterParams,
             ...extraFilters,
-            sort: "lastMessageAt" as const,
+            sort: sortMode,
           }
           : {
             status: nextStatus,
@@ -1021,6 +1225,7 @@ export function InboxClient({
             cursor: nextCursor || undefined,
             ...queueFilterParams,
             ...extraFilters,
+            sort: sortMode,
           };
 
       const data = (await conversationsApi.list(params)) as Conversation[];
@@ -1051,7 +1256,7 @@ export function InboxClient({
     } finally {
       setListLoading(false);
     }
-  }, [mode, queueFilter, status, channelFilter, assigneeFilter, tagFilter, listSearch]);
+  }, [mode, queueFilter, status, channelFilter, assigneeFilter, tagFilter, listSearch, sortMode]);
 
   const fetchStarredMessages = useCallback(async (nextCursor?: string | null, append = false) => {
     setStarredLoading(true);
@@ -1092,6 +1297,13 @@ export function InboxClient({
     if (sidebarView === "starred") void fetchStarredMessages();
     if (sidebarView === "scheduled") void fetchScheduledMessages();
   }, [sidebarView, fetchStarredMessages, fetchScheduledMessages]);
+
+  /** Fetch scheduled once on mount so the per-contact strip can hydrate
+   *  immediately when the user opens any conversation — without requiring
+   *  them to first open the global "Scheduled" sidebar. */
+  useEffect(() => {
+    void fetchScheduledMessages();
+  }, [fetchScheduledMessages]);
 
   const fetchMessages = useCallback(
     async (conversationId: string, options?: { silent?: boolean }) => {
@@ -1198,6 +1410,81 @@ export function InboxClient({
       setMessageMutationBusy(false);
     }
   }, [messageMutationBusy]);
+
+  /**
+   * Send / change a reaction. Optimistic local update first (immediate
+   * feedback even on a slow link); the server response replaces the
+   * optimistic set with the canonical reaction list, and the SSE
+   * MESSAGE_REACTION_CHANGED handler reconciles for other connected agents.
+   */
+  const handleReactToMessage = useCallback(
+    async (msg: InboxMessage, emoji: string) => {
+      const optimistic: InboxMessage["reactions"] = (() => {
+        const existing = msg.reactions ?? [];
+        const mine = existing.find((r) => r.actorUserId === currentUserId);
+        const now = new Date().toISOString();
+        if (mine) {
+          return existing.map((r) =>
+            r.actorUserId === currentUserId
+              ? { ...r, emoji, updatedAt: now }
+              : r,
+          );
+        }
+        return [
+          ...existing,
+          {
+            id: `optimistic-${msg.id}`,
+            emoji,
+            actorContactId: null,
+            actorUserId: currentUserId ?? null,
+            createdAt: now,
+            updatedAt: now,
+          },
+        ];
+      })();
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id ? { ...m, reactions: optimistic } : m,
+        ),
+      );
+      try {
+        const fresh = await conversationsApi.reactToMessage(msg.id, emoji);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msg.id ? { ...m, reactions: fresh } : m,
+          ),
+        );
+      } catch (err: unknown) {
+        setMessageError(extractApiErrorMessage(err) || "Failed to react.");
+      }
+    },
+    [currentUserId],
+  );
+
+  const handleUnreactToMessage = useCallback(
+    async (msg: InboxMessage) => {
+      const stripped =
+        (msg.reactions ?? []).filter((r) => r.actorUserId !== currentUserId);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msg.id ? { ...m, reactions: stripped } : m,
+        ),
+      );
+      try {
+        const fresh = await conversationsApi.unreactToMessage(msg.id);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === msg.id ? { ...m, reactions: fresh } : m,
+          ),
+        );
+      } catch (err: unknown) {
+        setMessageError(
+          extractApiErrorMessage(err) || "Failed to remove reaction.",
+        );
+      }
+    },
+    [currentUserId],
+  );
 
   const focusReplyComposer = useCallback(() => {
     window.setTimeout(() => {
@@ -1412,6 +1699,28 @@ export function InboxClient({
           return;
         }
 
+        if (isMessageReactionChanged(ev.type)) {
+          const convId =
+            typeof ev.data.conversationId === "string" ? ev.data.conversationId : "";
+          if (selectedId && convId === selectedId) {
+            const messageId =
+              typeof ev.data.messageId === "string" ? ev.data.messageId : "";
+            const reactions = Array.isArray(ev.data.reactions)
+              ? (ev.data.reactions as InboxMessage["reactions"])
+              : [];
+            if (messageId) {
+              setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.id === messageId);
+                if (idx < 0) return prev;
+                const next = [...prev];
+                next[idx] = { ...next[idx], reactions };
+                return next;
+              });
+            }
+          }
+          return;
+        }
+
         if (isMessageStatusUpdated(ev.type)) {
           const convId =
             typeof ev.data.conversationId === "string" ? ev.data.conversationId : "";
@@ -1427,6 +1736,18 @@ export function InboxClient({
               });
             } else {
               void fetchMessages(selectedId, { silent: true });
+            }
+          }
+          // Keep the per-contact "scheduled" strip in sync when a scheduled
+          // message transitions to a real status (QUEUED/SENT/etc.) or is
+          // cancelled — prune by id when the new status isn't SCHEDULED.
+          const updatedMsg = inboxMessageFromSseWire(ev.data.message);
+          if (updatedMsg?.id) {
+            const nextStatus = (updatedMsg.status ?? "").toUpperCase();
+            if (nextStatus && nextStatus !== "SCHEDULED") {
+              setScheduledMessages((prev) =>
+                prev.filter((m) => m.id !== updatedMsg.id),
+              );
             }
           }
           return;
@@ -1902,11 +2223,21 @@ export function InboxClient({
       if (scheduleAt) {
         sendPayload.sendAt = new Date(scheduleAt).toISOString();
       }
+      const hadSchedule = !!sendPayload.sendAt;
       await conversationsApi.sendMessage(sendPayload);
       setDraft("");
       if (selectedId) clearDraftForConversation(selectedId);
       setScheduleAt("");
+      setShowSchedulePicker(false);
       await refreshThreadAfterSend(activeContactId, activeChannel);
+      // After scheduling a new message we need the strip above the composer
+      // to reflect it immediately — the SSE message.created event will fire
+      // but parking on a server round-trip is cheap and avoids races where
+      // the strip stays empty until the next poll.
+      if (hadSchedule) {
+        void fetchScheduledMessages();
+        setShowScheduledStrip(true);
+      }
     } catch (error: unknown) {
       const maybeReason =
         ((error as { response?: { data?: { reason?: string } } }).response?.data
@@ -2050,6 +2381,81 @@ export function InboxClient({
     });
   }, []);
 
+  /**
+   * Match a `/<token>` written at the start of the draft (or after a newline /
+   * space) immediately before the cursor. Returns the token + the absolute
+   * span [start, end] in `draft` so we can replace it on apply.
+   *
+   * We only trigger when the user is actively typing a shortcut; once they
+   * hit space or move the cursor past the token, the popover hides.
+   */
+  const cannedTrigger = useMemo(() => {
+    if (!draft.startsWith("/")) return null;
+    // Only match at the very start to avoid colliding with chat content.
+    const m = draft.match(/^\/([a-z0-9_-]*)$/i);
+    if (!m) return null;
+    return { token: m[1].toLowerCase(), start: 0, end: m[0].length };
+  }, [draft]);
+
+  const cannedSuggestions = useMemo(() => {
+    if (!cannedTrigger) return [] as CannedResponse[];
+    const t = cannedTrigger.token;
+    if (!t) {
+      return cannedResponses.slice(0, 8);
+    }
+    return cannedResponses
+      .filter(
+        (c) =>
+          c.shortcut.toLowerCase().startsWith(t) ||
+          c.title.toLowerCase().includes(t),
+      )
+      .slice(0, 8);
+  }, [cannedTrigger, cannedResponses]);
+
+  useEffect(() => {
+    setCannedSelectedIdx(0);
+  }, [cannedTrigger?.token]);
+
+  const applyCannedResponse = useCallback(
+    (c: CannedResponse) => {
+      if (!cannedTrigger) return;
+      const before = draft.slice(0, cannedTrigger.start);
+      const after = draft.slice(cannedTrigger.end);
+      const next = `${before}${c.content}${after}`;
+      setDraft(next);
+      // restore caret to end of inserted content
+      const caret = before.length + c.content.length;
+      window.setTimeout(() => {
+        const el = draftInputRef.current;
+        if (el) {
+          el.focus();
+          try {
+            el.setSelectionRange(caret, caret);
+          } catch {
+            // ignored
+          }
+        }
+      }, 0);
+      // Optimistic local bump so the next /-popup ordering reflects usage.
+      setCannedResponses((prev) =>
+        prev
+          .map((p) =>
+            p.id === c.id
+              ? {
+                  ...p,
+                  usageCount: (p.usageCount ?? 0) + 1,
+                  lastUsedAt: new Date().toISOString(),
+                }
+              : p,
+          )
+          .sort((a, b) => b.usageCount - a.usageCount),
+      );
+      // Fire-and-forget — failure here is acceptable; just doesn't move the rank.
+      void cannedResponsesApi.recordUsage(c.id).catch(() => undefined);
+    },
+    [draft, cannedTrigger],
+  );
+
   const handleEmojiSelect = useCallback((emoji: { native?: string }) => {
     if (!emoji.native) return;
     const input = draftInputRef.current;
@@ -2092,24 +2498,117 @@ export function InboxClient({
   const showWhatsAppMediaTools =
     activeChannel === "WHATSAPP";
 
+  /**
+   * Consent actions surfaced in the conversation sidebar — opt-out and block
+   * originate from the chat ("STOP" / abusive sender) so the agent needs them
+   * one click away. ConfirmDialog gates the toggle in both directions; the
+   * undo paths ("Restore" / "Unblock") use a lower-stakes tone.
+   */
+  const [consentAction, setConsentAction] = useState<
+    | null
+    | {
+        kind: "opt-out" | "restore" | "block" | "unblock";
+        contactId: string;
+      }
+  >(null);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentError, setConsentError] = useState<string | null>(null);
+
+  const applyConsent = useCallback(
+    async (
+      contactId: string,
+      patch: { isOptedOut?: boolean; isBlocked?: boolean },
+    ) => {
+      setConsentBusy(true);
+      setConsentError(null);
+      try {
+        await contactsApi.updateConsent(contactId, patch);
+        // Optimistically refresh the embedded contact on the selected
+        // conversation. Avoids a full /conversations/:id refetch round-trip
+        // for a UI-local update.
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.contactId === contactId
+              ? {
+                  ...c,
+                  contact: c.contact
+                    ? { ...c.contact, ...patch }
+                    : { ...patch },
+                }
+              : c,
+          ),
+        );
+        setConsentAction(null);
+      } catch (err: unknown) {
+        setConsentError(
+          extractApiErrorMessage(err) || "Failed to update consent.",
+        );
+      } finally {
+        setConsentBusy(false);
+      }
+    },
+    [],
+  );
+
   const contactForDetails = useMemo(
     () =>
       selectedConversation?.contact
         ? {
+          id: selectedConversation.contact.id ?? selectedConversation.contactId,
           name: selectedConversation.contact.name,
           phone: selectedConversation.contact.phone,
           email: selectedConversation.contact.email,
+          isOptedOut: selectedConversation.contact.isOptedOut ?? false,
+          isBlocked: selectedConversation.contact.isBlocked ?? false,
+          lifecycleStage:
+            selectedConversation.contact.lifecycleStage ?? null,
           status: selectedConversation.status,
         }
         : startContact
           ? {
+            id: startContact.id,
             name: startContact.name,
             phone: startContact.phone,
             email: startContact.email,
+            isOptedOut: false,
+            isBlocked: false,
+            lifecycleStage: startContact.lifecycleStage ?? null,
             status: "NEW",
           }
           : null,
     [selectedConversation, startContact]
+  );
+
+  const [lifecycleBusy, setLifecycleBusy] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState<string | null>(null);
+
+  const applyLifecycleStage = useCallback(
+    async (contactId: string, stage: ContactLifecycleStage | null) => {
+      setLifecycleBusy(true);
+      setLifecycleError(null);
+      try {
+        await contactsApi.update(contactId, { lifecycleStage: stage });
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.contactId === contactId
+              ? {
+                  ...c,
+                  contact: c.contact
+                    ? { ...c.contact, lifecycleStage: stage }
+                    : { lifecycleStage: stage },
+                }
+              : c,
+          ),
+        );
+      } catch (err: unknown) {
+        setLifecycleError(
+          extractApiErrorMessage(err) || "Failed to update lifecycle stage.",
+        );
+      } finally {
+        setLifecycleBusy(false);
+      }
+    },
+    [],
   );
 
   const contactDetailsEl = useMemo(
@@ -2131,9 +2630,16 @@ export function InboxClient({
             <h3 className="text-[1rem] font-semibold tracking-[-0.02em]">
               {contactForDetails.name || "Unknown"}
             </h3>
-            {contactForDetails.status ? (
-              <span className="op-tag">{contactForDetails.status}</span>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {contactForDetails.status ? (
+                <span className="op-tag">{contactForDetails.status}</span>
+              ) : null}
+              {contactForDetails.lifecycleStage ? (
+                <span className="rounded-[3px] border border-primary/40 bg-primary/10 px-1.5 py-[1px] text-[0.6875rem] font-mono-op uppercase tracking-[0.04em] text-primary">
+                  {LIFECYCLE_STAGE_LABELS[contactForDetails.lifecycleStage]}
+                </span>
+              ) : null}
+            </div>
             {selectedConversation?.contactId ? (
               <a
                 href={`/people/contacts/${selectedConversation.contactId}`}
@@ -2168,9 +2674,136 @@ export function InboxClient({
               </div>
             ) : null}
           </div>
+
+          {/* Lifecycle stage — funnel position, set by the agent while
+              talking to the customer. Null means "not classified yet". */}
+          {contactForDetails.id ? (
+            <div className="border-b border-base-300 px-4 py-3">
+              <p className="op-label mb-2">Lifecycle stage</p>
+              <select
+                className="select select-bordered select-sm w-full font-mono-op text-[0.75rem] uppercase tracking-[0.04em]"
+                value={contactForDetails.lifecycleStage ?? ""}
+                disabled={lifecycleBusy}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  void applyLifecycleStage(
+                    contactForDetails.id!,
+                    next ? (next as ContactLifecycleStage) : null,
+                  );
+                }}
+              >
+                <option value="">Not set</option>
+                {CONTACT_LIFECYCLE_STAGES.map((s) => (
+                  <option key={s} value={s}>
+                    {LIFECYCLE_STAGE_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+              {lifecycleError ? (
+                <p className="mt-2 text-[0.6875rem] text-error">
+                  {lifecycleError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Consent / safety actions — opt-out for compliance ("STOP"),
+              block for abuse. Surfaced here so the agent doesn't have to
+              leave the conversation to act on a customer's request. */}
+          {contactForDetails.id ? (
+            <div className="border-b border-base-300 px-4 py-3">
+              <p className="op-label mb-2">Consent &amp; safety</p>
+
+              {(contactForDetails.isOptedOut || contactForDetails.isBlocked) ? (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {contactForDetails.isOptedOut ? (
+                    <span className="rounded-[3px] border border-warning/40 bg-warning/10 px-1.5 py-[1px] text-[0.6875rem] font-mono-op uppercase tracking-[0.04em] text-warning">
+                      opted out
+                    </span>
+                  ) : null}
+                  {contactForDetails.isBlocked ? (
+                    <span className="rounded-[3px] border border-error/40 bg-error/10 px-1.5 py-[1px] text-[0.6875rem] font-mono-op uppercase tracking-[0.04em] text-error">
+                      blocked
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2">
+                {contactForDetails.isOptedOut ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() =>
+                      setConsentAction({
+                        kind: "restore",
+                        contactId: contactForDetails.id!,
+                      })
+                    }
+                  >
+                    Restore consent
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-warning btn-xs"
+                    onClick={() =>
+                      setConsentAction({
+                        kind: "opt-out",
+                        contactId: contactForDetails.id!,
+                      })
+                    }
+                    title="Mark this contact as opted out — outbound sends will be blocked."
+                  >
+                    Mark opted out
+                  </button>
+                )}
+
+                {contactForDetails.isBlocked ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() =>
+                      setConsentAction({
+                        kind: "unblock",
+                        contactId: contactForDetails.id!,
+                      })
+                    }
+                  >
+                    Unblock
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-error btn-xs"
+                    onClick={() =>
+                      setConsentAction({
+                        kind: "block",
+                        contactId: contactForDetails.id!,
+                      })
+                    }
+                    title="Block this contact — outbound sends will be refused and inbound is suppressed in the inbox."
+                  >
+                    Block contact
+                  </button>
+                )}
+              </div>
+
+              {consentError ? (
+                <p className="mt-2 text-[0.6875rem] text-error">{consentError}</p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ),
-    [contactForDetails, selectedConversation?.contactId]
+    [
+      contactForDetails,
+      selectedConversation?.contactId,
+      consentError,
+      lifecycleBusy,
+      lifecycleError,
+      applyLifecycleStage,
+    ]
   );
 
   const rightPanelContent = useMemo(
@@ -2191,6 +2824,7 @@ export function InboxClient({
                   placeholder="Search in this conversation"
                   value={messageSearchQuery}
                   onChange={(e) => setMessageSearchQuery(e.target.value)}
+                  data-esc-clearable="true"
                 />
                 <button
                   type="button"
@@ -2269,6 +2903,16 @@ export function InboxClient({
               </div>
               <InternalNotesPanel conversationId={selectedConversation.id} currentUserId={currentUserId} />
             </div>
+
+            {/* Tasks for this contact */}
+            {selectedConversation.contactId ? (
+              <div className="border-b border-base-300">
+                <TasksPanel
+                  contactId={selectedConversation.contactId}
+                  conversationId={selectedConversation.id}
+                />
+              </div>
+            ) : null}
 
             {/* Shared media */}
             <div className="px-4 py-3">
@@ -2376,6 +3020,7 @@ export function InboxClient({
                       className="input input-bordered input-sm w-full pr-8"
                       value={listSearch}
                       onChange={(e) => setListSearch(e.target.value)}
+                      data-esc-clearable="true"
                     />
                     {listSearch && (
                       <button
@@ -2438,6 +3083,36 @@ export function InboxClient({
                           {f === "awaiting" ? "Awaiting" : f === "unread" ? "Unread" : "Snoozed"}
                         </button>
                       ))}
+                      {/* Sort selector — visually distinct from filter chips
+                          (those narrow the result set; sort reorders the same
+                          set). Native select keeps the row compact and scales
+                          to additional sort modes later. */}
+                      <label
+                        className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-[0.6875rem] font-medium transition-colors ${sortMode === "oldestUnreadFirst"
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-base-300 bg-base-100 text-base-content/70 hover:bg-base-200"
+                          }`}
+                        title="Conversation sort order"
+                      >
+                        <ArrowUpDown className="h-3 w-3" aria-hidden />
+                        <span className="text-base-content/55">Sort:</span>
+                        <select
+                          className="select select-ghost select-xs min-h-0 h-5 border-0 bg-transparent px-0 pl-0 pr-4 text-[0.6875rem] font-medium focus:outline-none"
+                          value={sortMode}
+                          onChange={(e) =>
+                            setSortMode(
+                              e.target.value as
+                                | "lastMessageAt"
+                                | "oldestUnreadFirst",
+                            )
+                          }
+                        >
+                          <option value="lastMessageAt">Newest first</option>
+                          <option value="oldestUnreadFirst">
+                            Oldest unread (SLA)
+                          </option>
+                        </select>
+                      </label>
                       {/* Channel chips */}
                       {CHANNEL_OPTIONS.map((ch) => (
                         <button
@@ -2524,7 +3199,7 @@ export function InboxClient({
                                   : [...prev, tag.id]
                               )
                             }
-                            className={`shrink-0 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${tagFilter.includes(tag.id)
+                            className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-2.5 py-1 text-[0.6875rem] font-medium transition-colors ${tagFilter.includes(tag.id)
                               ? "border-primary bg-primary/10 text-primary"
                               : "border-base-300 bg-base-200 text-base-content/70 hover:bg-base-300"
                               }`}
@@ -2534,6 +3209,7 @@ export function InboxClient({
                                 : {}
                             }
                           >
+                            <TagIcon className="h-3 w-3" aria-hidden />
                             {tag.name}
                           </button>
                         ))}
@@ -3076,6 +3752,9 @@ export function InboxClient({
                           message={message}
                           onPin={handlePinMessage}
                           onStar={handleStarMessage}
+                          onReact={handleReactToMessage}
+                          onUnreact={handleUnreactToMessage}
+                          currentUserId={currentUserId}
                           highlighted={highlightedMessageId === message.id}
                         />
                       ))}
@@ -3599,6 +4278,142 @@ export function InboxClient({
                       </div>
                     </div>
                   ) : null}
+                  {/* Per-contact scheduled-messages strip. Collapsed by
+                      default; the agent can expand to see what's queued
+                      for this contact and cancel individual items. The
+                      conversation thread itself never renders SCHEDULED
+                      messages — they only appear here until they fire. */}
+                  {scheduledForActiveContact.length > 0 && (
+                    <div className="border-b border-base-300 bg-base-200/60">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[0.75rem] text-base-content/70 hover:bg-base-300/40"
+                        aria-expanded={showScheduledStrip}
+                        onClick={() => setShowScheduledStrip((v) => !v)}
+                      >
+                        <Clock className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+                        <span>
+                          {scheduledForActiveContact.length} scheduled message
+                          {scheduledForActiveContact.length === 1 ? "" : "s"} for this contact
+                        </span>
+                        {!showScheduledStrip && scheduledForActiveContact[0]?.sendAt ? (
+                          <span className="hidden font-mono-op text-[0.6875rem] text-base-content/55 sm:inline">
+                            · next {new Date(scheduledForActiveContact[0].sendAt).toLocaleString([], {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        ) : null}
+                        <span className="ml-auto text-[0.6875rem] text-base-content/50">
+                          {showScheduledStrip ? "hide" : "show"}
+                        </span>
+                      </button>
+                      {showScheduledStrip && (
+                        <ul className="max-h-44 divide-y divide-base-300/60 overflow-y-auto border-t border-base-300">
+                          {scheduledForActiveContact.map((m) => (
+                            <li
+                              key={m.id}
+                              className="flex items-start gap-2 px-3 py-2 text-[0.75rem]"
+                            >
+                              <Clock className="mt-0.5 h-3 w-3 shrink-0 text-base-content/45" aria-hidden />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-mono-op text-[0.6875rem] text-primary">
+                                  {m.sendAt
+                                    ? new Date(m.sendAt).toLocaleString([], {
+                                        weekday: "short",
+                                        month: "short",
+                                        day: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
+                                    : "—"}
+                                </p>
+                                <p className="mt-0.5 line-clamp-2 text-base-content/85">
+                                  {m.text?.trim() || `[${m.type ?? "message"}]`}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs shrink-0 text-error"
+                                title="Cancel scheduled send"
+                                onClick={() => handleCancelScheduled(m.id)}
+                              >
+                                <XIcon className="h-3 w-3" aria-hidden />
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  {/* Schedule strip — collapsible row above the composer.
+                      Auto-opens when a time is already set so the agent
+                      can see / edit / clear it. */}
+                  {(showSchedulePicker || scheduleAt) && (
+                    <div className="flex flex-col gap-2 border-b border-base-300 bg-base-200/60 px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 shrink-0 text-base-content/55" aria-hidden />
+                        <span className="op-label">Send at</span>
+                        <input
+                          ref={scheduleInputRef}
+                          type="datetime-local"
+                          aria-label="Schedule send"
+                          className="input input-bordered input-sm h-9 min-w-0 flex-1 font-mono-op text-[0.75rem] sm:flex-none sm:w-56"
+                          min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                          value={scheduleAt}
+                          onChange={(e) => setScheduleAt(e.target.value)}
+                          disabled={!activeContactId || useTemplateSend}
+                        />
+                        {scheduleAt ? (
+                          <span className="hidden text-[0.75rem] text-base-content/70 sm:inline">
+                            {new Date(scheduleAt).toLocaleString([], {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </span>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs ml-auto gap-1"
+                          title={scheduleAt ? "Clear and close" : "Close"}
+                          onClick={() => {
+                            setScheduleAt("");
+                            setShowSchedulePicker(false);
+                          }}
+                        >
+                          <XIcon className="h-3 w-3" aria-hidden />
+                          {scheduleAt ? "Clear" : "Close"}
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="op-label shrink-0">Quick pick</span>
+                        {schedulePresets.map((p) => (
+                          <button
+                            key={p.label}
+                            type="button"
+                            className="btn btn-ghost btn-xs border border-base-300 font-normal hover:border-primary/40 hover:text-primary"
+                            disabled={!activeContactId || useTemplateSend}
+                            title={p.date.toLocaleString([], {
+                              weekday: "short",
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                            onClick={() => setScheduleAt(toLocalInputValue(p.date))}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="relative flex flex-wrap items-end gap-2">
                     {/* Emoji picker popover */}
                     {showEmojiPicker && (
@@ -3822,6 +4637,7 @@ export function InboxClient({
                         </span>
                       </div>
                     ) : (
+                      <div className="relative flex min-w-0 flex-1">
                       <textarea
                         ref={draftInputRef}
                         rows={1}
@@ -3841,6 +4657,37 @@ export function InboxClient({
                         }}
                         onBlur={persistDraftToStorageMap}
                         onKeyDown={(event) => {
+                          // Canned-response popover keyboard handling
+                          if (cannedSuggestions.length > 0) {
+                            if (event.key === "ArrowDown") {
+                              event.preventDefault();
+                              setCannedSelectedIdx((i) =>
+                                Math.min(i + 1, cannedSuggestions.length - 1),
+                              );
+                              return;
+                            }
+                            if (event.key === "ArrowUp") {
+                              event.preventDefault();
+                              setCannedSelectedIdx((i) => Math.max(i - 1, 0));
+                              return;
+                            }
+                            if (event.key === "Tab") {
+                              event.preventDefault();
+                              const pick =
+                                cannedSuggestions[cannedSelectedIdx] ??
+                                cannedSuggestions[0];
+                              if (pick) applyCannedResponse(pick);
+                              return;
+                            }
+                            if (event.key === "Enter" && !event.shiftKey) {
+                              event.preventDefault();
+                              const pick =
+                                cannedSuggestions[cannedSelectedIdx] ??
+                                cannedSuggestions[0];
+                              if (pick) applyCannedResponse(pick);
+                              return;
+                            }
+                          }
                           if (event.key === "Enter" && !event.shiftKey) {
                             event.preventDefault();
                             if (canSend) handleSend();
@@ -3854,33 +4701,61 @@ export function InboxClient({
                           voiceRecorder.recording
                         }
                       />
+                      {cannedSuggestions.length > 0 ? (
+                        <div className="absolute bottom-full left-0 right-0 z-30 mb-1 max-h-64 overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow-lg">
+                          <div className="flex items-center justify-between gap-2 px-2 py-1 text-[0.625rem] uppercase tracking-[0.08em] text-base-content/50">
+                            <span>Canned responses</span>
+                            <span className="font-mono-op">↑↓ · Tab/Enter</span>
+                          </div>
+                          {cannedSuggestions.map((c, idx) => {
+                            const active = idx === cannedSelectedIdx;
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-[0.75rem] ${active ? "bg-primary/10 text-primary" : "hover:bg-base-200"}`}
+                                onMouseEnter={() => setCannedSelectedIdx(idx)}
+                                onMouseDown={(e) => {
+                                  // prevent textarea blur which would close popover
+                                  e.preventDefault();
+                                  applyCannedResponse(c);
+                                }}
+                              >
+                                <span className="shrink-0 font-mono-op text-primary">
+                                  /{c.shortcut}
+                                </span>
+                                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                                  <span className="truncate font-medium">{c.title}</span>
+                                  <span className="line-clamp-1 text-base-content/55">
+                                    {c.content}
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                      </div>
                     )}
                     <div className="flex items-center gap-1 shrink-0">
-                      {/* Schedule datetime picker — hidden until user clicks clock icon */}
-                      {scheduleAt && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-xs text-warning"
-                          title="Clear schedule"
-                          onClick={() => setScheduleAt("")}
-                        >
-                          ✕ {new Date(scheduleAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                        </button>
-                      )}
-                      <label
-                        title="Schedule send"
-                        className="btn btn-ghost btn-sm px-2"
+                      {/* Schedule toggle — reveals the slim row above the
+                          composer where the native datetime picker has
+                          enough room to breathe. */}
+                      <button
+                        type="button"
+                        className={`btn btn-ghost btn-square shrink-0 ${
+                          showSchedulePicker || scheduleAt ? "btn-active text-primary" : ""
+                        }`}
+                        aria-label={
+                          scheduleAt ? "Edit scheduled send" : "Schedule send"
+                        }
+                        aria-pressed={showSchedulePicker || !!scheduleAt}
+                        title={scheduleAt ? "Edit scheduled send" : "Schedule send"}
+                        disabled={!activeContactId || useTemplateSend}
+                        onClick={() => setShowSchedulePicker((v) => !v)}
                       >
-                        🕐
-                        <input
-                          type="datetime-local"
-                          className="sr-only"
-                          min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
-                          value={scheduleAt}
-                          onChange={(e) => setScheduleAt(e.target.value)}
-                          disabled={!activeContactId || useTemplateSend}
-                        />
-                      </label>
+                        <Clock className="h-5 w-5" aria-hidden />
+                      </button>
                       <button
                         type="button"
                         className="btn btn-primary min-w-[4.5rem] px-4 sm:min-w-0"
@@ -4021,6 +4896,75 @@ export function InboxClient({
           </button>
         </form>
       </dialog>
+
+      <ConfirmDialog
+        open={consentAction?.kind === "opt-out"}
+        title="Mark contact as opted out"
+        description="Future outbound messages to this contact will be refused at send time. The customer can be opted back in if this was a mistake."
+        confirmLabel="Mark opted out"
+        tone="warning"
+        loading={consentBusy}
+        onConfirm={() => {
+          if (consentAction?.kind === "opt-out") {
+            void applyConsent(consentAction.contactId, { isOptedOut: true });
+          }
+        }}
+        onClose={() => {
+          setConsentAction(null);
+          setConsentError(null);
+        }}
+      />
+      <ConfirmDialog
+        open={consentAction?.kind === "restore"}
+        title="Restore consent"
+        description="The contact will be eligible for outbound messages again."
+        confirmLabel="Restore"
+        tone="primary"
+        loading={consentBusy}
+        onConfirm={() => {
+          if (consentAction?.kind === "restore") {
+            void applyConsent(consentAction.contactId, { isOptedOut: false });
+          }
+        }}
+        onClose={() => {
+          setConsentAction(null);
+          setConsentError(null);
+        }}
+      />
+      <ConfirmDialog
+        open={consentAction?.kind === "block"}
+        title="Block contact"
+        description="Outbound messages will be refused and inbound messages will be suppressed from the inbox. Use opt-out for compliance requests; use block for abuse."
+        confirmLabel="Block"
+        tone="danger"
+        loading={consentBusy}
+        onConfirm={() => {
+          if (consentAction?.kind === "block") {
+            void applyConsent(consentAction.contactId, { isBlocked: true });
+          }
+        }}
+        onClose={() => {
+          setConsentAction(null);
+          setConsentError(null);
+        }}
+      />
+      <ConfirmDialog
+        open={consentAction?.kind === "unblock"}
+        title="Unblock contact"
+        description="The contact will be able to receive messages again and their inbound messages will reappear in the inbox."
+        confirmLabel="Unblock"
+        tone="primary"
+        loading={consentBusy}
+        onConfirm={() => {
+          if (consentAction?.kind === "unblock") {
+            void applyConsent(consentAction.contactId, { isBlocked: false });
+          }
+        }}
+        onClose={() => {
+          setConsentAction(null);
+          setConsentError(null);
+        }}
+      />
     </>
   );
 }

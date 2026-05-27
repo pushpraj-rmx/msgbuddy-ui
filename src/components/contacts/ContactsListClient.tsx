@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-query";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Search, Upload, Download, UserPlus, Tag, Trash2, MessageSquare, Columns3, Check, Minus, LayoutGrid, Settings2, CalendarDays } from "lucide-react";
+import { Eye, Search, Upload, Download, UserPlus, Tag, Trash2, MessageSquare, Columns3, Check, Minus, LayoutGrid, Settings2, CalendarDays, GitBranch } from "lucide-react";
 import { TagsPanelContent } from "./TagsPanelContent";
 import { SegmentsPanelContent } from "./SegmentsPanelContent";
 import {
@@ -31,6 +31,19 @@ import {
   parseWorkspaceSseEvent,
 } from "@/lib/sseEvents";
 import type { Contact, CustomFieldDef } from "@/lib/types";
+import {
+  CONTACT_LIFECYCLE_STAGES,
+  type ContactLifecycleStage,
+} from "@/lib/types";
+
+const LIFECYCLE_STAGE_LABELS: Record<ContactLifecycleStage, string> = {
+  LEAD: "Lead",
+  ENGAGED: "Engaged",
+  QUALIFIED: "Qualified",
+  CUSTOMER: "Customer",
+  DORMANT: "Dormant",
+  LOST: "Lost",
+};
 import { formatRelativeTime } from "@/lib/format";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
 import { ContactDetailPanelContent } from "./ContactDetailDrawer";
@@ -48,6 +61,7 @@ const CONTACTS_LIST_QUERY_KEY = (
   tagsMatch: TagsMatch = "all",
   createdAfter: string | null = null,
   createdBefore: string | null = null,
+  lifecycleStage: ContactLifecycleStage | null = null,
 ) => [
   "contacts",
   "list",
@@ -59,6 +73,7 @@ const CONTACTS_LIST_QUERY_KEY = (
   tagsMatch,
   createdAfter ?? "any-after",
   createdBefore ?? "any-before",
+  lifecycleStage ?? "any-stage",
 ] as const;
 const LIST_PAGE_SIZE = 50;
 
@@ -208,6 +223,10 @@ export function ContactsListClient({
   const [createdDropdownOpen, setCreatedDropdownOpen] = useState(false);
   const createdDropdownRef = useRef<HTMLDivElement>(null);
   const tagsDropdownRef = useRef<HTMLDivElement>(null);
+  const [lifecycleStageFilter, setLifecycleStageFilter] =
+    useState<ContactLifecycleStage | null>(null);
+  const [lifecycleDropdownOpen, setLifecycleDropdownOpen] = useState(false);
+  const lifecycleDropdownRef = useRef<HTMLDivElement>(null);
   const [visibleFieldIds, setVisibleFieldIds] = useState<Set<string>>(new Set());
   const [tagsDropdownOpen, setTagsDropdownOpen] = useState(false);
   const canCreateContacts = roleHasWorkspacePermission(meRole, "contacts.create");
@@ -266,6 +285,7 @@ export function ContactsListClient({
       tagsMatch,
       createdAfterIso,
       createdBeforeIso,
+      lifecycleStageFilter,
     ),
     queryFn: async ({ pageParam }) =>
       contactsApi.list({
@@ -281,6 +301,7 @@ export function ContactsListClient({
         tagsMatch: filterTagIds.length ? tagsMatch : undefined,
         createdAfter: createdAfterIso ?? undefined,
         createdBefore: createdBeforeIso ?? undefined,
+        lifecycleStage: lifecycleStageFilter ?? undefined,
       }),
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
@@ -291,7 +312,8 @@ export function ContactsListClient({
       sortDir === "asc" &&
       filterTagIds.length === 0 &&
       !createdAfterIso &&
-      !createdBeforeIso
+      !createdBeforeIso &&
+      !lifecycleStageFilter
         ? {
             pages: [
               {
@@ -346,7 +368,16 @@ export function ContactsListClient({
 
   useEffect(() => {
     setDisplayPageIndex(0);
-  }, [debouncedSearch, sortKey, sortDir, filterTagIds, tagsMatch, createdAfter, createdBefore]);
+  }, [
+    debouncedSearch,
+    sortKey,
+    sortDir,
+    filterTagIds,
+    tagsMatch,
+    createdAfter,
+    createdBefore,
+    lifecycleStageFilter,
+  ]);
 
   // Auto-select first 2 custom field columns when definitions load
   const fieldDefsInitRef = useRef(false);
@@ -812,6 +843,17 @@ export function ContactsListClient({
     return () => document.removeEventListener("mousedown", onPointerDown);
   }, [tagsDropdownOpen]);
 
+  useEffect(() => {
+    if (!lifecycleDropdownOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (!lifecycleDropdownRef.current?.contains(e.target as Node)) {
+        setLifecycleDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [lifecycleDropdownOpen]);
+
   type ContactRow = (typeof displayed)[number];
   const tableColumns: ColumnDef<ContactRow>[] = useMemo(() => {
     const cols: ColumnDef<ContactRow>[] = [
@@ -1087,6 +1129,7 @@ export function ContactsListClient({
             className="input input-bordered input-sm w-full pl-8"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
+            data-esc-clearable="true"
           />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -1336,6 +1379,74 @@ export function ContactsListClient({
             </div>
           )}
 
+          {/* Lifecycle stage filter dropdown */}
+          <div className="relative" ref={lifecycleDropdownRef}>
+            <div className="tooltip tooltip-bottom" data-tip="Filter by lifecycle stage">
+              <button
+                type="button"
+                className={`btn btn-ghost btn-sm gap-1 ${lifecycleStageFilter ? "text-primary" : ""}`}
+                onClick={() => setLifecycleDropdownOpen((v) => !v)}
+              >
+                <GitBranch className="h-3.5 w-3.5" />
+                Stage
+                {lifecycleStageFilter ? (
+                  <span className="font-mono-op text-[0.625rem] tabular-nums uppercase tracking-[0.04em]">
+                    {LIFECYCLE_STAGE_LABELS[lifecycleStageFilter]}
+                  </span>
+                ) : null}
+              </button>
+            </div>
+            {lifecycleDropdownOpen && (
+              <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">
+                <div className="flex items-center justify-between px-2 pb-1.5">
+                  <span className="op-label">Lifecycle stage</span>
+                  {lifecycleStageFilter ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs gap-1 text-base-content/50"
+                      onClick={() => setLifecycleStageFilter(null)}
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex flex-col">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[0.75rem] hover:bg-base-300/40">
+                    <input
+                      type="radio"
+                      name="lifecycle-stage"
+                      className="radio radio-xs radio-primary"
+                      checked={!lifecycleStageFilter}
+                      onChange={() => {
+                        setLifecycleStageFilter(null);
+                        setLifecycleDropdownOpen(false);
+                      }}
+                    />
+                    Any stage
+                  </label>
+                  {CONTACT_LIFECYCLE_STAGES.map((stage) => (
+                    <label
+                      key={stage}
+                      className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[0.75rem] hover:bg-base-300/40"
+                    >
+                      <input
+                        type="radio"
+                        name="lifecycle-stage"
+                        className="radio radio-xs radio-primary"
+                        checked={lifecycleStageFilter === stage}
+                        onChange={() => {
+                          setLifecycleStageFilter(stage);
+                          setLifecycleDropdownOpen(false);
+                        }}
+                      />
+                      {LIFECYCLE_STAGE_LABELS[stage]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Created date filter dropdown */}
           <div className="relative" ref={createdDropdownRef}>
             <div className="tooltip tooltip-bottom" data-tip="Filter by created date">
@@ -1466,7 +1577,7 @@ export function ContactsListClient({
       {!loadingList && sorted.length === 0 && (
         <div className="rounded-box border border-base-300 bg-base-200 p-8 text-center">
           <p className="text-sm text-base-content/70">
-            {searchParam || filterTagIds.length > 0 || createdAfter || createdBefore
+            {searchParam || filterTagIds.length > 0 || createdAfter || createdBefore || lifecycleStageFilter
               ? "No contacts match the current search/filter combination."
               : segmentId
                 ? "No contacts in this segment. Try another list or add contacts."

@@ -41,8 +41,26 @@ const loginFeatureSlides = [
   },
 ] as const;
 
+/**
+ * Resolve a `?next=` query param to a safe same-origin pathname. Anything
+ * non-pathy (absolute URLs, protocol-relative `//host`) is rejected to
+ * close the open-redirect hole — invitations link to /accept-invite?token=
+ * but an attacker could craft `?next=https://evil.example`.
+ */
+function safeNextDestination(): string {
+  if (typeof window === "undefined") return "/dashboard";
+  const q = new URLSearchParams(window.location.search);
+  const raw = q.get("next");
+  if (raw && raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return "/dashboard";
+}
+
 export default function LoginPage() {
   const router = useRouter();
+  // Capture `?next=` FIRST — the error/verified initializers below call
+  // `window.history.replaceState(...)` which would wipe the query string
+  // before this could read it.
+  const [nextDestination] = useState<string>(() => safeNextDestination());
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(() => {
@@ -90,7 +108,7 @@ export default function LoginPage() {
         setAccessToken(result.accessToken || null, {
           expiresInSeconds: result.expiresIn,
         });
-        router.replace("/dashboard");
+        router.replace(nextDestination);
       }
     });
   };

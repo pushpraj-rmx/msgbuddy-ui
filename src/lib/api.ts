@@ -1,6 +1,10 @@
 import api, { fetchWithAuthRefresh } from "./axios";
 import { API_BASE_URL, endpoints } from "./endpoints";
-import type { InboxMessage, MediaItem } from "./messaging";
+import type {
+  InboxMessage,
+  MediaItem,
+  MessageReactionWire,
+} from "./messaging";
 import type {
   Contact,
   ContactsListResponse,
@@ -196,7 +200,7 @@ export interface ConversationFilters {
   awaitingReplyOnly?: boolean;
   includeSnoozed?: boolean;
   snoozedOnly?: boolean;
-  sort?: "lastMessageAt" | "awaitingReply";
+  sort?: "lastMessageAt" | "awaitingReply" | "oldestUnreadFirst";
   limit?: number;
   cursor?: string;
 }
@@ -380,6 +384,17 @@ export const conversationsApi = {
     const response = await api.delete(endpoints.messages.star(messageId));
     return response.data;
   },
+  reactToMessage: async (
+    messageId: string,
+    emoji: string,
+  ): Promise<MessageReactionWire[]> => {
+    const response = await api.post(endpoints.messages.react(messageId), { emoji });
+    return response.data as MessageReactionWire[];
+  },
+  unreactToMessage: async (messageId: string): Promise<MessageReactionWire[]> => {
+    const response = await api.delete(endpoints.messages.react(messageId));
+    return response.data as MessageReactionWire[];
+  },
   listStarred: async (cursor?: string, limit?: number) => {
     const response = await api.get(endpoints.messages.starred, { params: { cursor, limit } });
     return response.data as { messages: InboxMessage[]; nextCursor: string | null };
@@ -513,6 +528,14 @@ export const contactsApi = {
     createdAfter?: string;
     /** ISO timestamp — contacts created on or before. */
     createdBefore?: string;
+    /** Filter by CRM lifecycle stage. */
+    lifecycleStage?:
+      | "LEAD"
+      | "ENGAGED"
+      | "QUALIFIED"
+      | "CUSTOMER"
+      | "DORMANT"
+      | "LOST";
   }): Promise<ContactsListResponse> => {
     const response = await api.get<ContactsListResponse>(
       endpoints.contacts.list,
@@ -575,6 +598,28 @@ export const contactsApi = {
     );
     return response.data;
   },
+  /**
+   * Start a background contact-import job by fetching a publicly-shared
+   * Google Sheet as CSV. Same wizard flow as `startImportJob` afterwards.
+   */
+  startImportJobFromGoogleSheet: async (
+    url: string,
+    options?: {
+      defaultCountry?: string;
+      mode?: import("./types").ImportMode;
+      dryRun?: boolean;
+    }
+  ): Promise<import("./types").ImportJobStartResponse> => {
+    const response = await api.post<
+      import("./types").ImportJobStartResponse
+    >(endpoints.contacts.importGoogleSheet, {
+      url,
+      defaultCountry: options?.defaultCountry,
+      mode: options?.mode,
+      dryRun: options?.dryRun === true,
+    });
+    return response.data;
+  },
   getImportJob: async (
     id: string
   ): Promise<import("./types").ImportJob> => {
@@ -613,6 +658,15 @@ export const contactsApi = {
       isBlocked?: boolean;
       isOptedOut?: boolean;
       avatarUrl?: string;
+      /** Null clears the stage; omit to leave unchanged. */
+      lifecycleStage?:
+        | "LEAD"
+        | "ENGAGED"
+        | "QUALIFIED"
+        | "CUSTOMER"
+        | "DORMANT"
+        | "LOST"
+        | null;
     }
   ): Promise<Contact> => {
     const response = await api.put<Contact>(endpoints.contacts.byId(id), data);
@@ -1110,6 +1164,20 @@ export const campaignsApi = {
     return response.data as { campaignId: string; removedFromQueue: number };
   },
   /**
+   * Recover CampaignJob rows stranded in PROCESSING (DB says processing but
+   * BullMQ no longer has the entry). Reconciles counters + re-enqueues.
+   * Use when a campaign shows ~100% but stays ACTIVE and pause/resume isn't
+   * recovering the last batch of jobs.
+   */
+  recoverStuck: async (id: string) => {
+    const response = await api.post(endpoints.campaigns.recoverStuck(id));
+    return response.data as {
+      runId: string | null;
+      recoveredCount: number;
+      enqueuedCount: number;
+    };
+  },
+  /**
    * Re-run every FAILED job in a run. Flips the rows back to PENDING,
    * decrements `failedJobs` and increments `pendingJobs`, revives a
    * COMPLETED/FAILED run to RUNNING, and re-enqueues to the campaign queue.
@@ -1588,6 +1656,291 @@ export const analyticsApi = {
   },
 };
 
+// ============================================================================
+// Automation (inbox rules + business hours)
+// ============================================================================
+
+export type AutomationTriggerType = "WELCOME" | "OUT_OF_HOURS" | "KEYWORD";
+export type AutomationActionType =
+  | "SEND_TEMPLATE"
+  | "SEND_TEXT"
+  | "ASSIGN_AGENT";
+
+export type AutomationRule = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  isActive: boolean;
+  priority: number;
+  trigger: AutomationTriggerType;
+  triggerConfig?: Record<string, unknown> | null;
+  channel?: string | null;
+  action: AutomationActionType;
+  actionConfig: Record<string, unknown>;
+  triggerCount: number;
+  lastTriggeredAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type BusinessHoursDay =
+  | "SUN"
+  | "MON"
+  | "TUE"
+  | "WED"
+  | "THU"
+  | "FRI"
+  | "SAT";
+export type BusinessHoursEntry = {
+  day: BusinessHoursDay;
+  start: string;
+  end: string;
+};
+export type BusinessHoursConfig = {
+  isActive: boolean;
+  timezone: string;
+  schedule: BusinessHoursEntry[];
+};
+
+// ============================================================================
+// Canned responses (saved replies / `/`-shortcut expansion)
+// ============================================================================
+
+export type CannedResponse = {
+  id: string;
+  workspaceId: string;
+  shortcut: string;
+  title: string;
+  content: string;
+  usageCount: number;
+  lastUsedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdById?: string | null;
+};
+
+export const cannedResponsesApi = {
+  list: async (): Promise<CannedResponse[]> => {
+    const res = await api.get<CannedResponse[]>(endpoints.cannedResponses.list);
+    return res.data;
+  },
+  create: async (body: {
+    shortcut: string;
+    title: string;
+    content: string;
+  }): Promise<CannedResponse> => {
+    const res = await api.post<CannedResponse>(
+      endpoints.cannedResponses.create,
+      body,
+    );
+    return res.data;
+  },
+  update: async (
+    id: string,
+    body: Partial<{ shortcut: string; title: string; content: string }>,
+  ): Promise<CannedResponse> => {
+    const res = await api.put<CannedResponse>(
+      endpoints.cannedResponses.byId(id),
+      body,
+    );
+    return res.data;
+  },
+  delete: async (id: string) => {
+    const res = await api.delete(endpoints.cannedResponses.byId(id));
+    return res.data as { id: string; deleted: true };
+  },
+  recordUsage: async (id: string): Promise<CannedResponse> => {
+    const res = await api.post<CannedResponse>(endpoints.cannedResponses.use(id));
+    return res.data;
+  },
+};
+
+// ============================================================================
+// Tasks
+// ============================================================================
+
+export const TASK_STATUSES = ["OPEN", "DONE", "SNOOZED", "CANCELLED"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_PRIORITIES = ["LOW", "NORMAL", "HIGH"] as const;
+export type TaskPriority = (typeof TASK_PRIORITIES)[number];
+
+export type Task = {
+  id: string;
+  workspaceId: string;
+  subject: string;
+  notes: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueAt: string | null;
+  completedAt: string | null;
+  snoozedUntil: string | null;
+  createdById: string | null;
+  assignedUserId: string | null;
+  contactId: string | null;
+  conversationId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskCounts = {
+  mineOpen: number;
+  mineOverdue: number;
+  mineDueToday: number;
+};
+
+export type TaskListResponse = { tasks: Task[]; nextCursor: string | null };
+
+export type TaskListParams = {
+  /** Pass "me" to scope to the caller. */
+  assignedUserId?: string;
+  contactId?: string;
+  conversationId?: string;
+  /** Comma-separated subset of TASK_STATUSES. Default: OPEN,SNOOZED. */
+  status?: string;
+  priority?: TaskPriority;
+  dueBefore?: string;
+  dueAfter?: string;
+  search?: string;
+  /** "false" hides future-snoozed tasks. */
+  includeSnoozed?: "true" | "false";
+  cursor?: string;
+  limit?: number;
+};
+
+export const tasksApi = {
+  list: async (params: TaskListParams = {}): Promise<TaskListResponse> => {
+    const res = await api.get<TaskListResponse>(endpoints.tasks.list, { params });
+    return res.data;
+  },
+  get: async (id: string): Promise<Task> => {
+    const res = await api.get<Task>(endpoints.tasks.byId(id));
+    return res.data;
+  },
+  create: async (body: {
+    subject: string;
+    notes?: string;
+    priority?: TaskPriority;
+    dueAt?: string;
+    assignedUserId?: string;
+    contactId?: string;
+    conversationId?: string;
+  }): Promise<Task> => {
+    const res = await api.post<Task>(endpoints.tasks.create, body);
+    return res.data;
+  },
+  update: async (
+    id: string,
+    body: Partial<{
+      subject: string;
+      notes: string | null;
+      status: TaskStatus;
+      priority: TaskPriority;
+      dueAt: string | null;
+      assignedUserId: string | null;
+      contactId: string | null;
+      conversationId: string | null;
+    }>,
+  ): Promise<Task> => {
+    const res = await api.patch<Task>(endpoints.tasks.byId(id), body);
+    return res.data;
+  },
+  delete: async (id: string): Promise<{ id: string; deleted: true }> => {
+    const res = await api.delete(endpoints.tasks.byId(id));
+    return res.data as { id: string; deleted: true };
+  },
+  complete: async (id: string): Promise<Task> => {
+    const res = await api.post<Task>(endpoints.tasks.complete(id));
+    return res.data;
+  },
+  snooze: async (id: string, until: string): Promise<Task> => {
+    const res = await api.post<Task>(endpoints.tasks.snooze(id), { until });
+    return res.data;
+  },
+  reopen: async (id: string): Promise<Task> => {
+    const res = await api.post<Task>(endpoints.tasks.reopen(id));
+    return res.data;
+  },
+  counts: async (): Promise<TaskCounts> => {
+    const res = await api.get<TaskCounts>(endpoints.tasks.counts);
+    return res.data;
+  },
+};
+
+export const automationApi = {
+  listRules: async (): Promise<AutomationRule[]> => {
+    const res = await api.get<AutomationRule[]>(endpoints.automation.rules);
+    return res.data;
+  },
+  getRule: async (id: string): Promise<AutomationRule> => {
+    const res = await api.get<AutomationRule>(endpoints.automation.ruleById(id));
+    return res.data;
+  },
+  createRule: async (
+    body: Omit<
+      AutomationRule,
+      | "id"
+      | "workspaceId"
+      | "triggerCount"
+      | "lastTriggeredAt"
+      | "createdAt"
+      | "updatedAt"
+    >,
+  ): Promise<AutomationRule> => {
+    const res = await api.post<AutomationRule>(
+      endpoints.automation.rules,
+      body,
+    );
+    return res.data;
+  },
+  updateRule: async (
+    id: string,
+    body: Partial<
+      Omit<
+        AutomationRule,
+        | "id"
+        | "workspaceId"
+        | "triggerCount"
+        | "lastTriggeredAt"
+        | "createdAt"
+        | "updatedAt"
+      >
+    >,
+  ): Promise<AutomationRule> => {
+    const res = await api.put<AutomationRule>(
+      endpoints.automation.ruleById(id),
+      body,
+    );
+    return res.data;
+  },
+  toggleRule: async (id: string): Promise<AutomationRule> => {
+    const res = await api.post<AutomationRule>(
+      endpoints.automation.toggleRule(id),
+    );
+    return res.data;
+  },
+  deleteRule: async (id: string) => {
+    const res = await api.delete(endpoints.automation.ruleById(id));
+    return res.data as { id: string; deleted: true };
+  },
+  getBusinessHours: async (): Promise<BusinessHoursConfig> => {
+    const res = await api.get<BusinessHoursConfig>(
+      endpoints.automation.businessHours,
+    );
+    return res.data;
+  },
+  updateBusinessHours: async (body: {
+    isActive: boolean;
+    schedule?: BusinessHoursEntry[];
+  }): Promise<BusinessHoursConfig> => {
+    const res = await api.put<BusinessHoursConfig>(
+      endpoints.automation.businessHours,
+      body,
+    );
+    return res.data;
+  },
+};
+
 export const usageApi = {
   current: async () => {
     const response = await api.get(endpoints.usage.current);
@@ -1846,6 +2199,25 @@ export const workspaceApi = {
     return response.data;
   },
 
+  /**
+   * Look up a user by email and add them as a member. Returns a sentinel
+   * `{ status: "no-account", email }` when no account exists for that email
+   * so the UI can offer the invite-link fallback.
+   */
+  addMemberByEmail: async (
+    workspaceId: string,
+    body: { email: string; role?: WorkspaceRole }
+  ): Promise<
+    | { status: "added"; member: WorkspaceMemberResponseDto }
+    | { status: "no-account"; email: string }
+  > => {
+    const response = await api.post(
+      endpoints.workspaces.membersByEmail(workspaceId),
+      body
+    );
+    return response.data;
+  },
+
   updateMemberRole: async (
     workspaceId: string,
     memberId: string,
@@ -1920,6 +2292,74 @@ export interface CreateApiKeyDto {
   /** ISO 8601 string. Null/undefined = no expiry. */
   expiresAt?: string;
 }
+
+// ============================================================================
+// Workspace invitations
+// ============================================================================
+
+export type WorkspaceInvitation = {
+  id: string;
+  workspaceId: string;
+  token: string;
+  role: WorkspaceRole;
+  email: string | null;
+  createdById: string | null;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  acceptedByUserId: string | null;
+  revokedAt: string | null;
+};
+
+export type PublicInvitation = {
+  workspaceId: string;
+  workspaceName: string;
+  role: WorkspaceRole;
+  email: string | null;
+  expiresAt: string;
+  status: "pending" | "accepted" | "revoked" | "expired";
+};
+
+export const workspaceInvitationsApi = {
+  list: async (): Promise<WorkspaceInvitation[]> => {
+    const res = await api.get<WorkspaceInvitation[]>(
+      endpoints.workspaceInvitations.list,
+    );
+    return res.data;
+  },
+  create: async (body: {
+    email?: string;
+    role?: WorkspaceRole;
+    expiresInDays?: number;
+  }): Promise<WorkspaceInvitation> => {
+    const res = await api.post<WorkspaceInvitation>(
+      endpoints.workspaceInvitations.create,
+      body,
+    );
+    return res.data;
+  },
+  revoke: async (id: string): Promise<WorkspaceInvitation> => {
+    const res = await api.delete<WorkspaceInvitation>(
+      endpoints.workspaceInvitations.revoke(id),
+    );
+    return res.data;
+  },
+  lookup: async (token: string): Promise<PublicInvitation> => {
+    const res = await api.get<PublicInvitation>(
+      endpoints.invitations.lookup(token),
+    );
+    return res.data;
+  },
+  accept: async (
+    token: string,
+  ): Promise<{ invitationId: string; workspaceId: string }> => {
+    const res = await api.post<{
+      invitationId: string;
+      workspaceId: string;
+    }>(endpoints.invitations.accept(token));
+    return res.data;
+  },
+};
 
 export const apiKeysApi = {
   list: async (): Promise<ApiKeyResponseDto[]> => {

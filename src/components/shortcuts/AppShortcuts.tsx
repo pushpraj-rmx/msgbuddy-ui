@@ -8,6 +8,7 @@ import {
 } from "@/lib/shortcuts";
 import { GlobalContextMenu } from "./GlobalContextMenu";
 import { KeyboardShortcutsHelpModal } from "./KeyboardShortcutsHelpModal";
+import { useGlobalEscape } from "@/hooks/useGlobalEscape";
 
 function isTypingTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -27,6 +28,10 @@ function isAnyModalDialogOpen(): boolean {
  * Global keyboard shortcuts. Add new handlers here over time.
  */
 export function AppShortcuts() {
+  // Standardized Esc cascade (close dialog → clear/blur clearable input →
+  // close right panel). See `useGlobalEscape` for the priority order.
+  useGlobalEscape();
+
   const [helpOpen, setHelpOpen] = useState(false);
   const helpOpenRef = useRef(false);
   // eslint-disable-next-line react-hooks/refs -- sync ref with state for use in event listeners; assignment is safe

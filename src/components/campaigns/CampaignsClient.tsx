@@ -41,6 +41,7 @@ export type Campaign = {
   templateBindings?: Record<string, unknown> | null;
   scheduledAt?: string | null;
   timezone?: string;
+  throttlePerMin?: number;
   updatedAt?: string;
   runs?: { totalJobs?: number; completedJobs?: number; failedJobs?: number; skippedJobs?: number; successRate?: number }[];
 };
@@ -49,6 +50,9 @@ type CampaignProgress = {
   progressPercent?: number;
   completedJobs?: number;
   totalJobs?: number;
+  pendingJobs?: number;
+  processingJobs?: number;
+  failedJobs?: number;
   status?: string;
   runNumber?: number;
 };
@@ -270,6 +274,7 @@ export function CampaignsClient({
               ...prev,
               totalJobs: typeof ev.data.totalJobs === "number" ? ev.data.totalJobs : prev.totalJobs,
               completedJobs: typeof ev.data.completedJobs === "number" ? ev.data.completedJobs : prev.completedJobs,
+              failedJobs: typeof ev.data.failedJobs === "number" ? ev.data.failedJobs : prev.failedJobs,
               progressPercent:
                 typeof ev.data.totalJobs === "number" && ev.data.totalJobs > 0
                   ? Math.round(
@@ -354,6 +359,80 @@ export function CampaignsClient({
     },
     [selectedCampaign, refresh, loadProgress, fetchReport, loadRuns, loadRunJobs]
   );
+
+  const handleRetryFailed = useCallback(async () => {
+    if (!selectedCampaign) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await campaignsApi.retryFailed(
+        selectedCampaign.id,
+        selectedRunId ?? undefined,
+      );
+      if (result.retriedCount === 0) {
+        window.alert("No failed jobs to retry in this run.");
+      } else {
+        window.alert(
+          `Re-queued ${result.retriedCount} failed job${result.retriedCount === 1 ? "" : "s"}.`,
+        );
+      }
+      await refresh();
+      await loadProgress();
+      await fetchReport();
+      await loadRuns();
+      await loadRunJobs();
+    } catch (err: unknown) {
+      setError(getApiError(err) || "Failed to retry failed jobs.");
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    selectedCampaign,
+    selectedRunId,
+    refresh,
+    loadProgress,
+    fetchReport,
+    loadRuns,
+    loadRunJobs,
+  ]);
+
+  /**
+   * Recover CampaignJob rows stranded in PROCESSING. Hits the backend
+   * recover-stuck endpoint, surfaces the count, refreshes UI state.
+   */
+  const handleRecoverStuck = useCallback(async () => {
+    if (!selectedCampaign) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await campaignsApi.recoverStuck(selectedCampaign.id);
+      if (result.recoveredCount === 0) {
+        window.alert(
+          "No stuck jobs found. If the run still isn't completing, check the worker logs for stalled jobs.",
+        );
+      } else {
+        window.alert(
+          `Recovered ${result.recoveredCount} stuck job${result.recoveredCount === 1 ? "" : "s"} and re-queued ${result.enqueuedCount} for delivery.`,
+        );
+      }
+      await refresh();
+      await loadProgress();
+      await fetchReport();
+      await loadRuns();
+      await loadRunJobs();
+    } catch (err: unknown) {
+      setError(getApiError(err) || "Failed to recover stuck jobs.");
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    selectedCampaign,
+    refresh,
+    loadProgress,
+    fetchReport,
+    loadRuns,
+    loadRunJobs,
+  ]);
 
   const handleSaveSchedule = useCallback(
     async (payload: { scheduledAt: string | null; timezone: string }) => {
@@ -476,6 +555,8 @@ export function CampaignsClient({
         progressBarCaption={progressBarCaption}
         loading={loading}
         handleAction={handleAction}
+        handleRetryFailed={handleRetryFailed}
+        handleRecoverStuck={handleRecoverStuck}
         onSaveSchedule={handleSaveSchedule}
         handleRename={handleRename}
         loadProgress={loadProgress}
@@ -517,6 +598,8 @@ export function CampaignsClient({
     progressBarCaption,
     loading,
     handleAction,
+    handleRetryFailed,
+    handleRecoverStuck,
     handleSaveSchedule,
     handleRename,
     loadProgress,
@@ -648,6 +731,16 @@ export function CampaignsClient({
                           style={{ width: `${Math.min(100, Math.round(((latestRun.completedJobs ?? 0) / (latestRun.totalJobs ?? 1)) * 100))}%` }}
                         />
                       </div>
+                    ) : null}
+                    {campaign.status === "DRAFT" ? (
+                      <Link
+                        href={`/campaigns/${encodeURIComponent(campaign.id)}/edit`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="mt-1.5 inline-block text-xs text-primary hover:underline"
+                        title="Resume editing this draft"
+                      >
+                        Continue editing →
+                      </Link>
                     ) : null}
                   </div>
                 </div>
