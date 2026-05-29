@@ -282,6 +282,12 @@ export const endpoints = {
     toggleRule: (id: string) => `${P}/automation-rules/${id}/toggle`,
     businessHours: `${P}/business-hours`,
   },
+  flows: {
+    list: `${P}/flows`,
+    byId: (id: string) => `${P}/flows/${id}`,
+    publish: (id: string) => `${P}/flows/${id}/publish`,
+    unpublish: (id: string) => `${P}/flows/${id}/unpublish`,
+  },
   cannedResponses: {
     list: `${P}/canned-responses`,
     create: `${P}/canned-responses`,

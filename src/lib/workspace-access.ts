@@ -35,6 +35,12 @@ export function canAccessUsagePage(workspaceRole: string): boolean {
   return r === "OWNER" || r === "ADMIN";
 }
 
+/** `automations.manage` — flow builder + automation rules. OWNER, ADMIN. */
+export function canAccessFlows(workspaceRole: string): boolean {
+  const r = R(workspaceRole);
+  return r === "OWNER" || r === "ADMIN";
+}
+
 /** Billing / subscription management — OWNER only. */
 export function canAccessBillingPage(workspaceRole: string): boolean {
   return R(workspaceRole) === "OWNER";

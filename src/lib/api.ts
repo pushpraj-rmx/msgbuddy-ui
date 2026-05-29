@@ -3202,3 +3202,78 @@ export const feedbackApi = {
     return response.data;
   },
 };
+
+// ===== Flows (visual chatbot flow builder) =====
+
+export type FlowStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+export type FlowTrigger = "KEYWORD" | "WELCOME" | "MANUAL";
+
+export interface FlowNode {
+  id: string;
+  type: string;
+  data: Record<string, unknown>;
+  position?: { x: number; y: number };
+}
+
+export interface FlowEdge {
+  id: string;
+  source: string;
+  target: string;
+  sourceHandle?: string;
+}
+
+export interface FlowGraph {
+  nodes: FlowNode[];
+  edges: FlowEdge[];
+}
+
+export interface Flow {
+  id: string;
+  name: string;
+  status: FlowStatus;
+  trigger: FlowTrigger;
+  triggerConfig?: Record<string, unknown> | null;
+  graph: FlowGraph;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateFlowPayload {
+  name: string;
+  trigger: FlowTrigger;
+  triggerConfig?: Record<string, unknown>;
+  graph: FlowGraph;
+}
+
+export type UpdateFlowPayload = Partial<CreateFlowPayload>;
+
+export const flowApi = {
+  list: async (): Promise<Flow[]> => {
+    const res = await api.get<Flow[]>(endpoints.flows.list);
+    return res.data;
+  },
+  get: async (id: string): Promise<Flow> => {
+    const res = await api.get<Flow>(endpoints.flows.byId(id));
+    return res.data;
+  },
+  create: async (body: CreateFlowPayload): Promise<Flow> => {
+    const res = await api.post<Flow>(endpoints.flows.list, body);
+    return res.data;
+  },
+  update: async (id: string, body: UpdateFlowPayload): Promise<Flow> => {
+    const res = await api.put<Flow>(endpoints.flows.byId(id), body);
+    return res.data;
+  },
+  publish: async (id: string): Promise<Flow> => {
+    const res = await api.post<Flow>(endpoints.flows.publish(id), {});
+    return res.data;
+  },
+  unpublish: async (id: string): Promise<Flow> => {
+    const res = await api.post<Flow>(endpoints.flows.unpublish(id), {});
+    return res.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(endpoints.flows.byId(id));
+  },
+};
