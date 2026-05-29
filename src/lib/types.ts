@@ -512,6 +512,7 @@ export type TemplateLimitsResponse = {
 
 export type NotificationType =
   | "CONVERSATION_ASSIGNED"
+  | "CONVERSATION_REASSIGNED"
   | "CAMPAIGN_COMPLETED"
   | "CAMPAIGN_FAILED"
   | "CONTACT_IMPORT_DONE"

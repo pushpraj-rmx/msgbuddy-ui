@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { CheckSquare } from "lucide-react";
 import {
   type InboxMessage,
   formatDeliveryStatusLabel,
@@ -8,11 +10,17 @@ import {
   getMediaKind,
   isFailedMessage,
   isProcessingMessage,
+  substituteTemplateVariables,
 } from "@/lib/messaging";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getWhatsappDeliveryHint } from "@/lib/whatsappDeliveryErrors";
 import { MessageContextMenu } from "@/components/inbox/MessageContextMenu";
+import { MessageStatusIcon } from "@/components/inbox/MessageStatusIcon";
 import { MediaLightbox } from "@/components/ui/MediaLightbox";
+import {
+  WhatsAppTemplatePreview,
+  type WhatsAppTemplatePreviewProps,
+} from "@/components/templates/WhatsAppTemplatePreview";
 
 function formatFileSizeForDocument(bytes: number | null | undefined): string | null {
   if (bytes == null || typeof bytes !== "number" || bytes < 0 || !Number.isFinite(bytes)) {
@@ -103,14 +111,30 @@ function formatMessageTimeShort(iso?: string | null): string | null {
   });
 }
 
+/**
+ * Tinted-background variant of daisyUI's chat-bubble. Replaces the fully-
+ * saturated `chat-bubble-primary` / `chat-bubble-secondary` (signal-green and
+ * blue) with low-opacity backgrounds + soft same-color borders. Side meaning
+ * (you vs them) still reads at a glance, but the bubbles no longer fight the
+ * rest of the inbox. Aligns with the "borders-over-shadows, dark-first"
+ * design language captured in MEMORY.
+ */
 function bubbleClassName(message: InboxMessage, failed: boolean): string {
-  if (failed) return "chat-bubble-error";
-  if (isProcessingMessage(message)) return "chat-bubble-neutral";
+  if (failed) {
+    // Soft red wash + muted border — the dedicated error card under the bubble
+    // does the heavy signalling, so the bubble itself just needs a tint.
+    return "!bg-error/10 !border !border-error/30 !text-base-content";
+  }
+  if (isProcessingMessage(message)) {
+    return "!bg-base-300/40 !border !border-base-content/15 !text-base-content";
+  }
   // Stickers render transparent (no colored background) — WebP often carries
   // alpha and a tinted bubble fights the artwork.
   if (getMediaKind(message) === "sticker") return "!bg-transparent !p-0";
-  if (message.direction === "OUTBOUND") return "chat-bubble-primary";
-  return "chat-bubble-secondary";
+  if (message.direction === "OUTBOUND") {
+    return "!bg-primary/12 !border !border-primary/25 !text-base-content";
+  }
+  return "!bg-secondary/10 !border !border-secondary/25 !text-base-content";
 }
 
 /** 1px frame on images; color matches bubble variant. */
@@ -121,8 +145,8 @@ function imageFrameClassForBubble(
   const base = "border rounded-box";
   if (failed) return `${base} border-error-content/40`;
   if (isProcessingMessage(message)) return `${base} border-neutral-content/35`;
-  if (message.direction === "OUTBOUND") return `${base} border-primary-content/35`;
-  return `${base} border-secondary-content/35`;
+  if (message.direction === "OUTBOUND") return `${base} border-primary/30`;
+  return `${base} border-secondary/30`;
 }
 
 function isRichMediaBubble(message: InboxMessage): boolean {
@@ -141,6 +165,16 @@ interface MessageBubbleProps {
   onStar?: (message: InboxMessage) => void;
   onReact?: (message: InboxMessage, emoji: string) => void;
   onUnreact?: (message: InboxMessage) => void;
+  /** Re-enqueues a FAILED outbound message. Only shown when provided. */
+  onRetry?: (message: InboxMessage) => void;
+  /** Reflects the in-flight state of the parent's retry mutation. */
+  retrying?: boolean;
+  /** Soft-deletes a FAILED outbound message — hides it from the timeline. */
+  onDiscard?: (message: InboxMessage) => void;
+  /** Reflects the in-flight state of the parent's discard mutation. */
+  discarding?: boolean;
+  /** Opens the "Create task" modal pre-linked to this message's conversation/contact. */
+  onCreateTask?: (message: InboxMessage) => void;
   /** Used to identify which reaction belongs to the current agent for "remove on click own". */
   currentUserId?: string | null;
   highlighted?: boolean;
@@ -154,6 +188,11 @@ export function MessageBubble({
   onStar,
   onReact,
   onUnreact,
+  onRetry,
+  retrying = false,
+  onDiscard,
+  discarding = false,
+  onCreateTask,
   currentUserId,
   highlighted = false,
 }: MessageBubbleProps) {
@@ -475,14 +514,51 @@ export function MessageBubble({
     }
 
     if (kind === "TEMPLATE") {
+      // Render with variables substituted so the agent sees exactly what the
+      // contact saw — not the raw `{{1}}, {{2}}` placeholders. When the list
+      // endpoint hydrates `channelTemplateVersion` we render the full
+      // WhatsApp-styled preview (header media / footer / buttons); otherwise
+      // we fall back to substituted body text only (legacy rows + cases where
+      // the version was deleted).
+      const version = message.channelTemplateVersion;
+      const variables = message.templateVariables;
+      const substitutedBody = substituteTemplateVariables(
+        version?.body ?? message.text,
+        variables,
+      ).trim();
       return (
         <div className="flex flex-col gap-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
             WhatsApp template
           </span>
-          <div className="whitespace-pre-wrap">
-            {message.text?.trim() ?? ""}
-          </div>
+          {version ? (
+            <WhatsAppTemplatePreview
+              headerType={
+                (version.headerType ?? null) as WhatsAppTemplatePreviewProps["headerType"]
+              }
+              headerContent={substituteTemplateVariables(
+                version.headerContent,
+                variables,
+              )}
+              body={substitutedBody}
+              footer={version.footer ?? null}
+              buttons={
+                (version.buttons ?? null) as WhatsAppTemplatePreviewProps["buttons"]
+              }
+              layoutType={
+                (version.layoutType ?? "STANDARD") as WhatsAppTemplatePreviewProps["layoutType"]
+              }
+              carouselCards={
+                (version.carouselCards ?? null) as WhatsAppTemplatePreviewProps["carouselCards"]
+              }
+              category={
+                (version.category ?? null) as WhatsAppTemplatePreviewProps["category"]
+              }
+              language={version.language ?? null}
+            />
+          ) : (
+            <div className="whitespace-pre-wrap">{substitutedBody}</div>
+          )}
           {message.campaignId && (
             <a
               href={`/campaigns?id=${message.campaignId}`}
@@ -526,7 +602,8 @@ export function MessageBubble({
   const canStar = !!onStar;
   const canPin = !!onPin;
   const canCopy = !!message.text;
-  const hasContextMenu = canStar || canPin || canCopy;
+  const canCreateTask = !!onCreateTask;
+  const hasContextMenu = canStar || canPin || canCopy || canCreateTask;
 
   return (
     <div
@@ -552,6 +629,7 @@ export function MessageBubble({
           text={message.text ?? undefined}
           onPin={onPin ? () => onPin(message) : undefined}
           onStar={onStar ? () => onStar(message) : undefined}
+          onCreateTask={onCreateTask ? () => onCreateTask(message) : undefined}
           onClose={() => setMenuPoint(null)}
         />
       )}
@@ -562,7 +640,7 @@ export function MessageBubble({
         }`}
       >
         <div
-          className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden text-sm leading-relaxed group/bubble relative ${
+          className={`chat-bubble max-w-[min(85%,28rem)] !rounded-box before:hidden text-sm leading-relaxed group/bubble relative break-words [overflow-wrap:anywhere] ${
             documentBubble ? "p-0" : richMedia ? "p-1.5" : "px-3 py-2.5"
           } ${bubbleClassName(message, failed)}`}
         >
@@ -744,13 +822,71 @@ export function MessageBubble({
                     </span>
                   ) : null}
                 </div>
-              </div> 
+              </div>
             )}
+            {message.direction === "OUTBOUND" && (onRetry || onDiscard) ? (
+              <div
+                className={`mt-1.5 flex items-center gap-2 ${
+                  message.direction === "OUTBOUND" ? "justify-end" : "justify-start"
+                }`}
+              >
+                {onDiscard ? (
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-ghost text-base-content/60 hover:text-base-content"
+                    onClick={() => onDiscard(message)}
+                    disabled={discarding || retrying}
+                    title="Hide this failed message from the inbox (keeps it in analytics)"
+                  >
+                    {discarding ? (
+                      <span className="loading loading-spinner loading-xs" />
+                    ) : null}
+                    Discard
+                  </button>
+                ) : null}
+                {onRetry ? (
+                  <button
+                    type="button"
+                    className="btn btn-xs btn-outline btn-error"
+                    onClick={() => onRetry(message)}
+                    disabled={retrying || discarding}
+                  >
+                    {retrying ? (
+                      <span className="loading loading-spinner loading-xs" />
+                    ) : null}
+                    Retry send
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
-        <div className="chat-footer font-mono-op mt-1 text-[0.625rem] tracking-[0.04em] text-base-content/45 tabular-nums">
-          {formatDeliveryStatusLabel(message)}
-        </div>
+        {(() => {
+          const timeStr = formatMessageTimeShort(message.createdAt);
+          const statusLabel = formatDeliveryStatusLabel(message);
+          const taskCount = message.taskCount ?? 0;
+          return (
+            <div className="chat-footer font-mono-op mt-1 flex items-center gap-1 text-[0.625rem] tracking-[0.04em] text-base-content/45 tabular-nums">
+              {timeStr ? <span>{timeStr}</span> : null}
+              {timeStr && statusLabel ? <span aria-hidden="true">·</span> : null}
+              <MessageStatusIcon message={message} />
+              {statusLabel ? <span>{statusLabel}</span> : null}
+              {taskCount > 0 ? (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <Link
+                    href={`/tasks?messageId=${message.id}`}
+                    className="inline-flex items-center gap-0.5 rounded-[3px] border border-primary/30 bg-primary/10 px-1 py-[1px] text-primary transition-colors hover:bg-primary/20"
+                    title={`${taskCount} open task${taskCount === 1 ? "" : "s"} — view`}
+                  >
+                    <CheckSquare className="h-2.5 w-2.5" aria-hidden />
+                    <span>{taskCount}</span>
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

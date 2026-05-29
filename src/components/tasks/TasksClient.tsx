@@ -10,8 +10,11 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   tasksApi,
+  taskLinkHref,
   type Task,
   type TaskListParams,
   type TaskPriority,
@@ -92,7 +95,15 @@ function toLocalInputValue(d: Date): string {
 }
 
 export function TasksClient({ canManage }: { canManage: boolean }) {
-  const [scope, setScope] = useState<Scope>("mine");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Anchored-to-message deep link from the inbox bubble's task badge.
+  // When set, list is filtered to only this message's tasks AND scope is
+  // forced to "all" so the agent sees tasks regardless of who they're
+  // assigned to (otherwise opening "/tasks?messageId=X" while scoped to
+  // "mine" could surface zero results and look broken).
+  const messageIdFilter = searchParams.get("messageId");
+  const [scope, setScope] = useState<Scope>(messageIdFilter ? "all" : "mine");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [search, setSearch] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -128,6 +139,7 @@ export function TasksClient({ canManage }: { canManage: boolean }) {
       };
       if (scope === "mine") params.assignedUserId = "me";
       if (search.trim()) params.search = search.trim();
+      if (messageIdFilter) params.messageId = messageIdFilter;
       // For open view, also surface SNOOZED-but-due so nothing slips
       // through; for explicit "snoozed" view we keep snoozed-only.
       if (statusFilter === "open") {
@@ -142,7 +154,7 @@ export function TasksClient({ canManage }: { canManage: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, [scope, statusFilter, search]);
+  }, [scope, statusFilter, search, messageIdFilter]);
 
   useEffect(() => {
     void refresh();
@@ -212,6 +224,27 @@ export function TasksClient({ canManage }: { canManage: boolean }) {
 
   return (
     <div className="space-y-4">
+      {/* Anchored-to-message filter banner — shown when /tasks?messageId=X
+          is opened from a bubble's task badge. Clear sends the user back
+          to the normal list. */}
+      {messageIdFilter ? (
+        <div className="flex items-center justify-between gap-2 rounded-box border border-primary/30 border-l-2 border-l-primary bg-primary/5 px-3 py-2 text-[0.8125rem]">
+          <span>
+            Showing tasks for{" "}
+            <span className="font-mono-op text-[0.6875rem] tracking-[0.04em] text-base-content/70">
+              message {messageIdFilter.slice(0, 8)}…
+            </span>
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={() => router.push("/tasks")}
+          >
+            Clear filter
+          </button>
+        </div>
+      ) : null}
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1 rounded-md border border-base-300 bg-base-200 p-0.5">
@@ -481,27 +514,43 @@ function TaskRow({
           {isDone ? <Check className="h-3.5 w-3.5 text-success" aria-hidden /> : null}
         </span>
       )}
-      <div className="min-w-0 flex-1">
-        <p
-          className={`line-clamp-2 ${isDone || isCancelled ? "text-base-content/55 line-through" : "text-base-content"}`}
-        >
-          {task.subject}
-        </p>
-        {(dueLabel || isSnoozed || (status === "done" && task.completedAt)) ? (
-          <p
-            className={`mt-0.5 inline-flex items-center gap-1 font-mono-op text-[0.6875rem] ${
-              bucket === "overdue" ? "text-error" : "text-base-content/55"
-            }`}
+      {(() => {
+        const href = taskLinkHref(task);
+        const body = (
+          <>
+            <p
+              className={`line-clamp-2 ${isDone || isCancelled ? "text-base-content/55 line-through" : "text-base-content"} ${href ? "group-hover/taskbody:text-primary transition-colors" : ""}`}
+            >
+              {task.subject}
+            </p>
+            {(dueLabel || isSnoozed || (status === "done" && task.completedAt)) ? (
+              <p
+                className={`mt-0.5 inline-flex items-center gap-1 font-mono-op text-[0.6875rem] ${
+                  bucket === "overdue" ? "text-error" : "text-base-content/55"
+                }`}
+              >
+                <Clock className="h-3 w-3" aria-hidden />
+                {isSnoozed && task.snoozedUntil
+                  ? `Snoozed until ${formatDueLabel(task.snoozedUntil)}`
+                  : status === "done" && task.completedAt
+                    ? `Completed ${formatDueLabel(task.completedAt)}`
+                    : dueLabel}
+              </p>
+            ) : null}
+          </>
+        );
+        return href ? (
+          <Link
+            href={href}
+            className="group/taskbody min-w-0 flex-1"
+            title="Open linked conversation"
           >
-            <Clock className="h-3 w-3" aria-hidden />
-            {isSnoozed && task.snoozedUntil
-              ? `Snoozed until ${formatDueLabel(task.snoozedUntil)}`
-              : status === "done" && task.completedAt
-                ? `Completed ${formatDueLabel(task.completedAt)}`
-                : dueLabel}
-          </p>
-        ) : null}
-      </div>
+            {body}
+          </Link>
+        ) : (
+          <div className="min-w-0 flex-1">{body}</div>
+        );
+      })()}
       <div className="flex shrink-0 items-center gap-0.5">
         {(isDone || isCancelled) && canManage ? (
           <button

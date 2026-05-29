@@ -7,6 +7,10 @@ import {
   campaignsApi,
   conversationsApi,
   usageApi,
+  tasksApi,
+  taskLinkHref,
+  TASK_CHANGED_EVENT,
+  type Task,
 } from "@/lib/api";
 import {
   campaignRunSummaryLine,
@@ -18,6 +22,7 @@ import {
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 import { canAccessAnalyticsNav } from "@/lib/workspace-access";
 import { KpiCard } from "@/components/ui/KpiCard";
+import { ContactAvatar } from "@/components/ui/ContactAvatar";
 import { QuotaBar } from "@/components/ui/QuotaBar";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { PanelBody, PanelSection } from "@/components/right-panel/PanelBody";
@@ -271,20 +276,29 @@ function LineGraph({
         {paths?.sentArea && (
           <path
             d={paths.sentArea}
-            style={{ fill: "oklch(var(--p) / 0.12)" }}
+            // CSS var holds a hex value (see globals.css), so wrap with
+            // color-mix to derive the translucent fill. The earlier
+            // `oklch(var(--p) / 0.12)` was legacy daisyUI v4 syntax that
+            // expected --p to hold HSL channel values; with v5+ hex vars
+            // it produced an invalid color and the path rendered uncolored.
+            style={{
+              fill: "color-mix(in oklch, var(--color-primary) 12%, transparent)",
+            }}
           />
         )}
         {paths?.inboundArea && (
           <path
             d={paths.inboundArea}
-            style={{ fill: "oklch(var(--s) / 0.12)" }}
+            style={{
+              fill: "color-mix(in oklch, var(--color-secondary) 12%, transparent)",
+            }}
           />
         )}
         {paths?.sentLine && (
           <path
             d={paths.sentLine}
             fill="none"
-            style={{ stroke: "oklch(var(--p))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+            style={{ stroke: "var(--color-primary)", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
             strokeWidth="1.5"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -294,7 +308,7 @@ function LineGraph({
           <path
             d={paths.inboundLine}
             fill="none"
-            style={{ stroke: "oklch(var(--s))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+            style={{ stroke: "var(--color-secondary)", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
             strokeWidth="1.5"
             strokeLinejoin="round"
             strokeLinecap="round"
@@ -304,7 +318,7 @@ function LineGraph({
           <circle
             key={`s${i}`}
             cx={cx} cy={cy} r="1.2"
-            style={{ fill: "oklch(var(--p))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+            style={{ fill: "var(--color-primary)", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
           >
             <title>{points[i]?.date}: {paths.sentVals[i]} sent</title>
           </circle>
@@ -313,7 +327,7 @@ function LineGraph({
           <circle
             key={`ib${i}`}
             cx={cx} cy={cy} r="1.2"
-            style={{ fill: "oklch(var(--s))", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
+            style={{ fill: "var(--color-secondary)", vectorEffect: "non-scaling-stroke" } as React.CSSProperties}
           >
             <title>{points[i]?.date}: {paths.inboundVals[i]} inbound</title>
           </circle>
@@ -445,6 +459,197 @@ export function DashboardClient({ meRole }: { meRole: string }) {
       cancelled = true;
     };
   }, []);
+
+  // Monthly message-quota snapshot for the "This month" KPI. Pulls the same
+  // shape the UsageWarningBanner uses; one fetch on mount is enough since
+  // counts move per-send, not per-second.
+  const [usageMonth, setUsageMonth] = useState<{
+    current: number;
+    limit: number;
+    percentUsed: number;
+  } | null>(null);
+  useEffect(() => {
+    if (isViewer) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = (await usageApi.limits()) as {
+          limits?: {
+            messages?: { current?: number; limit?: number; percentUsed?: number };
+          };
+        };
+        const m = res.limits?.messages;
+        if (!cancelled && m && typeof m.limit === "number") {
+          setUsageMonth({
+            current: m.current ?? 0,
+            limit: m.limit,
+            percentUsed:
+              m.percentUsed ??
+              Math.round(((m.current ?? 0) / m.limit) * 100),
+          });
+        }
+      } catch {
+        // non-fatal
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewer]);
+
+  // NOW-tab live data: my open tasks (overdue + due today) + count of
+  // unassigned open conversations. Refreshes on TASK_CHANGED_EVENT so
+  // completing/snoozing a task in the panel updates immediately without a
+  // round-trip through the Topbar poll.
+  const [nowTasks, setNowTasks] = useState<Task[] | null>(null);
+  const [nowTasksLoading, setNowTasksLoading] = useState(true);
+  const [unassignedCount, setUnassignedCount] = useState<number | null>(null);
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+
+  const refreshNowTasks = useCallback(async () => {
+    // End-of-today in the browser's local zone, then sent as ISO so the
+    // backend filter catches overdue (dueAt < now) + due-today (dueAt <= EOD).
+    const eod = new Date();
+    eod.setHours(23, 59, 59, 999);
+    try {
+      const res = await tasksApi.list({
+        assignedUserId: "me",
+        status: "OPEN",
+        dueBefore: eod.toISOString(),
+        limit: 8,
+      });
+      setNowTasks(res.tasks);
+    } catch {
+      setNowTasks([]);
+    } finally {
+      setNowTasksLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshNowTasks();
+    const onChanged = () => void refreshNowTasks();
+    window.addEventListener(TASK_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(TASK_CHANGED_EVENT, onChanged);
+  }, [refreshNowTasks]);
+
+  useEffect(() => {
+    if (isViewer) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await conversationsApi.list({
+          status: "OPEN",
+          unassignedOnly: true,
+          // Cheap upper-bound; we only show the number, not the rows.
+          limit: 100,
+        });
+        if (!cancelled) {
+          setUnassignedCount(Array.isArray(rows) ? rows.length : 0);
+        }
+      } catch {
+        if (!cancelled) setUnassignedCount(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewer]);
+
+  const handleCompleteTask = useCallback(async (id: string) => {
+    setBusyTaskId(id);
+    try {
+      await tasksApi.complete(id);
+      // tasksApi auto-dispatches TASK_CHANGED_EVENT — the listener above
+      // refreshes the list, and the Topbar badge updates too.
+    } finally {
+      setBusyTaskId(null);
+    }
+  }, []);
+
+  const handleSnoozeTask = useCallback(async (id: string) => {
+    setBusyTaskId(id);
+    try {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
+      await tasksApi.snooze(id, tomorrow.toISOString());
+    } finally {
+      setBusyTaskId(null);
+    }
+  }, []);
+
+  // Conversations whose WhatsApp 24h free-form window is closing soon. The
+  // backend sets `firstInboundAwaitingReplyAt` the moment a customer message
+  // lands and clears it on outbound reply — that's the timer. We pull all
+  // awaiting-reply conversations and filter client-side to the in-window
+  // ones (cheap; one query gives us the full slice up to LIMIT=100).
+  const [windowConvs, setWindowConvs] = useState<
+    | Array<{
+        id: string;
+        contactName: string;
+        contactPhone?: string;
+        contactAvatarUrl?: string | null;
+        awaitingSince: Date;
+      }>
+    | null
+  >(null);
+
+  useEffect(() => {
+    if (isViewer) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = (await conversationsApi.list({
+          status: "OPEN",
+          awaitingReplyOnly: true,
+          limit: 100,
+        })) as Array<{
+          id: string;
+          firstInboundAwaitingReplyAt?: string | null;
+          contact?: {
+            name?: string;
+            phone?: string;
+            email?: string;
+            avatarUrl?: string | null;
+          };
+        }>;
+        if (cancelled) return;
+        const now = Date.now();
+        const cutoff = now - 24 * 60 * 60 * 1000; // 24h ago
+        const filtered = rows
+          .map((r) => {
+            const since = r.firstInboundAwaitingReplyAt
+              ? new Date(r.firstInboundAwaitingReplyAt)
+              : null;
+            return since ? { row: r, since } : null;
+          })
+          .filter(
+            (x): x is { row: typeof rows[number]; since: Date } =>
+              x !== null && x.since.getTime() > cutoff,
+          )
+          .sort((a, b) => a.since.getTime() - b.since.getTime())
+          .slice(0, 8)
+          .map(({ row, since }) => ({
+            id: row.id,
+            contactName:
+              row.contact?.name?.trim() ||
+              row.contact?.phone ||
+              row.contact?.email ||
+              "Unknown contact",
+            contactPhone: row.contact?.phone,
+            contactAvatarUrl: row.contact?.avatarUrl,
+            awaitingSince: since,
+          }));
+        setWindowConvs(filtered);
+      } catch {
+        if (!cancelled) setWindowConvs([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isViewer]);
 
   // Eager: Now + Overview data
   useEffect(() => {
@@ -785,7 +990,7 @@ export function DashboardClient({ meRole }: { meRole: string }) {
             <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">Live now</h2>
             <span className="op-label">workspace state · today</span>
           </div>
-          <div className={`grid gap-3 sm:grid-cols-2 ${isViewer ? "" : "xl:grid-cols-4"}`}>
+          <div className={`grid gap-3 sm:grid-cols-2 ${isViewer ? "" : "xl:grid-cols-6"}`}>
             {!isViewer ? (
               <>
                 <Link href="/inbox" className="group block">
@@ -793,6 +998,27 @@ export function DashboardClient({ meRole }: { meRole: string }) {
                     label="Open conversations"
                     value={openCount ?? "—"}
                     hint={<span className="transition-colors group-hover:text-primary">Open inbox →</span>}
+                    className="transition-colors group-hover:border-primary/40"
+                  />
+                </Link>
+                <Link
+                  href="/inbox?assignee=__unassigned__"
+                  className="group block"
+                >
+                  <KpiCard
+                    label="Unassigned"
+                    value={unassignedCount ?? "—"}
+                    hint={
+                      unassignedCount != null && unassignedCount >= 100 ? (
+                        <span className="text-warning transition-colors group-hover:text-warning">
+                          100+ awaiting an owner
+                        </span>
+                      ) : (
+                        <span className="transition-colors group-hover:text-primary">
+                          Claim or assign →
+                        </span>
+                      )
+                    }
                     className="transition-colors group-hover:border-primary/40"
                   />
                 </Link>
@@ -811,6 +1037,36 @@ export function DashboardClient({ meRole }: { meRole: string }) {
               value={todayStats?.sent ?? "—"}
               hint="Outbound messages since 00:00 UTC"
             />
+            {!isViewer && usageMonth ? (
+              <Link href="/billing#plans" className="group block">
+                <KpiCard
+                  label="This month"
+                  value={`${usageMonth.percentUsed}%`}
+                  hint={
+                    <span
+                      className={
+                        usageMonth.percentUsed >= 100
+                          ? "text-error"
+                          : usageMonth.percentUsed >= 80
+                            ? "text-warning"
+                            : ""
+                      }
+                    >
+                      {usageMonth.current.toLocaleString()} /{" "}
+                      {usageMonth.limit.toLocaleString()} messages
+                      {usageMonth.percentUsed >= 80 ? " · upgrade →" : ""}
+                    </span>
+                  }
+                  className={`transition-colors ${
+                    usageMonth.percentUsed >= 100
+                      ? "border-error/40 group-hover:border-error/60"
+                      : usageMonth.percentUsed >= 80
+                        ? "border-warning/40 group-hover:border-warning/60"
+                        : "group-hover:border-primary/40"
+                  }`}
+                />
+              </Link>
+            ) : null}
             <KpiCard
               label="Failed today"
               value={todayStats?.failed ?? "—"}
@@ -822,6 +1078,212 @@ export function DashboardClient({ meRole }: { meRole: string }) {
                 )
               }
             />
+          </div>
+
+          {/* Action row — My tasks + Window closing equal-width side-by-side
+              at xl, stacked on smaller screens. Both are operational
+              quick-scan lists, weighted the same. */}
+          <div className={`grid gap-3 ${!isViewer ? "xl:grid-cols-2" : ""}`}>
+          {/* My tasks — overdue + due today. Reuses tasksApi which auto-fires
+              TASK_CHANGED_EVENT on each mutation, so the Topbar badge stays
+              in sync without an extra round-trip. */}
+          <div className="rounded-box border border-base-300 bg-base-200">
+            <div className="flex items-center justify-between gap-2 border-b border-base-300 px-3 py-3">
+              <div className="min-w-0">
+                <h3 className="truncate text-[0.8125rem] font-semibold tracking-[-0.01em]">
+                  My tasks
+                </h3>
+                <span className="op-label">due today + overdue</span>
+              </div>
+              <Link href="/tasks" className="btn btn-ghost btn-xs shrink-0" title="All tasks">
+                All →
+              </Link>
+            </div>
+            {nowTasksLoading ? (
+              <div className="px-3 py-6 text-[0.8125rem] text-base-content/55">
+                Loading…
+              </div>
+            ) : !nowTasks || nowTasks.length === 0 ? (
+              <div className="px-3 py-6 text-center text-[0.75rem] leading-snug text-base-content/55">
+                Nothing urgent.{" "}
+                <Link href="/tasks" className="link link-primary">
+                  Plan your day
+                </Link>
+                .
+              </div>
+            ) : (
+              <ul>
+                {nowTasks.map((t) => {
+                  const dueDate = t.dueAt ? new Date(t.dueAt) : null;
+                  const overdue =
+                    !!dueDate && dueDate.getTime() < Date.now();
+                  const dueLabel = dueDate
+                    ? overdue
+                      ? `Overdue · ${dueDate.toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: false,
+                        })}`
+                      : `Due ${dueDate.toLocaleTimeString(undefined, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: false,
+                        })}`
+                    : "No due date";
+                  return (
+                    <li
+                      key={t.id}
+                      className="flex items-center gap-2.5 border-b border-base-300 px-3 py-2 last:border-b-0"
+                    >
+                      {(() => {
+                        const href = taskLinkHref(t);
+                        const body = (
+                          <>
+                            <p
+                              className={`truncate text-[0.8125rem] font-medium ${
+                                href
+                                  ? "group-hover/taskbody:text-primary transition-colors"
+                                  : ""
+                              }`}
+                            >
+                              {t.subject}
+                            </p>
+                            <p
+                              className={`font-mono-op mt-0.5 text-[0.625rem] tracking-[0.04em] ${
+                                overdue
+                                  ? "text-error"
+                                  : "text-base-content/55"
+                              }`}
+                            >
+                              {dueLabel}
+                              {t.priority && t.priority !== "NORMAL" ? (
+                                <span className="ml-2 text-base-content/55">
+                                  · {t.priority.toLowerCase()}
+                                </span>
+                              ) : null}
+                            </p>
+                          </>
+                        );
+                        return href ? (
+                          <Link
+                            href={href}
+                            className="group/taskbody min-w-0 flex-1"
+                            title="Open linked conversation"
+                          >
+                            {body}
+                          </Link>
+                        ) : (
+                          <div className="min-w-0 flex-1">{body}</div>
+                        );
+                      })()}
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={() => void handleSnoozeTask(t.id)}
+                          disabled={busyTaskId === t.id}
+                          title="Snooze to 9 AM tomorrow"
+                        >
+                          Snooze
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-xs"
+                          onClick={() => void handleCompleteTask(t.id)}
+                          disabled={busyTaskId === t.id}
+                        >
+                          {busyTaskId === t.id ? (
+                            <span className="loading loading-spinner loading-xs" />
+                          ) : null}
+                          Done
+                        </button>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </div>
+
+          {/* Window closing — sits beside My tasks at equal width. WhatsApp
+              24h free-form window countdown for conversations waiting on us. */}
+          {!isViewer ? (
+            <div className="rounded-box border border-base-300 bg-base-200">
+              <div className="flex items-center justify-between gap-2 border-b border-base-300 px-3 py-3">
+                <div className="min-w-0">
+                  <h3 className="truncate text-[0.8125rem] font-semibold tracking-[-0.01em]">
+                    Window closing
+                  </h3>
+                  <span className="op-label">24h free-form</span>
+                </div>
+                <Link
+                  href="/inbox?queueFilter=awaiting"
+                  className="btn btn-ghost btn-xs shrink-0"
+                  title="All awaiting"
+                >
+                  All →
+                </Link>
+              </div>
+              {windowConvs == null ? (
+                <div className="px-3 py-6 text-[0.8125rem] text-base-content/55">
+                  Loading…
+                </div>
+              ) : windowConvs.length === 0 ? (
+                <div className="px-3 py-6 text-center text-[0.75rem] leading-snug text-base-content/55">
+                  No conversations waiting inside the 24h window. 🟢
+                </div>
+              ) : (
+                <ul>
+                  {windowConvs.map((c) => {
+                    const expiresAt = c.awaitingSince.getTime() + 24 * 60 * 60 * 1000;
+                    const msLeft = expiresAt - Date.now();
+                    const hoursLeft = Math.floor(msLeft / (60 * 60 * 1000));
+                    const minutesLeft = Math.floor(
+                      (msLeft % (60 * 60 * 1000)) / (60 * 1000),
+                    );
+                    const critical = msLeft < 60 * 60 * 1000;
+                    const warning = !critical && msLeft < 4 * 60 * 60 * 1000;
+                    const tone = critical
+                      ? "text-error"
+                      : warning
+                        ? "text-warning"
+                        : "text-base-content/65";
+                    const label =
+                      hoursLeft >= 1
+                        ? `${hoursLeft}h ${minutesLeft}m`
+                        : `${minutesLeft}m`;
+                    return (
+                      <li key={c.id} className="border-b border-base-300 last:border-b-0">
+                        <Link
+                          href={`/inbox?conversationId=${c.id}`}
+                          className="group flex items-center gap-2.5 px-3 py-2 transition hover:bg-base-300/40"
+                          title={`${c.contactName} · ${label} left`}
+                        >
+                          <ContactAvatar
+                            name={c.contactName}
+                            phone={c.contactPhone}
+                            avatarUrl={c.contactAvatarUrl}
+                            size="sm"
+                            className="shrink-0"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[0.8125rem] font-medium group-hover:text-primary">
+                              {c.contactName}
+                            </p>
+                            <p
+                              className={`font-mono-op mt-0.5 text-[0.625rem] tracking-[0.04em] ${tone}`}
+                            >
+                              ⏱ {label} left
+                            </p>
+                          </div>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          ) : null}
           </div>
         </section>
       ) : null}

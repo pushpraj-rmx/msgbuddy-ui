@@ -193,6 +193,16 @@ export function ContactsListClient({
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [filterDeleteOpen, setFilterDeleteOpen] = useState(false);
+  const [filterDeletePreview, setFilterDeletePreview] = useState<{
+    count: number;
+    sample: Array<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+    }>;
+  } | null>(null);
   const [selectedContactId, setSelectedContactId] = useState<string | null>(
     null
   );
@@ -543,6 +553,70 @@ export function ContactsListClient({
         return next;
       });
       setBulkDeleteOpen(false);
+      setError(null);
+    },
+    onError: (err) => setError(getApiError(err)),
+  });
+
+  /**
+   * The exact filter payload the user is currently looking at — sent to both
+   * preview-delete and bulk-delete so "what you see" matches "what gets deleted".
+   * Keyed off the same memoised values that drive the list query.
+   */
+  const activeFilterPayload = useMemo(
+    () => ({
+      search: searchParam || undefined,
+      tagIds: filterTagIds.length > 0 ? filterTagIds : undefined,
+      tagsMatch: filterTagIds.length > 0 ? tagsMatch : undefined,
+      createdAfter: createdAfterIso ?? undefined,
+      createdBefore: createdBeforeIso ?? undefined,
+      lifecycleStage: lifecycleStageFilter ?? undefined,
+      segmentId: segmentId ?? undefined,
+    }),
+    [
+      searchParam,
+      filterTagIds,
+      tagsMatch,
+      createdAfterIso,
+      createdBeforeIso,
+      lifecycleStageFilter,
+      segmentId,
+    ],
+  );
+
+  const hasActiveFilters =
+    !!searchParam ||
+    filterTagIds.length > 0 ||
+    !!createdAfterIso ||
+    !!createdBeforeIso ||
+    !!lifecycleStageFilter ||
+    !!segmentId;
+
+  const filterPreviewMutation = useMutation({
+    mutationFn: () => contactsApi.previewBulkDelete(activeFilterPayload),
+    onSuccess: (preview) => {
+      setFilterDeletePreview(preview);
+      setFilterDeleteOpen(true);
+      setError(null);
+    },
+    onError: (err) => setError(getApiError(err)),
+  });
+
+  const filterBulkDeleteMutation = useMutation({
+    mutationFn: () => {
+      if (!filterDeletePreview) {
+        throw new Error("Preview required before bulk delete.");
+      }
+      return contactsApi.bulkDelete({
+        ...activeFilterPayload,
+        confirmCount: filterDeletePreview.count,
+      });
+    },
+    onSuccess: () => {
+      invalidateContacts();
+      invalidateSegmentPreview();
+      setFilterDeleteOpen(false);
+      setFilterDeletePreview(null);
       setError(null);
     },
     onError: (err) => setError(getApiError(err)),
@@ -1243,6 +1317,29 @@ export function ContactsListClient({
               ) : null}
             </>
           )}
+          {canDeleteContacts && hasActiveFilters && selectedContactIds.size === 0 && (
+            <>
+              <div className="mx-1 h-5 w-px bg-base-300" />
+              <div className="tooltip tooltip-bottom" data-tip="Delete every contact matching the current filter">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm gap-1 text-error/70 hover:text-error"
+                  onClick={() => filterPreviewMutation.mutate()}
+                  disabled={
+                    filterPreviewMutation.isPending ||
+                    filterBulkDeleteMutation.isPending
+                  }
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span className="text-[0.6875rem]">
+                    {filterPreviewMutation.isPending
+                      ? "Counting…"
+                      : "Delete matching"}
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
           {canCreateContacts ? (
             <button
               type="button"
@@ -1887,6 +1984,62 @@ export function ContactsListClient({
           loading={bulkDeleteMutation.isPending}
           onConfirm={() => bulkDeleteMutation.mutate(Array.from(selectedContactIds))}
           onClose={() => setBulkDeleteOpen(false)}
+        />
+      )}
+      {canDeleteContacts && filterDeletePreview && (
+        <ConfirmDialog
+          open={filterDeleteOpen}
+          title={
+            filterDeletePreview.count === 0
+              ? "Nothing matches the current filter"
+              : `Delete ${filterDeletePreview.count} contact${filterDeletePreview.count !== 1 ? "s" : ""}?`
+          }
+          description={
+            <span className="block space-y-2">
+              {filterDeletePreview.count === 0 ? (
+                <span className="block">
+                  No contacts match the current filter. Adjust the filter and try again.
+                </span>
+              ) : (
+                <>
+                  <span className="block">
+                    Soft-deletes every contact matching the current filter (search, tags,
+                    lifecycle stage, date range, segment). Deleted contacts can be
+                    restored individually from the contact record.
+                  </span>
+                  {filterDeletePreview.sample.length > 0 && (
+                    <span className="block rounded-md border border-base-300 bg-base-200 px-2 py-1.5">
+                      <span className="op-label mb-1 block">
+                        sample ({filterDeletePreview.sample.length} of {filterDeletePreview.count})
+                      </span>
+                      <span className="block max-h-32 overflow-y-auto text-[0.75rem]">
+                        {filterDeletePreview.sample.map((c) => (
+                          <span key={c.id} className="block truncate">
+                            {c.name?.trim() || c.phone || c.email || c.id}
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  )}
+                </>
+              )}
+            </span>
+          }
+          confirmLabel={filterDeletePreview.count === 0 ? "Close" : `Delete ${filterDeletePreview.count}`}
+          tone="danger"
+          loading={filterBulkDeleteMutation.isPending}
+          onConfirm={() => {
+            if (filterDeletePreview.count === 0) {
+              setFilterDeleteOpen(false);
+              setFilterDeletePreview(null);
+              return;
+            }
+            filterBulkDeleteMutation.mutate();
+          }}
+          onClose={() => {
+            setFilterDeleteOpen(false);
+            setFilterDeletePreview(null);
+          }}
         />
       )}
     </div>

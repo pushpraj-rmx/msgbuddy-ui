@@ -2,7 +2,6 @@ import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
   Bell,
-  CreditCard,
   FileText,
   Home,
   Image,
@@ -16,7 +15,6 @@ import {
 } from "lucide-react";
 import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
 import {
-  canAccessBillingPage,
   canAccessCampaigns,
   canAccessUsagePage,
   canViewTemplates,
@@ -53,7 +51,9 @@ export function getAppNav(
     // Feedback / bug report — surfaced as a topbar button (see Topbar.tsx) so
     // agents can report from anywhere in the app, not just from the sidebar.
     { href: "/usage", label: "Usage", Icon: Layers },
-    { href: "/billing", label: "Billing", Icon: CreditCard },
+    // Billing intentionally NOT in the sidebar — only OWNER/ADMIN configure
+    // it, and they already come to Settings for plan/payment changes. The
+    // /billing route still works; Settings exposes a "Manage billing" tile.
     {
       href: "/settings",
       label: "Settings",
@@ -75,7 +75,6 @@ export function getAppNav(
       if (item.href === "/campaigns" && !canAccessCampaigns(wr)) return false;
       if (item.href === "/templates" && !canViewTemplates(wr)) return false;
       if (item.href === "/usage" && !canAccessUsagePage(wr)) return false;
-      if (item.href === "/billing" && !canAccessBillingPage(wr)) return false;
       return true;
     });
   }

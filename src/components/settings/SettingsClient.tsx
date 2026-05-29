@@ -16,7 +16,7 @@ import { PurgeContactsClient } from "@/components/settings/PurgeContactsClient";
 import { TeamClient } from "@/components/settings/TeamClient";
 import type { DisplayDensity, LoginHistoryEvent } from "@/lib/api";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
-import { canDeleteWorkspace } from "@/lib/workspace-access";
+import { canAccessBillingPage, canDeleteWorkspace } from "@/lib/workspace-access";
 
 export type Workspace = {
   id: string;
@@ -87,6 +87,7 @@ export function SettingsClient({
   const canManageWorkspace = roleHasWorkspacePermission(meRole, "settings.manage");
   const canViewMembers = roleHasWorkspacePermission(meRole, "members.view");
   const canDeleteWorkspaceAction = canDeleteWorkspace(meRole);
+  const canSeeBilling = canAccessBillingPage(meRole);
 
   const initialForm = useMemo(
     () => ({
@@ -389,6 +390,36 @@ export function SettingsClient({
                   className="btn btn-outline btn-sm"
                 >
                   Manage webhooks
+                </a>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* ── Billing & plan ── Moved here from the sidebar (it didn't belong
+            in the day-to-day nav; only OWNER/ADMIN configure it, and they
+            already come to Settings for plan / payment changes). */}
+        {canSeeBilling ? (
+          <section id="billing" className="space-y-3">
+            <span className="op-section-title">Billing</span>
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.875rem] font-semibold">
+                      Plan, invoices & payment
+                    </span>
+                  </div>
+                  <p className="text-[0.75rem] text-base-content/55">
+                    View your current plan, upgrade or downgrade, manage
+                    payment methods, and download past invoices.
+                  </p>
+                </div>
+                <a
+                  href="/billing"
+                  className="btn btn-outline btn-sm"
+                >
+                  Manage billing
                 </a>
               </div>
             </div>

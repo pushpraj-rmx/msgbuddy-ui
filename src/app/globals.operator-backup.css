@@ -1,20 +1,10 @@
 @import "tailwindcss";
 
 /* ──────────────────────────────────────────────────────────────────
-   MsgBuddy · "Bootstrap" colour-variant of the Operator design system
-   (EXPERIMENTAL). Backup of the original Operator palette lives in
-   `globals.operator-backup.css` — restore with one `cp`.
-
-   What stays the same as Operator:
-     - Fonts (Geist + Geist Mono + Instrument Serif)
-     - Dark-first (dark is still the default, light is still the pair)
-     - Shape (6/8 radii, borders-over-shadows, depth: 0)
-     - Custom utility classes (op-label, op-tag, op-section-title, …)
-
-   What changes:
-     - Accent / signal colour swapped from WhatsApp-green to Bootstrap-blue
-     - Semantic palette (success / warning / error) realigned with
-       Bootstrap-ish hues, kept legible on the dark slate background
+   MsgBuddy · "Operator" design system
+   Fonts:   Geist (body/UI) · Geist Mono (numerics/IDs/labels) · Instrument Serif (display)
+   Palette: dark-first slate with warm-bone light pair; single signal-green accent
+   Shape:   6/8/12 radii · borders-over-shadows · subtle grain on raised panels
    ────────────────────────────────────────────────────────────────── */
 
 @theme {
@@ -28,81 +18,81 @@
   themes: dark --default, light;
 }
 
-/* ─── DARK (default): deep slate, Bootstrap-blue accent ───────────── */
+/* ─── DARK (default): deep slate, signal-green accent ─────────────── */
 @plugin "../../node_modules/daisyui/theme" {
   name: "dark";
   default: true;
   prefersdark: true;
   color-scheme: dark;
 
-  /* surfaces — same dark slate as Operator */
-  --color-base-100: #0B0B0D;
-  --color-base-200: #101114;
-  --color-base-300: #23252B;
+  /* surfaces */
+  --color-base-100: #0B0B0D;  /* page / canvas */
+  --color-base-200: #101114;  /* panels */
+  --color-base-300: #23252B;  /* borders / dividers */
   --color-base-content: #E8E9EC;
 
-  /* primary = Bootstrap blue (lightened so it sits well on dark slate) */
-  --color-primary: #6EA8FE;
-  --color-primary-content: #052C65;
+  /* accent = signal green */
+  --color-primary: #4ADE80;
+  --color-primary-content: #0B0B0D;
 
-  /* secondary kept as neutral grey — Bootstrap's bs-gray-500-ish */
-  --color-secondary: #ADB5BD;
-  --color-secondary-content: #212529;
-  --color-accent: #6EA8FE;
-  --color-accent-content: #052C65;
+  /* secondary/accent kept muted — no purple */
+  --color-secondary: #4D9FFF;
+  --color-secondary-content: #0B0B0D;
+  --color-accent: #4ADE80;
+  --color-accent-content: #0B0B0D;
 
   /* neutrals */
   --color-neutral: #1C1D22;
   --color-neutral-content: #E8E9EC;
 
-  /* semantic — dark-mode-tuned Bootstrap palette */
-  --color-info: #6EDFF6;        /* bs-info on dark */
-  --color-info-content: #055160;
-  --color-success: #75B798;     /* bs-success on dark */
-  --color-success-content: #051B11;
-  --color-warning: #FFDA6A;     /* bs-warning on dark */
-  --color-warning-content: #332701;
-  --color-error: #EA868F;       /* bs-danger on dark */
-  --color-error-content: #58151C;
+  /* semantic */
+  --color-info: #4D9FFF;
+  --color-info-content: #0B0B0D;
+  --color-success: #4ADE80;
+  --color-success-content: #0B0B0D;
+  --color-warning: #E4A94A;
+  --color-warning-content: #1A1408;
+  --color-error: #E5484D;
+  --color-error-content: #0B0B0D;
 
-  /* shape — UNCHANGED from Operator (your call: colours only) */
-  --radius-selector: 0.375rem;
-  --radius-field:    0.375rem;
-  --radius-box:      0.5rem;
+  /* shape */
+  --radius-selector: 0.375rem; /* 6px */
+  --radius-field:    0.375rem; /* 6px */
+  --radius-box:      0.5rem;   /* 8px */
   --border: 1px;
   --depth: 0;
   --noise: 0;
 }
 
-/* ─── LIGHT pair: same Bootstrap-blue accent on a light canvas ────── */
+/* ─── LIGHT: warm bone, deep ink, emerald accent ──────────────────── */
 @plugin "../../node_modules/daisyui/theme" {
   name: "light";
   default: false;
   prefersdark: false;
   color-scheme: light;
 
-  --color-base-100: #FFFFFF;
-  --color-base-200: #F8F9FA;
-  --color-base-300: #DEE2E6;
-  --color-base-content: #212529;
+  --color-base-100: #FBFBF9;
+  --color-base-200: #FFFFFF;
+  --color-base-300: #E4E2D9;
+  --color-base-content: #0F1012;
 
-  --color-primary: #0D6EFD;
+  --color-primary: #1B7F3A;
   --color-primary-content: #FFFFFF;
-  --color-secondary: #6C757D;
+  --color-secondary: #0F5FCB;
   --color-secondary-content: #FFFFFF;
-  --color-accent: #0D6EFD;
+  --color-accent: #1B7F3A;
   --color-accent-content: #FFFFFF;
 
-  --color-neutral: #E9ECEF;
-  --color-neutral-content: #212529;
+  --color-neutral: #F4F3EF;
+  --color-neutral-content: #0F1012;
 
-  --color-info: #0DCAF0;
-  --color-info-content: #212529;
-  --color-success: #198754;
+  --color-info: #0F5FCB;
+  --color-info-content: #FFFFFF;
+  --color-success: #1B7F3A;
   --color-success-content: #FFFFFF;
-  --color-warning: #FFC107;
-  --color-warning-content: #212529;
-  --color-error: #DC3545;
+  --color-warning: #8A5A12;
+  --color-warning-content: #FFFFFF;
+  --color-error: #B5142B;
   --color-error-content: #FFFFFF;
 
   --radius-selector: 0.375rem;
@@ -113,10 +103,7 @@
   --noise: 0;
 }
 
-/* ─── Re-skin the "op-*" utility vars to the Bootstrap-blue accent.
-       Dark stays default (matches the daisyUI theme order above); op-*
-       still uses the Operator's slate surfaces — only the accent and
-       semantic hues swap to the Bootstrap-tinted palette. ──────────── */
+/* ─── Operator-specific CSS vars (consumed by polished components) ── */
 :root[data-theme="dark"], :root {
   --op-bg-0:         #0B0B0D;
   --op-bg-1:         #101114;
@@ -128,34 +115,33 @@
   --op-ink-dim:      #6B6F7A;
   --op-line:         #23252B;
   --op-line-strong:  #2E3037;
-  /* accent swapped: signal-green → Bootstrap blue (lightened for dark) */
-  --op-accent:       #6EA8FE;
-  --op-accent-ink:   #052C65;
-  --op-accent-soft:  rgba(110, 168, 254, 0.10);
-  --op-info:         #6EDFF6;
-  --op-warn:         #FFDA6A;
-  --op-danger:       #EA868F;
-  --op-ok:           #75B798;
+  --op-accent:       #4ADE80;
+  --op-accent-ink:   #0B0B0D;
+  --op-accent-soft:  rgba(74, 222, 128, 0.10);
+  --op-info:         #4D9FFF;
+  --op-warn:         #E4A94A;
+  --op-danger:       #E5484D;
+  --op-ok:           #4ADE80;
   --op-grain-color:  rgba(255, 255, 255, 0.014);
 }
 :root[data-theme="light"] {
-  --op-bg-0:         #FFFFFF;
-  --op-bg-1:         #F8F9FA;
-  --op-bg-2:         #F1F3F5;
-  --op-bg-3:         #E9ECEF;
-  --op-bg-hover:     #EFF1F3;
-  --op-ink:          #212529;
-  --op-ink-muted:    #495057;
-  --op-ink-dim:      #6C757D;
-  --op-line:         #DEE2E6;
-  --op-line-strong:  #CED4DA;
-  --op-accent:       #0D6EFD;
+  --op-bg-0:         #FBFBF9;
+  --op-bg-1:         #FFFFFF;
+  --op-bg-2:         #F4F3EF;
+  --op-bg-3:         #ECEAE2;
+  --op-bg-hover:     #F0EEE6;
+  --op-ink:          #0F1012;
+  --op-ink-muted:    #5A5D66;
+  --op-ink-dim:      #8A8D94;
+  --op-line:         #E4E2D9;
+  --op-line-strong:  #D2CFC3;
+  --op-accent:       #1B7F3A;
   --op-accent-ink:   #FFFFFF;
-  --op-accent-soft:  rgba(13, 110, 253, 0.08);
-  --op-info:         #0DCAF0;
-  --op-warn:         #FFC107;
-  --op-danger:       #DC3545;
-  --op-ok:           #198754;
+  --op-accent-soft:  rgba(27, 127, 58, 0.08);
+  --op-info:         #0F5FCB;
+  --op-warn:         #8A5A12;
+  --op-danger:       #B5142B;
+  --op-ok:           #1B7F3A;
   --op-grain-color:  rgba(0, 0, 0, 0.015);
 }
 

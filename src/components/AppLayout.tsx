@@ -14,6 +14,7 @@ import { RightPanelProvider } from "./right-panel/RightPanelProvider";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { TrialBanner } from "./billing/TrialBanner";
+import { UsageWarningBanner } from "./billing/UsageWarningBanner";
 import type { MeResponse } from "@/lib/api";
 import { conversationsApi } from "@/lib/api";
 
@@ -93,6 +94,7 @@ export function AppLayout({
   const mainContent = (
     <>
       <TrialBanner workspace={me.workspace} />
+      <UsageWarningBanner />
       <Topbar
         drawerId={DRAWER_ID}
         me={me}

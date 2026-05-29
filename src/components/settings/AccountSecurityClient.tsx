@@ -82,7 +82,7 @@ export function AccountSecurityClient({
   return (
     <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
       {/* ── Profile row ── */}
-      <div className="grid gap-4 md:grid-cols-[4.75rem_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
+      <div className="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1fr)] md:items-end">
         <div>
           <AvatarCropUpload
             currentUrl={avatarUrl}

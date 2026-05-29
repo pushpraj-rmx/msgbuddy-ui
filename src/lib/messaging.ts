@@ -32,6 +32,27 @@ export type MessageReactionWire = {
   updatedAt: string;
 };
 
+/**
+ * Hydrated template version (v2 list-endpoint enrichment) so the inbox can
+ * render the same WhatsApp-styled preview the template builder shows, header
+ * media / buttons / footer included. Only present on TEMPLATE-direction
+ * messages where the version row still exists; legacy rows fall back to plain
+ * text rendering.
+ */
+export type InboxMessageTemplateVersion = {
+  id: string;
+  body: string;
+  headerType?: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | null;
+  headerContent?: string | null;
+  headerPreviewUrl?: string | null;
+  footer?: string | null;
+  buttons?: unknown;
+  layoutType?: "STANDARD" | "CAROUSEL" | null;
+  carouselCards?: unknown;
+  category?: "MARKETING" | "UTILITY" | "AUTHENTICATION" | null;
+  language?: string | null;
+};
+
 export type InboxMessage = {
   id: string;
   conversationId: string;
@@ -61,6 +82,14 @@ export type InboxMessage = {
   starredAt?: string | null;
   sendAt?: string | null;
   reactions?: MessageReactionWire[];
+  /** Flat map: keys positional ("1","2") OR named ("first_name"). */
+  templateVariables?: Record<string, string> | null;
+  /** Set when the message is a TEMPLATE and the linked version was hydrated. */
+  channelTemplateVersion?: InboxMessageTemplateVersion | null;
+  /** Count of OPEN + SNOOZED tasks anchored to this message. Drives the
+   *  small task badge on the bubble; 0 (or omitted on legacy payloads)
+   *  hides the badge. */
+  taskCount?: number;
 };
 
 /** Shape returned by GET /messages/conversation/:id/media */
@@ -194,6 +223,30 @@ function formatScheduledForLabel(iso: string | null | undefined): string | null 
   return `${dateStr} · ${timeStr}`;
 }
 
+/**
+ * Substitutes `{{N}}` / `{{name}}` placeholders in a WhatsApp template body
+ * with the values from `templateVariables`. Mirrors the substitution the
+ * Cloud API performs at delivery time, so the inbox bubble shows the same
+ * thing the contact saw.
+ *
+ * - Whitespace inside braces is tolerated: `{{ 1 }}` matches key "1".
+ * - Keys can be positional ("1","2") or named ("first_name") — backend DTO
+ *   accepts both, often mixed in one payload, so the helper does too.
+ * - Placeholders WITHOUT a matching value are left intact (NOT replaced with
+ *   "undefined"). Better to surface the unresolved placeholder than to lie.
+ */
+export function substituteTemplateVariables(
+  text: string | null | undefined,
+  variables: Record<string, string> | null | undefined,
+): string {
+  if (!text) return "";
+  if (!variables) return text;
+  return text.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (full, key: string) => {
+    const v = variables[key];
+    return typeof v === "string" ? v : full;
+  });
+}
+
 export function formatDeliveryStatusLabel(message: InboxMessage): string {
   if (isFailedMessage(message)) return "Failed";
   const raw = message.status?.trim();
@@ -215,7 +268,10 @@ export function formatDeliveryStatusLabel(message: InboxMessage): string {
     case "SENT":
       return "Sent";
     case "DELIVERED":
-      return "Delivered";
+      // Inbound deliveries are messages WE received — "Delivered" reads as if
+      // the contact got something from us, which is misleading. Surface
+      // "Received" instead.
+      return message.direction === "INBOUND" ? "Received" : "Delivered";
     case "READ":
       return "Read";
     case "CANCELLED":

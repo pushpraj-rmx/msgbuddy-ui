@@ -46,6 +46,8 @@ export const endpoints = {
       `${P}/workspaces/${id}/members/${memberId}/role`,
     memberById: (id: string, memberId: string) =>
       `${P}/workspaces/${id}/members/${memberId}`,
+    transferOwnership: (id: string) =>
+      `${P}/workspaces/${id}/transfer-ownership`,
     settings: (id: string) => `${P}/workspaces/${id}/settings`,
     cloudApi: (id: string) => `${P}/workspaces/${id}/cloud-api`,
     messagingConfig: (id: string) => `${P}/workspaces/${id}/messaging-config`,
@@ -108,6 +110,7 @@ export const endpoints = {
     pin: (id: string) => `${P}/messages/${id}/pin`,
     star: (id: string) => `${P}/messages/${id}/star`,
     react: (id: string) => `${P}/messages/${id}/react`,
+    retry: (id: string) => `${P}/messages/${id}/retry`,
     starred: `${P}/messages/starred`,
     scheduled: `${P}/messages/scheduled`,
   },
@@ -136,6 +139,8 @@ export const endpoints = {
     consent: (id: string) => `${P}/contacts/${id}/consent`,
     delete: (id: string) => `${P}/contacts/${id}`,
     deleteAll: `${P}/contacts/all`,
+    previewBulkDelete: `${P}/contacts/preview-delete`,
+    bulkDelete: `${P}/contacts`,
     checkPhone: `${P}/contacts/check-phone`,
     duplicates: `${P}/contacts/duplicates`,
     merge: `${P}/contacts/merge`,

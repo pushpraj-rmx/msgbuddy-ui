@@ -35,6 +35,7 @@ import {
 } from "@/lib/types";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { MessageBubble } from "@/components/inbox/MessageBubble";
+import { CreateTaskFromMessageModal } from "@/components/inbox/CreateTaskFromMessageModal";
 import { InternalNotesPanel } from "@/components/inbox/InternalNotesPanel";
 import { TasksPanel } from "@/components/inbox/TasksPanel";
 import { DateSeparator, formatDateLabel, getDateKey } from "@/components/inbox/DateSeparator";
@@ -80,6 +81,10 @@ export type Conversation = {
   assignedUserId?: string | null;
   unreadCount?: number;
   lastMessageAt?: string;
+  /** When the OLDEST unanswered inbound landed in the current streak. Drives
+   *  the WhatsApp 24-hour free-form-window countdown — null when we are not
+   *  currently awaiting a reply. */
+  firstInboundAwaitingReplyAt?: string | null;
   lastMessage?: {
     text?: string;
     type?: string;
@@ -831,68 +836,48 @@ export function InboxClient({
   }, [selectedId, sortedMessages, messageLoading, pendingScrollMessageId]);
 
   /**
-   * Dwell-gated "mark as read" — fires `/conversations/:id/read` (which also
-   * sends the WhatsApp blue-tick to Meta) after the conversation has been
-   * focused AND visible for a full second. Cancels on conversation switch,
-   * tab blur, or page hide so accidental clicks / quick alt-tabs don't get
-   * counted as a real read.
+   * Tracks PUTs in flight so a flurry of SSE-driven list refreshes can't
+   * trigger duplicate PUTs (= duplicate WhatsApp blue-ticks to Meta) before
+   * the first one returns and zeroes unreadCount in our local state.
+   */
+  const readInFlightRef = useRef<Set<string>>(new Set());
+
+  /**
+   * Mark conversation as read the moment the user opens it AND any time it
+   * gains unread messages while open. Clicking / new-message arrival is the
+   * engagement signal — the earlier "1s dwell + focus + visibility" gate was
+   * meant to defend against skim-clicks but in practice made the badge feel
+   * broken (slow / overwritten by a racing SSE refetch).
    *
-   * Scroll-to-bottom and new-message arrival paths still fire immediately —
-   * those are explicit engagement signals, no dwell needed.
+   * Re-runs on every conversations-array change so SSE-driven unread bumps
+   * on the OPEN conversation get auto-cleared. Bails cheaply when there's
+   * nothing to mark.
    */
   useEffect(() => {
     if (!selectedId) return;
-    if (typeof document === "undefined") return;
-    const READ_DWELL_MS = 1000;
+    const conv = conversations.find((c) => c.id === selectedId);
+    if (!conv || (conv.unreadCount ?? 0) === 0) return;
+    if (readInFlightRef.current.has(selectedId)) return;
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    readInFlightRef.current.add(selectedId);
 
-    const fire = () => {
-      void conversationsApi.read(selectedId).catch(() => { });
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedId ? { ...c, unreadCount: 0 } : c,
-        ),
-      );
-    };
+    // Optimistic — badge disappears immediately.
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedId ? { ...c, unreadCount: 0 } : c,
+      ),
+    );
 
-    const isEligible = () =>
-      document.visibilityState === "visible" && document.hasFocus();
-
-    const start = () => {
-      if (timer || !isEligible()) return;
-      timer = setTimeout(() => {
-        timer = null;
-        fire();
-      }, READ_DWELL_MS);
-    };
-
-    const stop = () => {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-    };
-
-    const onVisibility = () => {
-      if (isEligible()) start();
-      else stop();
-    };
-    const onFocus = () => start();
-    const onBlur = () => stop();
-
-    start();
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", onFocus);
-    window.addEventListener("blur", onBlur);
-
-    return () => {
-      stop();
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("focus", onFocus);
-      window.removeEventListener("blur", onBlur);
-    };
-  }, [selectedId]);
+    void conversationsApi
+      .read(selectedId)
+      .catch(() => {
+        // If the PUT failed, the next list refresh will resync unreadCount
+        // from the server, and this effect will retry naturally.
+      })
+      .finally(() => {
+        readInFlightRef.current.delete(selectedId);
+      });
+  }, [selectedId, conversations]);
 
   useEffect(() => {
     const container = messagesScrollRef.current;
@@ -1484,6 +1469,93 @@ export function InboxClient({
       }
     },
     [currentUserId],
+  );
+
+  const [retryingMessageIds, setRetryingMessageIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [discardingMessageIds, setDiscardingMessageIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  // The message the agent right-clicked to seed the Create-task modal. Null
+  // when modal is closed.
+  const [createTaskFor, setCreateTaskFor] = useState<InboxMessage | null>(null);
+
+  const handleOpenCreateTaskForMessage = useCallback((msg: InboxMessage) => {
+    setCreateTaskFor(msg);
+  }, []);
+
+  const handleRetryFailedMessage = useCallback(
+    async (msg: InboxMessage) => {
+      if (retryingMessageIds.has(msg.id)) return;
+      setRetryingMessageIds((prev) => {
+        const next = new Set(prev);
+        next.add(msg.id);
+        return next;
+      });
+      try {
+        const updated = await conversationsApi.retryFailedMessage(msg.id);
+        // Server returns the updated row (status QUEUED, error fields cleared);
+        // SSE will surface subsequent status transitions.
+        setMessages((prev) =>
+          prev.map((m) => (m.id === msg.id ? { ...m, ...updated } : m)),
+        );
+        setMessageError(null);
+      } catch (err: unknown) {
+        setMessageError(
+          extractApiErrorMessage(err) || "Failed to retry message.",
+        );
+      } finally {
+        setRetryingMessageIds((prev) => {
+          const next = new Set(prev);
+          next.delete(msg.id);
+          return next;
+        });
+      }
+    },
+    [retryingMessageIds],
+  );
+
+  const handleDiscardFailedMessage = useCallback(
+    async (msg: InboxMessage) => {
+      if (discardingMessageIds.has(msg.id)) return;
+      setDiscardingMessageIds((prev) => {
+        const next = new Set(prev);
+        next.add(msg.id);
+        return next;
+      });
+      // Optimistically remove from the timeline; rollback on error.
+      const snapshot = msg;
+      setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+      try {
+        await conversationsApi.discardFailedMessage(msg.id);
+        setMessageError(null);
+      } catch (err: unknown) {
+        // Re-insert at the original position (best-effort: append + re-sort
+        // by createdAt would be ideal, but the original ordering is by
+        // createdAt asc, so push-then-sort is correct).
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === snapshot.id)) return prev;
+          const next = [...prev, snapshot];
+          next.sort(
+            (a, b) =>
+              new Date(a.createdAt ?? 0).getTime() -
+              new Date(b.createdAt ?? 0).getTime(),
+          );
+          return next;
+        });
+        setMessageError(
+          extractApiErrorMessage(err) || "Failed to discard message.",
+        );
+      } finally {
+        setDiscardingMessageIds((prev) => {
+          const next = new Set(prev);
+          next.delete(msg.id);
+          return next;
+        });
+      }
+    },
+    [discardingMessageIds],
   );
 
   const focusReplyComposer = useCallback(() => {
@@ -3444,16 +3516,33 @@ export function InboxClient({
                     <ArrowLeft className="h-5 w-5" />
                   </button>
                 ) : null}
-                <h2 className="truncate text-sm font-medium text-base-content/80">
-                  {selectedConversation
-                    ? conversationTitle(selectedConversation)
-                    : startContact
+                {selectedConversation ? (
+                  // Clicking the contact title opens the right detail panel,
+                  // matching the WhatsApp Web pattern. The panel is already
+                  // populated via the `rightPanelContent` effect — we just
+                  // need to open it. (`openAfter: true` on the content sync
+                  // is avoided because the memory `right-panel-openAfter-mobile`
+                  // warns against auto-open on data refreshes.)
+                  <button
+                    type="button"
+                    onClick={openRightPanel}
+                    className="group/title flex min-w-0 items-center gap-1.5 truncate rounded-md px-1 py-0.5 text-left text-sm font-medium text-base-content/80 transition-colors hover:bg-base-200/80 hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary/40"
+                    title="Open contact details"
+                  >
+                    <span className="truncate">
+                      {conversationTitle(selectedConversation)}
+                    </span>
+                  </button>
+                ) : (
+                  <h2 className="truncate text-sm font-medium text-base-content/80">
+                    {startContact
                       ? startContact.name ||
-                      startContact.phone ||
-                      startContact.email ||
-                      "New chat"
+                        startContact.phone ||
+                        startContact.email ||
+                        "New chat"
                       : "Select a conversation"}
-                </h2>
+                  </h2>
+                )}
                 {selectedConversation?.assignedUserId && assigneeName ? (
                   <span className="hidden shrink-0 items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-xs text-base-content/70 sm:flex">
                     <CircleUser className="h-3.5 w-3.5 shrink-0" />
@@ -3754,6 +3843,11 @@ export function InboxClient({
                           onStar={handleStarMessage}
                           onReact={handleReactToMessage}
                           onUnreact={handleUnreactToMessage}
+                          onRetry={handleRetryFailedMessage}
+                          retrying={retryingMessageIds.has(message.id)}
+                          onDiscard={handleDiscardFailedMessage}
+                          discarding={discardingMessageIds.has(message.id)}
+                          onCreateTask={handleOpenCreateTaskForMessage}
                           currentUserId={currentUserId}
                           highlighted={highlightedMessageId === message.id}
                         />
@@ -4964,6 +5058,24 @@ export function InboxClient({
           setConsentAction(null);
           setConsentError(null);
         }}
+      />
+
+      <CreateTaskFromMessageModal
+        open={createTaskFor !== null}
+        contactId={
+          selectedConversation?.contact?.id ??
+          selectedConversation?.contactId ??
+          undefined
+        }
+        conversationId={createTaskFor?.conversationId ?? selectedId ?? undefined}
+        messageId={createTaskFor?.id ?? undefined}
+        contactName={
+          selectedConversation?.contact?.name ??
+          selectedConversation?.contact?.phone ??
+          undefined
+        }
+        messageText={createTaskFor?.text ?? undefined}
+        onClose={() => setCreateTaskFor(null)}
       />
     </>
   );

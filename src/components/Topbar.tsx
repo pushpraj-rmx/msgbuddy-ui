@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { X, PanelLeft, Bell, Search, FileText, Bug, ListChecks } from "lucide-react";
 import type { MeResponse, TaskCounts } from "@/lib/api";
-import { tasksApi } from "@/lib/api";
+import { tasksApi, TASK_CHANGED_EVENT } from "@/lib/api";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { logoutAction } from "@/app/actions/auth";
 import { clearToken } from "@/lib/auth";
@@ -74,11 +74,17 @@ export function Topbar({
     const onVisible = () => {
       if (document.visibilityState === "visible") refresh();
     };
+    // Any tasksApi mutation in this tab (create / update / complete / delete /
+    // snooze / reopen) dispatches TASK_CHANGED_EVENT — refresh the badge
+    // immediately instead of waiting for the next 60s tick.
+    const onTaskChanged = () => refresh();
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener(TASK_CHANGED_EVENT, onTaskChanged);
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener(TASK_CHANGED_EVENT, onTaskChanged);
     };
   }, []);
   const dueTaskCount =

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Check, Clock, Plus, Trash2 } from "lucide-react";
-import { tasksApi, type Task, type TaskPriority } from "@/lib/api";
+import { tasksApi, taskLinkHref, type Task, type TaskPriority } from "@/lib/api";
 import { getApiError } from "@/lib/api-error";
 import { PriorityPicker } from "@/components/tasks/PriorityPicker";
 
@@ -195,7 +196,7 @@ export function TasksPanel({
               type="datetime-local"
               value={dueAt}
               onChange={(e) => setDueAt(e.target.value)}
-              className="input input-bordered input-xs h-7 w-44 font-mono-op text-[0.6875rem]"
+              className="input input-bordered input-xs h-7 w-56 font-mono-op text-[0.6875rem]"
               min={toLocalInputValue(new Date(Date.now() + 60_000))}
               disabled={submitting}
             />
@@ -256,21 +257,43 @@ export function TasksPanel({
                 >
                   <Check className="h-3.5 w-3.5" aria-hidden />
                 </button>
-                <div className="min-w-0 flex-1">
-                  <p className="line-clamp-2 text-[0.8125rem] text-base-content">
-                    {t.subject}
-                  </p>
-                  {due ? (
-                    <p
-                      className={`mt-0.5 inline-flex items-center gap-1 font-mono-op text-[0.625rem] ${
-                        overdue ? "text-error" : "text-base-content/55"
-                      }`}
+                {(() => {
+                  const href = taskLinkHref(t);
+                  const body = (
+                    <>
+                      <p
+                        className={`line-clamp-2 text-[0.8125rem] text-base-content ${
+                          href
+                            ? "group-hover/taskbody:text-primary transition-colors"
+                            : ""
+                        }`}
+                      >
+                        {t.subject}
+                      </p>
+                      {due ? (
+                        <p
+                          className={`mt-0.5 inline-flex items-center gap-1 font-mono-op text-[0.625rem] ${
+                            overdue ? "text-error" : "text-base-content/55"
+                          }`}
+                        >
+                          <Clock className="h-2.5 w-2.5" aria-hidden /> {due}
+                          {overdue ? " · overdue" : ""}
+                        </p>
+                      ) : null}
+                    </>
+                  );
+                  return href ? (
+                    <Link
+                      href={href}
+                      className="group/taskbody min-w-0 flex-1"
+                      title="Open linked conversation"
                     >
-                      <Clock className="h-2.5 w-2.5" aria-hidden /> {due}
-                      {overdue ? " · overdue" : ""}
-                    </p>
-                  ) : null}
-                </div>
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="min-w-0 flex-1">{body}</div>
+                  );
+                })()}
                 <button
                   type="button"
                   className="btn btn-ghost btn-xs btn-square shrink-0 text-error/70 hover:text-error"

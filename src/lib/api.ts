@@ -415,6 +415,26 @@ export const conversationsApi = {
     const response = await api.delete(endpoints.messages.byId(messageId));
     return response.data;
   },
+  /**
+   * Re-enqueue a FAILED outbound message for delivery. Backend resets status to
+   * QUEUED, clears errorCode/errorMessage/providerMessageId/failedAt and pushes
+   * back onto the delivery queue. Throws 400 unless the message is currently
+   * FAILED, and 422 if the contact has opted out since the failure.
+   */
+  retryFailedMessage: async (messageId: string) => {
+    const response = await api.post(endpoints.messages.retry(messageId));
+    return response.data as InboxMessage;
+  },
+  /**
+   * Soft-deletes a FAILED message — the row stays in DB (analytics keep it),
+   * but the conversation timeline hides it from now on. Same DELETE endpoint
+   * that cancels SCHEDULED messages; backend dispatches by status. 400 for
+   * any other status.
+   */
+  discardFailedMessage: async (messageId: string) => {
+    const response = await api.delete(endpoints.messages.byId(messageId));
+    return response.data as InboxMessage;
+  },
 };
 
 export const presenceApi = {
@@ -690,6 +710,59 @@ export const contactsApi = {
   deleteAll: async (): Promise<{ deleted: number }> => {
     const response = await api.delete<{ deleted: number }>(
       endpoints.contacts.deleteAll
+    );
+    return response.data;
+  },
+  /**
+   * Counts how many contacts a filter would delete, plus a 10-name sample for the confirm modal.
+   * Must be called before bulkDelete — the returned `count` is what the user types into
+   * the confirm input on the dialog.
+   */
+  previewBulkDelete: async (filter: {
+    tagIds?: string[];
+    tagsMatch?: "all" | "any";
+    search?: string;
+    createdAfter?: string;
+    createdBefore?: string;
+    lifecycleStage?: string;
+    segmentId?: string;
+  }): Promise<{
+    count: number;
+    sample: Array<{
+      id: string;
+      name: string | null;
+      phone: string | null;
+      email: string | null;
+    }>;
+  }> => {
+    const response = await api.post<{
+      count: number;
+      sample: Array<{
+        id: string;
+        name: string | null;
+        phone: string | null;
+        email: string | null;
+      }>;
+    }>(endpoints.contacts.previewBulkDelete, filter);
+    return response.data;
+  },
+  /**
+   * Soft-deletes every contact matching the filter. Pass the `confirmCount` returned
+   * by previewBulkDelete with the SAME filter. The server 409s if the live count changed.
+   */
+  bulkDelete: async (payload: {
+    tagIds?: string[];
+    tagsMatch?: "all" | "any";
+    search?: string;
+    createdAfter?: string;
+    createdBefore?: string;
+    lifecycleStage?: string;
+    segmentId?: string;
+    confirmCount: number;
+  }): Promise<{ deleted: number }> => {
+    const response = await api.delete<{ deleted: number }>(
+      endpoints.contacts.bulkDelete,
+      { data: payload },
     );
     return response.data;
   },
@@ -1779,9 +1852,31 @@ export type Task = {
   assignedUserId: string | null;
   contactId: string | null;
   conversationId: string | null;
+  /** Optional anchor to a specific message. Set when the task was created
+   *  from the message-bubble context menu. */
+  messageId: string | null;
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * Deep-link target for a task. Conversation wins over contact since it's
+ * more specific (it implies the contact too); falls back to the contact's
+ * inbox view when only contactId is set. Returns null for free-floating
+ * tasks (no link to follow) so callers can skip wrapping in a Link.
+ */
+export function taskLinkHref(task: {
+  contactId: string | null;
+  conversationId: string | null;
+}): string | null {
+  if (task.conversationId) {
+    return `/inbox?conversationId=${task.conversationId}`;
+  }
+  if (task.contactId) {
+    return `/inbox?contactId=${task.contactId}`;
+  }
+  return null;
+}
 
 export type TaskCounts = {
   mineOpen: number;
@@ -1796,6 +1891,8 @@ export type TaskListParams = {
   assignedUserId?: string;
   contactId?: string;
   conversationId?: string;
+  /** Filter to tasks anchored to a specific message. */
+  messageId?: string;
   /** Comma-separated subset of TASK_STATUSES. Default: OPEN,SNOOZED. */
   status?: string;
   priority?: TaskPriority;
@@ -1807,6 +1904,18 @@ export type TaskListParams = {
   cursor?: string;
   limit?: number;
 };
+
+/**
+ * Broadcast that "the set of tasks changed" so any badge / list listening can
+ * refresh without waiting for the next poll tick. Fired by every successful
+ * tasks mutation in this file; consumed by the Topbar tasks-count badge (and
+ * available for any future panel that wants live updates).
+ */
+export const TASK_CHANGED_EVENT = "msgbuddy:task.changed";
+function dispatchTaskChanged(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(TASK_CHANGED_EVENT));
+}
 
 export const tasksApi = {
   list: async (params: TaskListParams = {}): Promise<TaskListResponse> => {
@@ -1825,8 +1934,10 @@ export const tasksApi = {
     assignedUserId?: string;
     contactId?: string;
     conversationId?: string;
+    messageId?: string;
   }): Promise<Task> => {
     const res = await api.post<Task>(endpoints.tasks.create, body);
+    dispatchTaskChanged();
     return res.data;
   },
   update: async (
@@ -1843,22 +1954,27 @@ export const tasksApi = {
     }>,
   ): Promise<Task> => {
     const res = await api.patch<Task>(endpoints.tasks.byId(id), body);
+    dispatchTaskChanged();
     return res.data;
   },
   delete: async (id: string): Promise<{ id: string; deleted: true }> => {
     const res = await api.delete(endpoints.tasks.byId(id));
+    dispatchTaskChanged();
     return res.data as { id: string; deleted: true };
   },
   complete: async (id: string): Promise<Task> => {
     const res = await api.post<Task>(endpoints.tasks.complete(id));
+    dispatchTaskChanged();
     return res.data;
   },
   snooze: async (id: string, until: string): Promise<Task> => {
     const res = await api.post<Task>(endpoints.tasks.snooze(id), { until });
+    dispatchTaskChanged();
     return res.data;
   },
   reopen: async (id: string): Promise<Task> => {
     const res = await api.post<Task>(endpoints.tasks.reopen(id));
+    dispatchTaskChanged();
     return res.data;
   },
   counts: async (): Promise<TaskCounts> => {
@@ -2232,6 +2348,22 @@ export const workspaceApi = {
 
   removeMember: async (workspaceId: string, memberId: string): Promise<void> => {
     await api.delete(endpoints.workspaces.memberById(workspaceId, memberId));
+  },
+
+  /**
+   * OWNER-only. Hands the OWNER role to another active workspace member. The current
+   * OWNER is demoted to ADMIN inside the same backend transaction. Generic role-update
+   * cannot promote to OWNER — this is the only path.
+   */
+  transferOwnership: async (
+    workspaceId: string,
+    newOwnerUserId: string,
+  ): Promise<{ previousOwnerId: string; newOwnerId: string }> => {
+    const response = await api.post<{
+      previousOwnerId: string;
+      newOwnerId: string;
+    }>(endpoints.workspaces.transferOwnership(workspaceId), { newOwnerUserId });
+    return response.data;
   },
 
   getSettings: async (id: string) => {

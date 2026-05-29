@@ -34,6 +34,14 @@ const ROLES: WorkspaceRole[] = [
   "VIEWER",
 ];
 
+/**
+ * Roles a user can be ASSIGNED via the role dropdown or invitation form.
+ * OWNER is intentionally excluded — workspaces must have exactly one OWNER,
+ * and ownership transfers happen through the dedicated transfer-ownership flow
+ * (the backend rejects role=OWNER in UpdateMemberRoleDto).
+ */
+const ASSIGNABLE_ROLES: WorkspaceRole[] = ROLES.filter((r) => r !== "OWNER");
+
 const ROLE_SORT_RANK: Record<string, number> = {
   OWNER: 0,
   ADMIN: 1,
@@ -78,6 +86,13 @@ export function TeamClient({
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("AGENT");
   const [inviteHint, setInviteHint] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<{ userId: string; rowId: string } | null>(null);
+  const [confirmTransfer, setConfirmTransfer] = useState<{
+    userId: string;
+    rowId: string;
+    label: string;
+  } | null>(null);
+
+  const isCurrentOwner = meRole === "OWNER";
 
   // Invitations list (admin-only). Loaded lazily on mount when the caller
   // can manage members; refreshed after every create/revoke.
@@ -209,6 +224,31 @@ export function TeamClient({
     }
   };
 
+  const onTransferOwnership = async (targetUserId: string, rowId: string) => {
+    if (!isCurrentOwner || !targetUserId || !meUserId) return;
+    setBusyId(rowId);
+    setError(null);
+    try {
+      await workspaceApi.transferOwnership(workspaceId, targetUserId);
+      // Optimistic local swap: actor → ADMIN, target → OWNER.
+      // Server is authoritative; refreshServerData reconciles.
+      setMembers((prev) =>
+        prev.map((m) => {
+          if (m.user?.id === meUserId) return { ...m, role: "ADMIN" };
+          if (m.user?.id === targetUserId) return { ...m, role: "OWNER" };
+          return m;
+        }),
+      );
+      refreshServerData();
+    } catch (e) {
+      setError(
+        e instanceof Error ? e.message : "Failed to transfer ownership",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const onRemove = async (targetUserId: string, rowId: string) => {
     if (!canManage || !targetUserId) return;
     setBusyId(rowId);
@@ -256,7 +296,7 @@ export function TeamClient({
                 onChange={(e) => setInviteRole(e.target.value as WorkspaceRole)}
                 disabled={inviteBusy || linkBusy}
               >
-                {ROLES.map((r) => (
+                {ASSIGNABLE_ROLES.map((r) => (
                   <option key={r} value={r}>
                     {r}
                   </option>
@@ -426,10 +466,14 @@ export function TeamClient({
                   </td>
 
                   <td className="px-3 py-2.5 align-top">
-                    {canManage ? (
+                    {canManage && role !== "OWNER" && !isSelf ? (
                       <select
                         className="select select-bordered select-xs w-28"
-                        value={ROLES.includes(role as WorkspaceRole) ? role : "AGENT"}
+                        value={
+                          ASSIGNABLE_ROLES.includes(role as WorkspaceRole)
+                            ? role
+                            : "AGENT"
+                        }
                         onChange={(e) =>
                           onChangeRole(
                             targetUserId,
@@ -437,9 +481,9 @@ export function TeamClient({
                             e.target.value as WorkspaceRole
                           )
                         }
-                        disabled={!canEditThisRole || role === "OWNER"}
+                        disabled={!canEditThisRole}
                       >
-                        {ROLES.map((r) => (
+                        {ASSIGNABLE_ROLES.map((r) => (
                           <option key={r} value={r}>
                             {r}
                           </option>
@@ -472,16 +516,42 @@ export function TeamClient({
                   </td>
 
                   <td className="px-3 py-2.5 text-right align-top">
-                    {canRemove ? (
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs text-error/70 hover:text-error"
-                        onClick={() => setConfirmRemove({ userId: targetUserId, rowId: member.id })}
-                        disabled={isBusy}
-                      >
-                        {isBusy ? <span className="loading loading-spinner loading-xs" /> : "Remove"}
-                      </button>
-                    ) : null}
+                    <div className="flex justify-end gap-1">
+                      {isCurrentOwner &&
+                      !isSelf &&
+                      role !== "OWNER" &&
+                      member.isActive !== false &&
+                      !!targetUserId ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs"
+                          onClick={() =>
+                            setConfirmTransfer({
+                              userId: targetUserId,
+                              rowId: member.id,
+                              label:
+                                member.user?.email ||
+                                member.user?.name ||
+                                "this member",
+                            })
+                          }
+                          disabled={isBusy}
+                          title="Transfer ownership to this member"
+                        >
+                          Make OWNER
+                        </button>
+                      ) : null}
+                      {canRemove ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-xs text-error/70 hover:text-error"
+                          onClick={() => setConfirmRemove({ userId: targetUserId, rowId: member.id })}
+                          disabled={isBusy}
+                        >
+                          {isBusy ? <span className="loading loading-spinner loading-xs" /> : "Remove"}
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               );
@@ -503,6 +573,35 @@ export function TeamClient({
           setConfirmRemove(null);
         }}
         onClose={() => setConfirmRemove(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmTransfer !== null}
+        title="Transfer ownership"
+        description={
+          <span className="block space-y-2">
+            <span className="block">
+              Make <strong>{confirmTransfer?.label}</strong> the OWNER of this workspace?
+            </span>
+            <span className="block">
+              You will be demoted to ADMIN. Only the OWNER can transfer ownership,
+              so you will no longer be able to undo this — only the new OWNER can
+              hand it back.
+            </span>
+          </span>
+        }
+        confirmLabel="Transfer ownership"
+        tone="warning"
+        onConfirm={() => {
+          if (confirmTransfer) {
+            void onTransferOwnership(
+              confirmTransfer.userId,
+              confirmTransfer.rowId,
+            );
+          }
+          setConfirmTransfer(null);
+        }}
+        onClose={() => setConfirmTransfer(null)}
       />
     </div>
   );
