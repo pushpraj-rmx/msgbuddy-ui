@@ -2189,6 +2189,7 @@ export interface WorkspaceSettingsPayload {
   chatbotProvider?: string;
   chatbotModel?: string;
   hasChatbotApiKey?: boolean;
+  aiKeySource?: "BYO" | "MANAGED";
 }
 
 export interface WorkspaceCloudApiConfigPayload {

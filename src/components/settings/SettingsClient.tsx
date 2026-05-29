@@ -115,9 +115,16 @@ export function SettingsClient({
   const [error, setError] = useState<string | null>(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
 
-  // Chatbot form state
+  // Chatbot form state. `mode` is the 3-state AI selector; on save it maps to
+  // chatbotEnabled (disabled => false) + aiKeySource (BYO | MANAGED).
+  const initialChatbotMode: "disabled" | "byo" | "managed" =
+    !settings.chatbotEnabled
+      ? "disabled"
+      : settings.aiKeySource === "MANAGED"
+        ? "managed"
+        : "byo";
   const [chatbotForm, setChatbotForm] = useState({
-    chatbotEnabled: settings.chatbotEnabled ?? false,
+    mode: initialChatbotMode,
     chatbotSystemPrompt: settings.chatbotSystemPrompt ?? "",
     chatbotApiKey: "",
     chatbotProvider: settings.chatbotProvider ?? "anthropic",
@@ -132,13 +139,18 @@ export function SettingsClient({
     setChatbotError(null);
     setChatbotSaved(false);
     try {
+      const enabled = chatbotForm.mode !== "disabled";
       const payload: Partial<WorkspaceSettingsPayload> = {
-        chatbotEnabled: chatbotForm.chatbotEnabled,
+        chatbotEnabled: enabled,
         chatbotSystemPrompt: chatbotForm.chatbotSystemPrompt.trim() || undefined,
         chatbotProvider: chatbotForm.chatbotProvider,
         chatbotModel: chatbotForm.chatbotModel,
       };
-      if (chatbotForm.chatbotApiKey.trim()) {
+      if (enabled) {
+        payload.aiKeySource = chatbotForm.mode === "managed" ? "MANAGED" : "BYO";
+      }
+      // Only the BYO path carries a customer key; MANAGED uses the platform key.
+      if (chatbotForm.mode === "byo" && chatbotForm.chatbotApiKey.trim()) {
         payload.chatbotApiKey = chatbotForm.chatbotApiKey.trim();
       }
       await workspaceApi.updateSettings(workspace.id, payload);
@@ -435,8 +447,12 @@ export function SettingsClient({
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-[0.875rem] font-semibold">LLM Auto-Reply</span>
-                    <span className={chatbotForm.chatbotEnabled ? "op-tag op-tag-ok" : "op-tag"}>
-                      {chatbotForm.chatbotEnabled ? "Active" : "Disabled"}
+                    <span className={chatbotForm.mode !== "disabled" ? "op-tag op-tag-ok" : "op-tag"}>
+                      {chatbotForm.mode === "managed"
+                        ? "MsgBuddy AI"
+                        : chatbotForm.mode === "byo"
+                          ? "Own key"
+                          : "Disabled"}
                     </span>
                   </div>
                   <p className="text-[0.75rem] text-base-content/55">
@@ -444,81 +460,111 @@ export function SettingsClient({
                     Stops when an agent claims the conversation.
                   </p>
                 </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <span className="text-[0.75rem] text-base-content/55">Enabled</span>
-                  <input
-                    type="checkbox"
-                    className="toggle toggle-sm toggle-primary"
-                    checked={chatbotForm.chatbotEnabled}
-                    onChange={(e) =>
-                      setChatbotForm((s) => ({ ...s, chatbotEnabled: e.target.checked }))
-                    }
-                  />
-                </label>
+                <div className="join">
+                  <button
+                    type="button"
+                    className={`btn btn-xs join-item ${chatbotForm.mode === "disabled" ? "btn-active btn-primary" : "btn-ghost"}`}
+                    onClick={() => setChatbotForm((s) => ({ ...s, mode: "disabled" }))}
+                  >
+                    Off
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-xs join-item ${chatbotForm.mode === "byo" ? "btn-active btn-primary" : "btn-ghost"}`}
+                    onClick={() => setChatbotForm((s) => ({ ...s, mode: "byo" }))}
+                  >
+                    Use my key
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-xs join-item ${chatbotForm.mode === "managed" ? "btn-active btn-primary" : "btn-ghost"}`}
+                    onClick={() => setChatbotForm((s) => ({ ...s, mode: "managed" }))}
+                  >
+                    Use MsgBuddy AI
+                  </button>
+                </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="form-control w-full">
-                  <span className="op-label mb-1">Provider</span>
-                  <select
-                    className="select select-bordered select-sm w-full"
-                    value={chatbotForm.chatbotProvider}
-                    onChange={(e) =>
-                      setChatbotForm((s) => ({ ...s, chatbotProvider: e.target.value }))
-                    }
-                  >
-                    <option value="anthropic">Anthropic</option>
-                  </select>
-                </label>
-
-                <label className="form-control w-full">
-                  <span className="op-label mb-1">Model</span>
-                  <select
-                    className="select select-bordered select-sm w-full"
-                    value={chatbotForm.chatbotModel}
-                    onChange={(e) =>
-                      setChatbotForm((s) => ({ ...s, chatbotModel: e.target.value }))
-                    }
-                  >
-                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-                  </select>
-                </label>
-              </div>
-
-              <label className="form-control w-full">
-                <span className="op-label mb-1">
-                  API Key
-                  {settings.hasChatbotApiKey ? (
-                    <span className="ml-2 text-success">Key saved</span>
+              {chatbotForm.mode !== "disabled" ? (
+                <>
+                  {chatbotForm.mode === "managed" ? (
+                    <div className="rounded-box border-l-2 border border-primary/30 border-l-primary bg-base-100 px-4 py-3 text-[0.8125rem] text-base-content/70">
+                      Uses MsgBuddy&apos;s AI — no API key required. Replies are metered
+                      and billed to your plan, and pause automatically when your monthly
+                      AI quota is reached. Track consumption on the{" "}
+                      <a href="/usage" className="link link-primary">
+                        Usage
+                      </a>{" "}
+                      page.
+                    </div>
                   ) : null}
-                </span>
-                <input
-                  type="password"
-                  className="input input-bordered input-sm w-full font-mono"
-                  placeholder="sk-ant-..."
-                  value={chatbotForm.chatbotApiKey}
-                  onChange={(e) =>
-                    setChatbotForm((s) => ({ ...s, chatbotApiKey: e.target.value }))
-                  }
-                />
-                <span className="mt-1 text-[0.6875rem] text-base-content/40">
-                  Leave blank to keep the existing key. Enter a new value to replace it.
-                </span>
-              </label>
 
-              <label className="form-control w-full">
-                <span className="op-label mb-1">System Prompt</span>
-                <textarea
-                  className="textarea textarea-bordered textarea-sm w-full"
-                  rows={4}
-                  placeholder="You are a helpful customer support assistant for [Company]. Be concise, friendly, and helpful..."
-                  value={chatbotForm.chatbotSystemPrompt}
-                  onChange={(e) =>
-                    setChatbotForm((s) => ({ ...s, chatbotSystemPrompt: e.target.value }))
-                  }
-                />
-              </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="form-control w-full">
+                      <span className="op-label mb-1">Provider</span>
+                      <select
+                        className="select select-bordered select-sm w-full"
+                        value={chatbotForm.chatbotProvider}
+                        onChange={(e) =>
+                          setChatbotForm((s) => ({ ...s, chatbotProvider: e.target.value }))
+                        }
+                      >
+                        <option value="anthropic">Anthropic</option>
+                      </select>
+                    </label>
+
+                    <label className="form-control w-full">
+                      <span className="op-label mb-1">Model</span>
+                      <select
+                        className="select select-bordered select-sm w-full"
+                        value={chatbotForm.chatbotModel}
+                        onChange={(e) =>
+                          setChatbotForm((s) => ({ ...s, chatbotModel: e.target.value }))
+                        }
+                      >
+                        <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {chatbotForm.mode === "byo" ? (
+                    <label className="form-control w-full">
+                      <span className="op-label mb-1">
+                        API Key
+                        {settings.hasChatbotApiKey ? (
+                          <span className="ml-2 text-success">Key saved</span>
+                        ) : null}
+                      </span>
+                      <input
+                        type="password"
+                        className="input input-bordered input-sm w-full font-mono"
+                        placeholder="sk-ant-..."
+                        value={chatbotForm.chatbotApiKey}
+                        onChange={(e) =>
+                          setChatbotForm((s) => ({ ...s, chatbotApiKey: e.target.value }))
+                        }
+                      />
+                      <span className="mt-1 text-[0.6875rem] text-base-content/40">
+                        Leave blank to keep the existing key. Enter a new value to replace it.
+                      </span>
+                    </label>
+                  ) : null}
+
+                  <label className="form-control w-full">
+                    <span className="op-label mb-1">System Prompt</span>
+                    <textarea
+                      className="textarea textarea-bordered textarea-sm w-full"
+                      rows={4}
+                      placeholder="You are a helpful customer support assistant for [Company]. Be concise, friendly, and helpful..."
+                      value={chatbotForm.chatbotSystemPrompt}
+                      onChange={(e) =>
+                        setChatbotForm((s) => ({ ...s, chatbotSystemPrompt: e.target.value }))
+                      }
+                    />
+                  </label>
+                </>
+              ) : null}
 
               {chatbotError ? (
                 <div className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">

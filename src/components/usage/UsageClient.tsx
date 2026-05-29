@@ -31,6 +31,7 @@ type UsageWithLimitsResponse = {
     messages: LimitSlice;
     contacts: LimitSlice;
     agents: LimitSlice;
+    aiReplies: LimitSlice;
   };
 };
 
@@ -311,6 +312,11 @@ export function UsageClient() {
               />
               <QuotaBlock title="Contacts" slice={lim.contacts} />
               <QuotaBlock title="Team seats" slice={lim.agents} />
+              <QuotaBlock
+                title="AI replies"
+                subtitle="MsgBuddy AI replies this month (managed mode)"
+                slice={lim.aiReplies}
+              />
             </div>
           </section>
 
