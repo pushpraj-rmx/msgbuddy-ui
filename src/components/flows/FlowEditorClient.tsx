@@ -19,7 +19,16 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { ArrowLeft } from "lucide-react";
-import { flowApi, type Flow, type FlowGraph } from "@/lib/api";
+import {
+  flowApi,
+  tagsApi,
+  workspaceApi,
+  authApi,
+  type Flow,
+  type FlowGraph,
+  type WorkspaceMemberResponseDto,
+} from "@/lib/api";
+import type { Tag } from "@/lib/types";
 
 // ── Node catalogue ──────────────────────────────────────────────────────────
 type NodeType =
@@ -184,6 +193,19 @@ export function FlowEditorClient({ flowId }: { flowId: string }) {
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [members, setMembers] = useState<WorkspaceMemberResponseDto[]>([]);
+
+  // Option lists for the inspector pickers (tags + agents). Best-effort: a
+  // failure here just falls back to empty selects, never blocks editing.
+  useEffect(() => {
+    tagsApi.list().then(setTags).catch(() => {});
+    authApi
+      .getMe()
+      .then((me) => workspaceApi.getMembers(me.workspace.id))
+      .then((m) => setMembers(m as WorkspaceMemberResponseDto[]))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     flowApi
@@ -340,6 +362,8 @@ export function FlowEditorClient({ flowId }: { flowId: string }) {
             key={selected.id}
             node={selected}
             onPatch={patchSelected}
+            tags={tags}
+            members={members}
           />
         ) : null}
       </div>
@@ -351,9 +375,13 @@ export function FlowEditorClient({ flowId }: { flowId: string }) {
 function NodeInspector({
   node,
   onPatch,
+  tags,
+  members,
 }: {
   node: Node;
   onPatch: (patch: Record<string, unknown>) => void;
+  tags: Tag[];
+  members: WorkspaceMemberResponseDto[];
 }) {
   const d = node.data as Record<string, unknown>;
   const nodeType = d.nodeType as NodeType;
@@ -453,24 +481,39 @@ function NodeInspector({
 
       {nodeType === "add_tag" ? (
         <label className="form-control w-full">
-          <span className="op-label mb-1">Tag id</span>
-          <input
-            className="input input-bordered input-sm w-full font-mono text-xs"
+          <span className="op-label mb-1">Tag</span>
+          <select
+            className="select select-bordered select-sm w-full"
             value={(d.tagId as string) ?? ""}
             onChange={(e) => onPatch({ tagId: e.target.value })}
-          />
+          >
+            <option value="">Select a tag…</option>
+            {tags.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
         </label>
       ) : null}
 
       {nodeType === "assign_agent" ? (
         <label className="form-control w-full">
-          <span className="op-label mb-1">Agent user id (optional)</span>
-          <input
-            className="input input-bordered input-sm w-full font-mono text-xs"
-            placeholder="leave blank for unassigned queue"
+          <span className="op-label mb-1">Assign to</span>
+          <select
+            className="select select-bordered select-sm w-full"
             value={(d.userId as string) ?? ""}
             onChange={(e) => onPatch({ userId: e.target.value || undefined })}
-          />
+          >
+            <option value="">Unassigned queue</option>
+            {members
+              .filter((m) => m.isActive && m.user?.id)
+              .map((m) => (
+                <option key={m.user!.id} value={m.user!.id}>
+                  {m.user?.name || m.user?.email || m.user!.id}
+                </option>
+              ))}
+          </select>
         </label>
       ) : null}
 
