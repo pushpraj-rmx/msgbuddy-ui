@@ -3277,3 +3277,32 @@ export const flowApi = {
     await api.delete(endpoints.flows.byId(id));
   },
 };
+
+// ===== Knowledge base (chatbot RAG) =====
+
+export type KnowledgeDocStatus = "PENDING" | "EMBEDDED" | "FAILED";
+
+export interface KnowledgeDoc {
+  id: string;
+  title: string;
+  sourceType: string;
+  status: KnowledgeDocStatus;
+  tokenCount: number;
+  error?: string | null;
+  createdAt: string;
+  _count?: { chunks: number };
+}
+
+export const knowledgeApi = {
+  list: async (): Promise<KnowledgeDoc[]> => {
+    const res = await api.get<KnowledgeDoc[]>(endpoints.knowledge.list);
+    return res.data;
+  },
+  create: async (body: { title: string; content: string }): Promise<KnowledgeDoc> => {
+    const res = await api.post<KnowledgeDoc>(endpoints.knowledge.list, body);
+    return res.data;
+  },
+  remove: async (id: string): Promise<void> => {
+    await api.delete(endpoints.knowledge.byId(id));
+  },
+};

@@ -563,6 +563,16 @@ export function SettingsClient({
                       }
                     />
                   </label>
+
+                  <a
+                    href="/settings/knowledge"
+                    className="link link-primary text-[0.8125rem]"
+                  >
+                    Manage knowledge base →
+                  </a>
+                  <p className="text-[0.6875rem] text-base-content/40">
+                    Ground replies in your own FAQs, policies, and product info.
+                  </p>
                 </>
               ) : null}
 

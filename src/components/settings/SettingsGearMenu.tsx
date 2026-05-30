@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Users, Puzzle, Lock, Settings, KeyRound, Webhook, MessageSquareText } from "lucide-react";
+import { Users, Puzzle, Lock, Settings, KeyRound, Webhook, MessageSquareText, BookOpen } from "lucide-react";
 
 export function SettingsGearMenu({
   memberCount,
@@ -110,6 +110,20 @@ export function SettingsGearMenu({
               <span>Canned responses</span>
               <span className="text-xs font-normal text-base-content/50">
                 /shortcut quick replies
+              </span>
+            </span>
+          </Link>
+        </li>
+        <li role="none">
+          <Link href="/settings/knowledge" className="gap-3" role="menuitem">
+            <BookOpen
+              className="h-4 w-4 shrink-0 opacity-70"
+              fontSize="inherit"
+            />
+            <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
+              <span>Knowledge base</span>
+              <span className="text-xs font-normal text-base-content/50">
+                Chatbot RAG docs
               </span>
             </span>
           </Link>

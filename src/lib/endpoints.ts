@@ -288,6 +288,10 @@ export const endpoints = {
     publish: (id: string) => `${P}/flows/${id}/publish`,
     unpublish: (id: string) => `${P}/flows/${id}/unpublish`,
   },
+  knowledge: {
+    list: `${P}/knowledge-docs`,
+    byId: (id: string) => `${P}/knowledge-docs/${id}`,
+  },
   cannedResponses: {
     list: `${P}/canned-responses`,
     create: `${P}/canned-responses`,
