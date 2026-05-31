@@ -138,6 +138,7 @@ export function useCreateChannelTemplateVersion() {
     onSuccess: (data, variables) => {
       const ctId = data.channelTemplateId ?? variables.id;
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(ctId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(ctId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(ctId, data.version) });
     },
   });
@@ -161,6 +162,7 @@ export function useUpdateChannelTemplateVersion() {
       // Apply server response immediately so UI matches DB (fixes stale cache / missed refetch).
       qc.setQueryData(channelTemplateKeys.version(ctId, vNum), data);
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(ctId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(ctId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(ctId, vNum) });
     },
   });
@@ -184,6 +186,8 @@ export function useActivateChannelTemplateVersion() {
       channelTemplatesApi.activate(id, version),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
     },
   });
 }
@@ -195,6 +199,7 @@ export function useSubmitChannelTemplateVersion() {
       channelTemplatesApi.submit(id, version),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
     },
   });
@@ -207,6 +212,7 @@ export function useApproveChannelTemplateVersion() {
       channelTemplatesApi.approve(id, version),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
     },
   });
@@ -219,6 +225,7 @@ export function useRejectChannelTemplateVersion() {
       channelTemplatesApi.reject(id, version, reason),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
     },
   });
@@ -231,6 +238,7 @@ export function useArchiveChannelTemplateVersion() {
       channelTemplatesApi.archive(id, version),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
     },
   });
@@ -243,6 +251,7 @@ export function useSyncChannelTemplateVersion() {
       channelTemplatesApi.sync(id, version),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(variables.id) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(variables.id) });
       qc.invalidateQueries({
         queryKey: channelTemplateKeys.version(variables.id, variables.version),
       });

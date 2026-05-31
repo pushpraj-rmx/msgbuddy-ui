@@ -358,9 +358,9 @@ function MessageTabBody({ input }: { input: CampaignReviewInput }) {
         <WhatsAppTemplatePreviewFromVersion version={mergePreviewMedia(input)} />
       </div>
       <p className="text-[0.6875rem] text-base-content/50">
-        Variable placeholders ({"{{1}}"}, etc.) are filled by WhatsApp at send
-        time using each contact&apos;s data + the template bindings configured
-        for this campaign.
+        Variable placeholders ({"{{1}}"}, etc.) are filled per recipient from the
+        contact-field / fixed-value bindings you set on the Template step. A
+        recipient missing a mapped field is skipped at send time.
       </p>
     </div>
   );

@@ -49,9 +49,17 @@ const HEADER_TYPES: TemplateHeaderType[] = [
 ];
 
 /** Meta template button label limit (QUICK_REPLY / URL / PHONE_NUMBER) — official Meta cap. */
-const META_TEMPLATE_BUTTON_LABEL_MAX = 20;
-/** Meta cap for template header media (IMAGE / VIDEO / DOCUMENT). */
-const HEADER_MEDIA_MAX_BYTES = 15 * 1024 * 1024;
+const META_TEMPLATE_BUTTON_LABEL_MAX = 25;
+/** Carousel card body limit (Meta) — far tighter than the 1024 main body. */
+const CAROUSEL_CARD_BODY_MAX = 160;
+/** Meta header media caps, per type: image 5 MB, video 16 MB, document 100 MB. */
+const HEADER_MEDIA_MAX_BYTES_BY_TYPE: Record<string, number> = {
+  IMAGE: 5 * 1024 * 1024,
+  VIDEO: 16 * 1024 * 1024,
+  DOCUMENT: 100 * 1024 * 1024,
+};
+/** Largest header media cap (document); used where the type isn't known up front. */
+const HEADER_MEDIA_MAX_BYTES = HEADER_MEDIA_MAX_BYTES_BY_TYPE.DOCUMENT;
 
 type CarouselButtonUiType = "QUICK_REPLY" | "URL" | "PHONE_NUMBER";
 
@@ -386,11 +394,12 @@ export const ChannelTemplateVersionEditor = forwardRef<
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      if (file.size > HEADER_MEDIA_MAX_BYTES) {
+      const cap = HEADER_MEDIA_MAX_BYTES_BY_TYPE[headerType] ?? HEADER_MEDIA_MAX_BYTES;
+      if (file.size > cap) {
         const mb = (file.size / (1024 * 1024)).toFixed(1);
-        const capMb = (HEADER_MEDIA_MAX_BYTES / (1024 * 1024)).toFixed(0);
+        const capMb = (cap / (1024 * 1024)).toFixed(0);
         setFormError(
-          `Header media is ${mb} MB — Meta limit is ${capMb} MB. Resize or compress before uploading.`
+          `Header media is ${mb} MB — Meta limit for ${headerType.toLowerCase()} is ${capMb} MB. Resize or compress before uploading.`
         );
         e.target.value = "";
         return;
@@ -411,7 +420,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
         e.target.value = "";
       }
     },
-    []
+    [headerType]
   );
 
   // Revoke standard header blob URL on unmount or when version switches.
@@ -969,6 +978,9 @@ export const ChannelTemplateVersionEditor = forwardRef<
                   onChange={(e) => setHeaderContent(e.target.value)}
                   placeholder="Short header line"
                 />
+                <span className="label-text-alt text-base-content/50">
+                  At most one variable allowed in the header (Meta).
+                </span>
               </label>
             )}
 
@@ -1081,7 +1093,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-xs font-medium">Buttons</span>
               <span className="text-xs text-base-content/60">
-                Optional · max 3 quick-reply or 2 CTA
+                Optional · up to 10 total (max 2 URL + 1 phone)
               </span>
             </div>
 
@@ -1350,6 +1362,12 @@ export const ChannelTemplateVersionEditor = forwardRef<
                       <button
                         type="button"
                         className="btn btn-ghost btn-xs text-error"
+                        disabled={carouselCards.length <= 2}
+                        title={
+                          carouselCards.length <= 2
+                            ? "A carousel needs at least 2 cards (Meta)"
+                            : "Remove card"
+                        }
                         onClick={() => {
                           setCarouselCards((prev) => prev.filter((_, i) => i !== idx));
                           setCarouselButtonRowsByIndex((prev) => {
@@ -1371,7 +1389,6 @@ export const ChannelTemplateVersionEditor = forwardRef<
                             return next;
                           });
                         }}
-                        title="Remove card"
                       >
                         Remove
                       </button>
@@ -1436,11 +1453,14 @@ export const ChannelTemplateVersionEditor = forwardRef<
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
-                              if (file.size > HEADER_MEDIA_MAX_BYTES) {
+                              const cardCap =
+                                HEADER_MEDIA_MAX_BYTES_BY_TYPE[card.headerFormat] ??
+                                HEADER_MEDIA_MAX_BYTES;
+                              if (file.size > cardCap) {
                                 const mb = (file.size / (1024 * 1024)).toFixed(1);
-                                const capMb = (HEADER_MEDIA_MAX_BYTES / (1024 * 1024)).toFixed(0);
+                                const capMb = (cardCap / (1024 * 1024)).toFixed(0);
                                 setFormError(
-                                  `Card ${idx + 1} header media is ${mb} MB — Meta limit is ${capMb} MB. Resize or compress before uploading.`
+                                  `Card ${idx + 1} header media is ${mb} MB — Meta limit for ${card.headerFormat.toLowerCase()} is ${capMb} MB. Resize or compress before uploading.`
                                 );
                                 e.target.value = "";
                                 return;
@@ -1482,10 +1502,21 @@ export const ChannelTemplateVersionEditor = forwardRef<
                     </div>
 
                     <label className="form-control w-full">
-                      <span className="label-text text-xs">Body · required</span>
+                      <div className="flex items-center justify-between">
+                        <span className="label-text text-xs">Body · required</span>
+                        <span
+                          className={`text-[0.6875rem] ${charCounterClass(
+                            card.body.length,
+                            CAROUSEL_CARD_BODY_MAX
+                          )}`}
+                        >
+                          {card.body.length}/{CAROUSEL_CARD_BODY_MAX}
+                        </span>
+                      </div>
                       <textarea
                         className="textarea textarea-bordered w-full min-h-[100px] text-sm"
                         value={card.body}
+                        maxLength={CAROUSEL_CARD_BODY_MAX}
                         onChange={(e) => {
                           const v = e.target.value;
                           setCarouselCards((prev) =>
@@ -1500,7 +1531,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="text-xs font-medium">Buttons</span>
                         <span className="text-xs text-base-content/60">
-                          At least one · label max {META_TEMPLATE_BUTTON_LABEL_MAX} chars (Meta)
+                          1–2 buttons · label max {META_TEMPLATE_BUTTON_LABEL_MAX} chars (Meta)
                         </span>
                       </div>
                       {btnRowsForCard.map((row, bi) => (
@@ -1614,6 +1645,12 @@ export const ChannelTemplateVersionEditor = forwardRef<
                       <button
                         type="button"
                         className="btn btn-outline btn-xs"
+                        disabled={btnRowsForCard.length >= 2}
+                        title={
+                          btnRowsForCard.length >= 2
+                            ? "A carousel card allows at most 2 buttons (Meta)"
+                            : undefined
+                        }
                         onClick={() => {
                           setCarouselButtonRowsByIndex((prev) => {
                             const list = [...(prev[idx] ?? btnRowsForCard)];

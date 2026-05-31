@@ -876,6 +876,14 @@ export function ChannelTemplateDetailClient({
               qualityScore={state.qualityScore}
               lastQualityCheckAt={state.lastQualityCheckAt}
             />
+            {state.providerTemplateName && (
+              <span
+                className="font-mono-op text-[0.6875rem] text-base-content/50"
+                title="The exact name this template is registered under with Meta. Sends address it by this name, so renaming the display title is safe."
+              >
+                registered as {state.providerTemplateName}
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {state.channel === "WHATSAPP" && (

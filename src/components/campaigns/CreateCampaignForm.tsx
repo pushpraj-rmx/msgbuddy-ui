@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { getApiError } from "@/lib/api-error";
-import { campaignsApi, contactsApi, channelTemplatesApi, segmentsApi, usageApi } from "@/lib/api";
+import { campaignsApi, contactsApi, channelTemplatesApi, customFieldsApi, segmentsApi, usageApi } from "@/lib/api";
 import type { ChannelTemplateVersion, Segment } from "@/lib/types";
 import {
   isMediaHeaderType,
@@ -90,6 +90,17 @@ export type CampaignDraftSeed = {
   throttlePerMin?: number | null;
 };
 
+/** Friendly label for a template placeholder key (e.g. "button_1_code" → "Button 1 · {{code}}"). */
+function variableKeyLabel(key: string): string {
+  const card = key.match(/^card_(\d+)_(.+)$/);
+  if (card) return `Card ${card[1]} · ${variableKeyLabel(card[2])}`;
+  const btn = key.match(/^button_(\d+)_(.+)$/);
+  if (btn) return `Button ${btn[1]} · {{${btn[2]}}}`;
+  const hdr = key.match(/^header_(.+)$/);
+  if (hdr) return `Header · {{${hdr[1]}}}`;
+  return `{{${key}}}`;
+}
+
 export function CreateCampaignForm({
   templates,
   campaignId,
@@ -156,6 +167,29 @@ export function CreateCampaignForm({
   const [bindingFieldError, setBindingFieldError] = useState<string | null>(
     null
   );
+  // Per-placeholder binding: a contact field (filled per recipient) or a fixed value.
+  const [variableBindings, setVariableBindings] = useState<
+    Record<string, { mode: "field" | "static"; value: string }>
+  >(() => {
+    const out: Record<string, { mode: "field" | "static"; value: string }> = {};
+    const b = initialCampaign?.templateBindings as
+      | Record<string, unknown>
+      | undefined;
+    const fm = (b?.variableFieldMappings ?? {}) as Record<string, unknown>;
+    const sv = (b?.staticVariables ?? {}) as Record<string, unknown>;
+    for (const [k, v] of Object.entries(fm))
+      if (typeof v === "string") out[k] = { mode: "field", value: v };
+    for (const [k, v] of Object.entries(sv))
+      if (typeof v === "string" && !(k in out))
+        out[k] = { mode: "static", value: v };
+    return out;
+  });
+  /** Placeholder keys the selected version requires (from channel-template state). */
+  const [requiredVarKeys, setRequiredVarKeys] = useState<string[]>([]);
+  /** Workspace contact fields offered as mapping targets. */
+  const [contactFields, setContactFields] = useState<
+    Array<{ name: string; label: string }>
+  >([]);
   const [chunkSize, setChunkSize] = useState<string>(
     initialCampaign?.chunkSize != null ? String(initialCampaign.chunkSize) : "",
   );
@@ -436,6 +470,50 @@ export function CreateCampaignForm({
           .slice(0, carouselCardCount)
           .every((id) => String(id ?? "").trim().length > 0)));
 
+  // Every required placeholder must be bound to a contact field or a non-empty fixed value.
+  const variablesReady = requiredVarKeys.every((k) => {
+    const b = variableBindings[k];
+    if (!b) return false;
+    return b.value.trim().length > 0;
+  });
+
+  // Load workspace contact fields once — they are the mapping targets for variables.
+  useEffect(() => {
+    let cancelled = false;
+    customFieldsApi
+      .list()
+      .then((fields) => {
+        if (!cancelled)
+          setContactFields(fields.map((f) => ({ name: f.name, label: f.label })));
+      })
+      .catch(() => {
+        if (!cancelled) setContactFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Which placeholders the chosen version needs (computed server-side from its content).
+  useEffect(() => {
+    if (!channelWaTemplateId) {
+      setRequiredVarKeys([]);
+      return;
+    }
+    let cancelled = false;
+    channelTemplatesApi
+      .state(channelWaTemplateId)
+      .then((st) => {
+        if (!cancelled) setRequiredVarKeys(st.requiredVariableKeys ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setRequiredVarKeys([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [channelWaTemplateId]);
+
   /** Audience-preview fetch — runs when entering step 4 OR when the audience
    *  config changes while on step 4. Server-side resolution gives the user
    *  the actual sendable count (post blocked/opted-out exclusions). */
@@ -528,6 +606,22 @@ export function CreateCampaignForm({
         .slice(0, carouselCardCount)
         .map((id) => id.trim());
     }
+    // Split per-placeholder bindings into fixed values vs per-recipient contact-field maps.
+    const staticVariables: Record<string, string> = {};
+    const variableFieldMappings: Record<string, string> = {};
+    for (const [key, b] of Object.entries(variableBindings)) {
+      if (b.mode === "field" && b.value.trim()) {
+        variableFieldMappings[key] = b.value.trim();
+      } else if (b.mode === "static" && b.value.trim()) {
+        staticVariables[key] = b.value;
+      }
+    }
+    if (Object.keys(staticVariables).length > 0) {
+      templateBindings.staticVariables = staticVariables;
+    }
+    if (Object.keys(variableFieldMappings).length > 0) {
+      templateBindings.variableFieldMappings = variableFieldMappings;
+    }
 
     let audienceQuery: Record<string, unknown> | null | undefined;
     if (audienceType === "SEGMENT" && selectedSegmentId) {
@@ -618,6 +712,10 @@ export function CreateCampaignForm({
     }
     if (!bindingsStepReady) {
       setError("Upload required template media (header or carousel cards) before creating.");
+      return;
+    }
+    if (!variablesReady) {
+      setError("Bind every template variable to a contact field or a fixed value before creating.");
       return;
     }
     const parsedChunkSize = chunkSize.trim() ? Number(chunkSize) : undefined;
@@ -923,6 +1021,91 @@ export function CreateCampaignForm({
                           </div>
                         )
                       )}
+                    </div>
+                  ) : null}
+
+                  {requiredVarKeys.length > 0 ? (
+                    <div className="card bg-base-100 border border-base-300 p-3">
+                      <p className="text-sm font-medium text-base-content">
+                        Personalize variables
+                      </p>
+                      <p className="mt-1 text-xs text-base-content/60">
+                        Bind each placeholder to a contact field (filled per
+                        recipient) or a fixed value. Recipients missing a mapped
+                        field are skipped at send time.
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {requiredVarKeys.map((key) => {
+                          const b =
+                            variableBindings[key] ??
+                            ({ mode: "field", value: "" } as const);
+                          const ready = b.value.trim().length > 0;
+                          return (
+                            <div
+                              key={key}
+                              className="flex flex-wrap items-center gap-2"
+                            >
+                              <code className="font-mono-op rounded bg-base-200 px-1.5 py-0.5 text-[0.6875rem] text-primary">
+                                {variableKeyLabel(key)}
+                              </code>
+                              <select
+                                className="select select-bordered select-xs"
+                                value={b.mode}
+                                onChange={(e) =>
+                                  setVariableBindings((prev) => ({
+                                    ...prev,
+                                    [key]: {
+                                      mode: e.target.value as "field" | "static",
+                                      value: "",
+                                    },
+                                  }))
+                                }
+                              >
+                                <option value="field">Contact field</option>
+                                <option value="static">Fixed value</option>
+                              </select>
+                              {b.mode === "field" ? (
+                                <select
+                                  className="select select-bordered select-xs min-w-[10rem]"
+                                  value={b.value}
+                                  onChange={(e) =>
+                                    setVariableBindings((prev) => ({
+                                      ...prev,
+                                      [key]: { mode: "field", value: e.target.value },
+                                    }))
+                                  }
+                                >
+                                  <option value="">Select field…</option>
+                                  <option value="name">Name</option>
+                                  {contactFields.map((f) => (
+                                    <option key={f.name} value={f.name}>
+                                      {f.label || f.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type="text"
+                                  className="input input-bordered input-xs min-w-[10rem]"
+                                  value={b.value}
+                                  placeholder="Fixed value for all recipients"
+                                  onChange={(e) =>
+                                    setVariableBindings((prev) => ({
+                                      ...prev,
+                                      [key]: { mode: "static", value: e.target.value },
+                                    }))
+                                  }
+                                />
+                              )}
+                              {ready ? (
+                                <span className="op-tag op-tag-ok">Set</span>
+                              ) : (
+                                <span className="op-tag op-tag-warn">Required</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   ) : null}
 
@@ -1349,7 +1532,7 @@ export function CreateCampaignForm({
                       />
                     </div>
                     <p className="text-[0.6875rem] text-base-content/50">
-                      Variable placeholders ({"{{1}}"}, etc.) are filled by WhatsApp at send time using each contact&apos;s data + the template bindings configured for this campaign.
+                      Variable placeholders ({"{{1}}"}, etc.) are filled per recipient from the contact-field / fixed-value bindings set below. A recipient missing a mapped field is skipped at send time.
                     </p>
                   </div>
                 ) : (
@@ -1455,7 +1638,7 @@ export function CreateCampaignForm({
                   loading ||
                   (step === 1 &&
                     (!templateId || !canUseSelectedTemplate)) ||
-                  (step === 2 && !bindingsStepReady)
+                  (step === 2 && (!bindingsStepReady || !variablesReady))
                 }
               >
                 Next

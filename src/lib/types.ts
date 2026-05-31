@@ -464,6 +464,8 @@ export type ChannelTemplateState = {
   channel: TemplateChannel;
   category?: TemplateCategory | null;
   providerTemplateId: string | null;
+  /** Exact name registered with Meta; what sends actually address (decoupled from display name). */
+  providerTemplateName?: string | null;
   providerStatus: string | null;
   /** Meta-reported quality (raw string). Pass through `normalizeQualityRating`. */
   qualityScore?: string | null;
@@ -472,6 +474,8 @@ export type ChannelTemplateState = {
   latestVersion: ChannelTemplateVersion | null;
   activeVersion: ChannelTemplateVersion | null;
   latestSendableVersion: ChannelTemplateVersion | null;
+  /** Text placeholder keys ("1", "first_name", "header_1", "button_1_code"…) the send must bind. */
+  requiredVariableKeys?: string[];
   isSendable: boolean;
   missingRequirements: ChannelTemplateStateRequirement[];
   /** Meta `correct_category` differs from current — automated recategorization pending */
