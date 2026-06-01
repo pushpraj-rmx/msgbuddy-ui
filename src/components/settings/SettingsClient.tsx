@@ -522,7 +522,7 @@ export function SettingsClient({
                               // reset to the provider's default model
                               chatbotModel:
                                 provider === "google"
-                                  ? "gemini-2.0-flash"
+                                  ? "gemini-flash-latest"
                                   : "claude-sonnet-4-20250514",
                             }));
                           }}
@@ -545,8 +545,8 @@ export function SettingsClient({
                         {(chatbotForm.mode === "byo" &&
                         chatbotForm.chatbotProvider === "google" ? (
                           <>
-                            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                            <option value="gemini-flash-latest">Gemini Flash (latest)</option>
+                            <option value="gemini-pro-latest">Gemini Pro (latest)</option>
                           </>
                         ) : (
                           <>
