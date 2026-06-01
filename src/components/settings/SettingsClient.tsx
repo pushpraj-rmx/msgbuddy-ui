@@ -140,11 +140,19 @@ export function SettingsClient({
     setChatbotSaved(false);
     try {
       const enabled = chatbotForm.mode !== "disabled";
+      // Managed mode always runs on MsgBuddy's Anthropic key — force the
+      // provider/model back to Anthropic regardless of the BYO selection.
+      const isManaged = chatbotForm.mode === "managed";
+      const provider = isManaged ? "anthropic" : chatbotForm.chatbotProvider;
+      const model =
+        isManaged && chatbotForm.chatbotModel.startsWith("gemini")
+          ? "claude-sonnet-4-20250514"
+          : chatbotForm.chatbotModel;
       const payload: Partial<WorkspaceSettingsPayload> = {
         chatbotEnabled: enabled,
         chatbotSystemPrompt: chatbotForm.chatbotSystemPrompt.trim() || undefined,
-        chatbotProvider: chatbotForm.chatbotProvider,
-        chatbotModel: chatbotForm.chatbotModel,
+        chatbotProvider: provider,
+        chatbotModel: model,
       };
       if (enabled) {
         payload.aiKeySource = chatbotForm.mode === "managed" ? "MANAGED" : "BYO";
@@ -500,18 +508,30 @@ export function SettingsClient({
                   ) : null}
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="form-control w-full">
-                      <span className="op-label mb-1">Provider</span>
-                      <select
-                        className="select select-bordered select-sm w-full"
-                        value={chatbotForm.chatbotProvider}
-                        onChange={(e) =>
-                          setChatbotForm((s) => ({ ...s, chatbotProvider: e.target.value }))
-                        }
-                      >
-                        <option value="anthropic">Anthropic</option>
-                      </select>
-                    </label>
+                    {chatbotForm.mode === "byo" ? (
+                      <label className="form-control w-full">
+                        <span className="op-label mb-1">Provider</span>
+                        <select
+                          className="select select-bordered select-sm w-full"
+                          value={chatbotForm.chatbotProvider}
+                          onChange={(e) => {
+                            const provider = e.target.value;
+                            setChatbotForm((s) => ({
+                              ...s,
+                              chatbotProvider: provider,
+                              // reset to the provider's default model
+                              chatbotModel:
+                                provider === "google"
+                                  ? "gemini-2.0-flash"
+                                  : "claude-sonnet-4-20250514",
+                            }));
+                          }}
+                        >
+                          <option value="anthropic">Anthropic (Claude)</option>
+                          <option value="google">Google (Gemini)</option>
+                        </select>
+                      </label>
+                    ) : null}
 
                     <label className="form-control w-full">
                       <span className="op-label mb-1">Model</span>
@@ -522,8 +542,18 @@ export function SettingsClient({
                           setChatbotForm((s) => ({ ...s, chatbotModel: e.target.value }))
                         }
                       >
-                        <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                        {(chatbotForm.mode === "byo" &&
+                        chatbotForm.chatbotProvider === "google" ? (
+                          <>
+                            <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                          </>
+                        ) : (
+                          <>
+                            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                          </>
+                        ))}
                       </select>
                     </label>
                   </div>
