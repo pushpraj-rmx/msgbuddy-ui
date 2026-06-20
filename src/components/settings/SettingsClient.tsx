@@ -1,22 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { useRouter } from "next/navigation";
 import {
-  workspaceApi,
-  type WorkspaceProviderType,
+  type WhatsAppConnectionSummary,
   type WorkspaceCloudApiConfigResponse,
-  type WorkspaceMessagingConfigPayload,
   type WorkspaceSettingsPayload,
-  type WorkspaceCloudApiConfigPayload,
+  type UpdateWorkspaceDto,
+  workspaceApi,
 } from "@/lib/api";
+import { AccountSecurityClient } from "@/components/settings/AccountSecurityClient";
+import { DisplayPreferencesClient } from "@/components/settings/DisplayPreferencesClient";
+import { PurgeContactsClient } from "@/components/settings/PurgeContactsClient";
+import { TeamClient } from "@/components/settings/TeamClient";
+import type { DisplayDensity, LoginHistoryEvent } from "@/lib/api";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
+import { canAccessBillingPage, canDeleteWorkspace } from "@/lib/workspace-access";
 
 export type Workspace = {
   id: string;
   name: string;
   slug?: string;
+  businessId?: string;
   description?: string;
+  logoUrl?: string;
+  website?: string;
   timezone?: string;
   locale?: string;
+  businessName?: string;
+  industry?: string;
+  country?: string;
+  phone?: string;
+  email?: string;
+  businessAddress?: string;
+  businessAbout?: string;
+  businessVertical?: string;
   status?: string;
 };
 
@@ -28,429 +47,757 @@ export type WorkspaceSettings = Partial<WorkspaceSettingsPayload> & {
 export type Member = {
   id: string;
   role: string;
-  user?: { email?: string };
+  user?: { id?: string; email?: string; name?: string | null };
 };
 
-const TABS = ["Workspace info", "Members", "WhatsApp"] as const;
+function isWhatsAppConnected(config: WorkspaceCloudApiConfigResponse | null): boolean {
+  return config != null && (config.status === "ACTIVE" || config.hasAccessToken === true);
+}
 
 export function SettingsClient({
-  workspaceId,
   workspace,
   settings,
   members,
-  messagingConfig,
   cloudApiConfig,
+  whatsappConnection,
+  meRole,
+  meUserId,
+  accountEmail,
+  accountName,
+  accountAvatarUrl,
+  hasPassword,
+  displayDensity,
+  loginHistory,
 }: {
-  workspaceId: string;
   workspace: Workspace;
   settings: WorkspaceSettings;
   members: Member[];
-  messagingConfig: WorkspaceMessagingConfigPayload;
   cloudApiConfig: WorkspaceCloudApiConfigResponse | null;
+  whatsappConnection: WhatsAppConnectionSummary | null;
+  meRole: string;
+  meUserId?: string;
+  accountEmail: string;
+  accountName?: string;
+  accountAvatarUrl?: string | null;
+  hasPassword: boolean;
+  displayDensity: DisplayDensity;
+  loginHistory: LoginHistoryEvent[];
 }) {
-  const [tab, setTab] = useState<(typeof TABS)[number]>("Workspace info");
-  const [providerType, setProviderType] =
-    useState<WorkspaceProviderType>(messagingConfig.providerType);
-  const [messagingSaving, setMessagingSaving] = useState(false);
-  const [messagingError, setMessagingError] = useState<string | null>(null);
-  // TODO: BSP | BSP form state; complete BSP-specific validation/UX later
-  const [bspForm, setBspForm] = useState({
-    whatsappPhoneNumberId: settings.whatsappPhoneNumberId ?? "",
-    whatsappBusinessId: settings.whatsappBusinessId ?? "",
-    whatsappAccessToken: settings.whatsappAccessToken ?? "",
-    whatsappWebhookSecret: settings.whatsappWebhookSecret ?? "",
+  const router = useRouter();
+  const canManageWorkspace = roleHasWorkspacePermission(meRole, "settings.manage");
+  const canViewMembers = roleHasWorkspacePermission(meRole, "members.view");
+  const canDeleteWorkspaceAction = canDeleteWorkspace(meRole);
+  const canSeeBilling = canAccessBillingPage(meRole);
+
+  const initialForm = useMemo(
+    () => ({
+      name: workspace.name ?? "",
+      description: workspace.description ?? "",
+      logoUrl: workspace.logoUrl ?? "",
+      website: workspace.website ?? "",
+      timezone: settings.timezone || workspace.timezone || "",
+      locale: settings.locale || workspace.locale || "",
+      businessName: workspace.businessName ?? "",
+      industry: workspace.industry ?? "",
+      country: workspace.country ?? "",
+      phone: workspace.phone ?? "",
+      email: workspace.email ?? "",
+      businessAddress: workspace.businessAddress ?? "",
+      businessAbout: workspace.businessAbout ?? "",
+      businessVertical: workspace.businessVertical ?? "",
+    }),
+    [settings.locale, settings.timezone, workspace]
+  );
+
+  const [saving, setSaving] = useState(false);
+  const [dangerBusy, setDangerBusy] = useState(false);
+  const [form, setForm] = useState(initialForm);
+  const [error, setError] = useState<string | null>(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState(false);
+
+  // Chatbot form state. `mode` is the 3-state AI selector; on save it maps to
+  // chatbotEnabled (disabled => false) + aiKeySource (BYO | MANAGED).
+  const initialChatbotMode: "disabled" | "byo" | "managed" =
+    !settings.chatbotEnabled
+      ? "disabled"
+      : settings.aiKeySource === "MANAGED"
+        ? "managed"
+        : "byo";
+  const [chatbotForm, setChatbotForm] = useState({
+    mode: initialChatbotMode,
+    chatbotSystemPrompt: settings.chatbotSystemPrompt ?? "",
+    chatbotApiKey: "",
+    chatbotProvider: settings.chatbotProvider ?? "anthropic",
+    chatbotModel: settings.chatbotModel ?? "claude-sonnet-4-20250514",
   });
-  const [bspSaving, setBspSaving] = useState(false);
-  const [bspError, setBspError] = useState<string | null>(null);
-  const [cloudForm, setCloudForm] = useState({
-    phoneNumberId: cloudApiConfig?.phoneNumberId ?? "",
-    wabaId: cloudApiConfig?.wabaId ?? "",
-    accessToken: "",
-  });
-  const [cloudSaving, setCloudSaving] = useState(false);
-  const [cloudError, setCloudError] = useState<string | null>(null);
-  const [cloudApiConfigState, setCloudApiConfigState] =
-    useState<WorkspaceCloudApiConfigResponse | null>(cloudApiConfig);
+  const [savingChatbot, setSavingChatbot] = useState(false);
+  const [chatbotError, setChatbotError] = useState<string | null>(null);
+  const [chatbotSaved, setChatbotSaved] = useState(false);
 
-  const handleProviderChange = async (next: WorkspaceProviderType) => {
-    setMessagingError(null);
-    setMessagingSaving(true);
+  const onSaveChatbot = async () => {
+    setSavingChatbot(true);
+    setChatbotError(null);
+    setChatbotSaved(false);
     try {
-      await workspaceApi.updateMessagingConfig(workspaceId, {
-        providerType: next,
-      });
-      setProviderType(next);
-    } catch (e) {
-      setMessagingError(
-        e instanceof Error ? e.message : "Failed to update provider"
-      );
-    } finally {
-      setMessagingSaving(false);
-    }
-  };
-
-  // TODO: BSP | Save BSP WhatsApp credentials; add validation / success feedback later
-  const handleBspSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBspError(null);
-    setBspSaving(true);
-    try {
-      await workspaceApi.updateSettings(workspaceId, {
-        whatsappPhoneNumberId: bspForm.whatsappPhoneNumberId || undefined,
-        whatsappBusinessId: bspForm.whatsappBusinessId || undefined,
-        whatsappAccessToken: bspForm.whatsappAccessToken || undefined,
-        whatsappWebhookSecret: bspForm.whatsappWebhookSecret || undefined,
-      });
-    } catch (e) {
-      setBspError(
-        e instanceof Error ? e.message : "Failed to save BSP settings"
-      );
-    } finally {
-      setBspSaving(false);
-    }
-  };
-
-  const handleCloudSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setCloudError(null);
-    setCloudSaving(true);
-    try {
-      const payload: WorkspaceCloudApiConfigPayload = {
-        phoneNumberId: cloudForm.phoneNumberId,
-        wabaId: cloudForm.wabaId,
+      const enabled = chatbotForm.mode !== "disabled";
+      const payload: Partial<WorkspaceSettingsPayload> = {
+        chatbotEnabled: enabled,
+        chatbotSystemPrompt: chatbotForm.chatbotSystemPrompt.trim() || undefined,
+        chatbotProvider: chatbotForm.chatbotProvider,
+        chatbotModel: chatbotForm.chatbotModel,
       };
-      if (cloudForm.accessToken.trim()) {
-        payload.accessToken = cloudForm.accessToken;
+      if (enabled) {
+        payload.aiKeySource = chatbotForm.mode === "managed" ? "MANAGED" : "BYO";
       }
-      const updated = await workspaceApi.updateCloudApiConfig(
-        workspaceId,
-        payload
-      );
-      setCloudApiConfigState(updated);
-      setCloudForm((prev) => ({ ...prev, accessToken: "" }));
+      // Only the BYO path carries a customer key; MANAGED uses the platform key.
+      if (chatbotForm.mode === "byo" && chatbotForm.chatbotApiKey.trim()) {
+        payload.chatbotApiKey = chatbotForm.chatbotApiKey.trim();
+      }
+      await workspaceApi.updateSettings(workspace.id, payload);
+      setChatbotForm((s) => ({ ...s, chatbotApiKey: "" }));
+      setChatbotSaved(true);
+      router.refresh();
     } catch (e) {
-      setCloudError(
-        e instanceof Error ? e.message : "Failed to save Cloud API config"
-      );
+      setChatbotError(e instanceof Error ? e.message : "Failed to save chatbot settings");
     } finally {
-      setCloudSaving(false);
+      setSavingChatbot(false);
+    }
+  };
+
+  const openEdit = () => {
+    setForm(initialForm);
+    setError(null);
+    (document.getElementById("edit_workspace_modal") as HTMLDialogElement | null)?.showModal();
+  };
+
+  const closeEdit = () => {
+    (document.getElementById("edit_workspace_modal") as HTMLDialogElement | null)?.close();
+  };
+
+  const onSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const payload: UpdateWorkspaceDto = {
+        name: form.name.trim() || undefined,
+        description: form.description.trim() || undefined,
+        logoUrl: form.logoUrl.trim() || undefined,
+        website: form.website.trim() || undefined,
+        timezone: form.timezone.trim() || undefined,
+        locale: form.locale.trim() || undefined,
+        businessName: form.businessName.trim() || undefined,
+        industry: form.industry.trim() || undefined,
+        country: form.country.trim() || undefined,
+        phone: form.phone.trim() || undefined,
+        email: form.email.trim() || undefined,
+        businessAddress: form.businessAddress.trim() || undefined,
+        businessAbout: form.businessAbout.trim() || undefined,
+        businessVertical: form.businessVertical.trim() || undefined,
+      };
+      await workspaceApi.updateWorkspace(workspace.id, payload);
+      closeEdit();
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update workspace");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onDeleteWorkspace = async () => {
+    if (!canDeleteWorkspaceAction) return;
+    setDangerBusy(true);
+    try {
+      await workspaceApi.deleteWorkspace(workspace.id);
+      router.replace("/login");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete workspace");
+    } finally {
+      setDangerBusy(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <div role="tablist" className="tabs tabs-box">
-        {TABS.map((label) => (
-          <button
-            key={label}
-            role="tab"
-            className={`tab ${tab === label ? "tab-active" : ""}`}
-            onClick={() => setTab(label)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+    <section className="mx-auto w-full max-w-6xl">
+      <div className="space-y-8">
+        {/* ── Page header ── */}
+        <header>
+          <span className="op-label">settings</span>
+          <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">
+            Workspace Settings
+          </h1>
+          <p className="mt-0.5 text-[0.8125rem] text-base-content/55">
+            Configure your account, workspace, and integrations.
+          </p>
+        </header>
 
-      {tab === "Workspace info" && (
-        <div className="grid gap-4 md:grid-cols-2">
-          <InfoCard label="Name" value={workspace.name} />
-          <InfoCard label="Slug" value={workspace.slug} />
-          <InfoCard label="Description" value={workspace.description} />
-          <InfoCard label="Status" value={workspace.status} />
-          <InfoCard
-            label="Timezone"
-            value={settings.timezone || workspace.timezone}
+        {/* ── Account & Security ── */}
+        <section id="account-security" className="space-y-3">
+          <span className="op-section-title">Account &amp; Security</span>
+          <AccountSecurityClient
+            accountEmail={accountEmail}
+            accountName={accountName}
+            accountAvatarUrl={accountAvatarUrl}
+            hasPassword={hasPassword}
+            loginHistory={loginHistory}
           />
-          <InfoCard
-            label="Locale"
-            value={settings.locale || workspace.locale}
-          />
-        </div>
-      )}
+        </section>
 
-      {tab === "Members" && (
-        <div className="overflow-x-auto rounded-box border border-base-300">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Role</th>
-              </tr>
-            </thead>
-            <tbody>
-              {members.map((member) => (
-                <tr key={member.id}>
-                  <td>{member.user?.email || "Unknown"}</td>
-                  <td>{member.role}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!members.length && (
-            <div className="p-4 text-sm text-base-content/60">
-              No members found.
+        {/* ── Display ── */}
+        <section id="display" className="space-y-3">
+          <span className="op-section-title">Display</span>
+          <DisplayPreferencesClient initialDensity={displayDensity} />
+        </section>
+
+        {/* ── Workspace Info ── */}
+        <section id="workspace-info" className="space-y-3">
+          <span className="op-section-title">Workspace</span>
+          {canManageWorkspace ? (
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                <InfoRow label="Name" value={workspace.name} />
+                <InfoRow label="Slug" value={workspace.slug} />
+                <InfoRow label="Status" value={workspace.status || "Active"} />
+                <InfoRow label="Timezone" value={settings.timezone || workspace.timezone} />
+                <InfoRow label="Locale" value={settings.locale || workspace.locale} />
+                <InfoRow
+                  label="Members"
+                  value={`${members.length} member${members.length === 1 ? "" : "s"}`}
+                />
+              </div>
+              {workspace.description && (
+                <p className="text-[0.75rem] text-base-content/50">{workspace.description}</p>
+              )}
+              <div className="flex items-center justify-end border-t border-base-300 pt-3">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={openEdit}
+                >
+                  Edit workspace
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-box border border-base-300 bg-base-200 px-4 py-3 text-[0.8125rem] text-base-content/55">
+              You do not have permission to change workspace settings.
             </div>
           )}
-        </div>
-      )}
+        </section>
 
-      {tab === "WhatsApp" && (
-        <div className="space-y-6">
-          <div className="card bg-base-200 shadow-sm">
-            <div className="card-body">
-              <h2 className="card-title text-lg">Provider</h2>
-              {/* TODO: BSP | Provider choice; BSP (legacy) path can be completed later */}
-              <p className="text-sm text-base-content/60">
-                Choose BSP (legacy) or Meta Cloud API for WhatsApp.
-              </p>
-              <div className="flex flex-wrap gap-4 pt-2">
-                <label className="label cursor-pointer gap-2">
-                  <input
-                    type="radio"
-                    name="provider"
-                    className="radio radio-primary"
-                    checked={providerType === "BSP"}
-                    onChange={() => handleProviderChange("BSP")}
-                    disabled={messagingSaving}
-                  />
-                  <span>BSP (legacy)</span>
-                </label>
-                <label className="label cursor-pointer gap-2">
-                  <input
-                    type="radio"
-                    name="provider"
-                    className="radio radio-primary"
-                    checked={providerType === "CLOUD_API"}
-                    onChange={() => handleProviderChange("CLOUD_API")}
-                    disabled={messagingSaving}
-                  />
-                  <span>Cloud API</span>
-                </label>
-              </div>
-              {messagingSaving && (
-                <span className="loading loading-spinner loading-sm" />
-              )}
-              {messagingError && (
-                <div role="alert" className="alert alert-error">
-                  <span>{messagingError}</span>
+        {/* ── Team Members ── */}
+        {canViewMembers ? (
+          <section id="team-members" className="space-y-3">
+            <span className="op-section-title">Team Members</span>
+            <TeamClient
+              workspaceId={workspace.id}
+              initialMembers={members}
+              meRole={meRole}
+              meUserId={meUserId}
+            />
+          </section>
+        ) : null}
+
+        {/* ── WhatsApp Integration ── */}
+        <section id="whatsapp-integration" className="space-y-3">
+          <span className="op-section-title">WhatsApp</span>
+          <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[0.875rem] font-semibold">Cloud API</span>
+                  <span className={isWhatsAppConnected(cloudApiConfig) ? "op-tag op-tag-ok" : "op-tag"}>
+                    {isWhatsAppConnected(cloudApiConfig) ? "Connected" : "Disconnected"}
+                  </span>
                 </div>
-              )}
+                <p className="text-[0.75rem] text-base-content/55">
+                  Manage conversations, templates, and automation from dashboard.
+                </p>
+              </div>
+              {canManageWorkspace ? (
+                <a
+                  href="/settings/integrations/whatsapp"
+                  className="btn btn-outline btn-sm"
+                >
+                  Manage
+                </a>
+              ) : null}
+            </div>
+
+            <div className="grid gap-px overflow-hidden rounded-box border border-base-300 bg-base-300 sm:grid-cols-3">
+              <StatCell
+                label="Number"
+                value={
+                  whatsappConnection?.displayPhoneNumber ||
+                  whatsappConnection?.phoneNumberId ||
+                  cloudApiConfig?.phoneNumberId ||
+                  workspace.phone ||
+                  "—"
+                }
+              />
+              <StatCell
+                label="WABA ID"
+                value={whatsappConnection?.wabaId || cloudApiConfig?.wabaId || "—"}
+              />
+              <StatCell
+                label="Business ID"
+                value={whatsappConnection?.businessId || workspace.businessId || "—"}
+              />
             </div>
           </div>
+        </section>
 
-          {/* TODO: BSP | BSP WhatsApp form block; finish field validation, masking, and copy behavior later */}
-          {providerType === "BSP" && (
-            <div className="card bg-base-200 shadow-sm">
-              <div className="card-body">
-                <h2 className="card-title text-lg">BSP WhatsApp</h2>
-                <p className="text-sm text-base-content/60">
-                  Phone number ID, Business ID, access token, and webhook secret
-                  (stored in workspace settings).
-                </p>
-                <form onSubmit={handleBspSubmit} className="space-y-4">
-                  <label className="form-control">
-                    <span className="label">Phone number ID</span>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      value={bspForm.whatsappPhoneNumberId}
-                      onChange={(e) =>
-                        setBspForm((p) => ({
-                          ...p,
-                          whatsappPhoneNumberId: e.target.value,
-                        }))
-                      }
-                      placeholder="e.g. 123456789"
-                    />
-                  </label>
-                  <label className="form-control">
-                    <span className="label">Business ID</span>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      value={bspForm.whatsappBusinessId}
-                      onChange={(e) =>
-                        setBspForm((p) => ({
-                          ...p,
-                          whatsappBusinessId: e.target.value,
-                        }))
-                      }
-                      placeholder="e.g. 123456789012345"
-                    />
-                  </label>
-                  <label className="form-control">
-                    <span className="label">Access token</span>
-                    <input
-                      type="password"
-                      className="input input-bordered"
-                      value={bspForm.whatsappAccessToken}
-                      onChange={(e) =>
-                        setBspForm((p) => ({
-                          ...p,
-                          whatsappAccessToken: e.target.value,
-                        }))
-                      }
-                      placeholder="Permanent or temporary token"
-                    />
-                  </label>
-                  <label className="form-control">
-                    <span className="label">Webhook secret</span>
-                    <input
-                      type="password"
-                      className="input input-bordered"
-                      value={bspForm.whatsappWebhookSecret}
-                      onChange={(e) =>
-                        setBspForm((p) => ({
-                          ...p,
-                          whatsappWebhookSecret: e.target.value,
-                        }))
-                      }
-                      placeholder="App secret or custom verify token"
-                    />
-                  </label>
-                  <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={bspSaving}
-                  >
-                    {bspSaving ? (
-                      <span className="loading loading-spinner loading-sm" />
-                    ) : (
-                      "Save BSP settings"
-                    )}
-                  </button>
-                  {bspError && (
-                    <div role="alert" className="alert alert-error">
-                      <span>{bspError}</span>
-                    </div>
-                  )}
-                </form>
+        {/* ── Developers (API keys) ── */}
+        {canManageWorkspace ? (
+          <section id="developers" className="space-y-3">
+            <span className="op-section-title">Developers</span>
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.875rem] font-semibold">API keys</span>
+                    <span className="op-tag">
+                      mb_live_…  ●●●●  ????
+                    </span>
+                  </div>
+                  <p className="text-[0.75rem] text-base-content/55">
+                    Generate keys for external apps to send messages and
+                    receive webhook events on this workspace&apos;s behalf.
+                  </p>
+                </div>
+                <a
+                  href="/settings/developers"
+                  className="btn btn-outline btn-sm"
+                >
+                  Manage keys
+                </a>
               </div>
             </div>
-          )}
+          </section>
+        ) : null}
 
-          {providerType === "CLOUD_API" && (
-            <div className="card bg-base-200 shadow-sm">
-              <div className="card-body">
-                <h2 className="card-title text-lg">Meta Cloud API</h2>
-                <p className="text-sm text-base-content/60">
-                  Phone number ID and WABA ID. Access token is encrypted and not
-                  shown; add a new token to update.
-                </p>
-                {cloudApiConfigState && (
-                  <div className="rounded-box border border-base-300 bg-base-100 p-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-base-content/60">
-                        Status:
-                      </span>
-                      <span
-                        className={`badge ${
-                          cloudApiConfigState.status === "ACTIVE"
-                            ? "badge-success"
-                            : cloudApiConfigState.status === "EXPIRED"
-                              ? "badge-warning"
-                              : "badge-ghost"
-                        }`}
-                      >
-                        {cloudApiConfigState.status}
-                      </span>
+        {/* ── Webhooks (outbound events) ── */}
+        {canManageWorkspace ? (
+          <section id="webhooks" className="space-y-3">
+            <span className="op-section-title">Webhooks</span>
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.875rem] font-semibold">
+                      Outbound endpoints
+                    </span>
+                    <span className="op-tag">
+                      X-MsgBuddy-Signature
+                    </span>
+                  </div>
+                  <p className="text-[0.75rem] text-base-content/55">
+                    Push message and template events into your app in
+                    real time. HMAC-SHA256 signed; auto-disable on
+                    sustained failure; replay supported.
+                  </p>
+                </div>
+                <a
+                  href="/settings/webhooks"
+                  className="btn btn-outline btn-sm"
+                >
+                  Manage webhooks
+                </a>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* ── Billing & plan ── Moved here from the sidebar (it didn't belong
+            in the day-to-day nav; only OWNER/ADMIN configure it, and they
+            already come to Settings for plan / payment changes). */}
+        {canSeeBilling ? (
+          <section id="billing" className="space-y-3">
+            <span className="op-section-title">Billing</span>
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.875rem] font-semibold">
+                      Plan, invoices & payment
+                    </span>
+                  </div>
+                  <p className="text-[0.75rem] text-base-content/55">
+                    View your current plan, upgrade or downgrade, manage
+                    payment methods, and download past invoices.
+                  </p>
+                </div>
+                <a
+                  href="/billing"
+                  className="btn btn-outline btn-sm"
+                >
+                  Manage billing
+                </a>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* ── Chatbot ── */}
+        {canManageWorkspace ? (
+          <section id="chatbot" className="space-y-3">
+            <span className="op-section-title">Chatbot</span>
+            <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[0.875rem] font-semibold">LLM Auto-Reply</span>
+                    <span className={chatbotForm.mode !== "disabled" ? "op-tag op-tag-ok" : "op-tag"}>
+                      {chatbotForm.mode === "managed"
+                        ? "MsgBuddy AI"
+                        : chatbotForm.mode === "byo"
+                          ? "Own key"
+                          : "Disabled"}
+                    </span>
+                  </div>
+                  <p className="text-[0.75rem] text-base-content/55">
+                    Automatically replies to unassigned conversations using an LLM.
+                    Stops when an agent claims the conversation.
+                  </p>
+                </div>
+                <div className="join">
+                  <button
+                    type="button"
+                    className={`btn btn-xs join-item ${chatbotForm.mode === "disabled" ? "btn-active btn-primary" : "btn-ghost"}`}
+                    onClick={() => setChatbotForm((s) => ({ ...s, mode: "disabled" }))}
+                  >
+                    Off
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-xs join-item ${chatbotForm.mode === "byo" ? "btn-active btn-primary" : "btn-ghost"}`}
+                    onClick={() => setChatbotForm((s) => ({ ...s, mode: "byo" }))}
+                  >
+                    Use my key
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-xs join-item ${chatbotForm.mode === "managed" ? "btn-active btn-primary" : "btn-ghost"}`}
+                    onClick={() => setChatbotForm((s) => ({ ...s, mode: "managed" }))}
+                  >
+                    Use MsgBuddy AI
+                  </button>
+                </div>
+              </div>
+
+              {chatbotForm.mode !== "disabled" ? (
+                <>
+                  {chatbotForm.mode === "managed" ? (
+                    <div className="rounded-box border-l-2 border border-primary/30 border-l-primary bg-base-100 px-4 py-3 text-[0.8125rem] text-base-content/70">
+                      Uses MsgBuddy&apos;s AI — no API key required. Replies are metered
+                      and billed to your plan, and pause automatically when your monthly
+                      AI quota is reached. Track consumption on the{" "}
+                      <a href="/usage" className="link link-primary">
+                        Usage
+                      </a>{" "}
+                      page.
                     </div>
-                    {cloudApiConfigState.tokenExpiresAt && (
-                      <p className="text-sm text-base-content/60">
-                        Token expires:{" "}
-                        {new Date(
-                          cloudApiConfigState.tokenExpiresAt
-                        ).toLocaleString()}
-                      </p>
-                    )}
-                    <p className="text-sm text-base-content/60">
-                      Access token:{" "}
-                      {cloudApiConfigState.hasAccessToken ? "Set" : "Not set"}
+                  ) : null}
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="form-control w-full">
+                      <span className="op-label mb-1">Provider</span>
+                      <select
+                        className="select select-bordered select-sm w-full"
+                        value={chatbotForm.chatbotProvider}
+                        onChange={(e) =>
+                          setChatbotForm((s) => ({ ...s, chatbotProvider: e.target.value }))
+                        }
+                      >
+                        <option value="anthropic">Anthropic</option>
+                      </select>
+                    </label>
+
+                    <label className="form-control w-full">
+                      <span className="op-label mb-1">Model</span>
+                      <select
+                        className="select select-bordered select-sm w-full"
+                        value={chatbotForm.chatbotModel}
+                        onChange={(e) =>
+                          setChatbotForm((s) => ({ ...s, chatbotModel: e.target.value }))
+                        }
+                      >
+                        <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                        <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {chatbotForm.mode === "byo" ? (
+                    <label className="form-control w-full">
+                      <span className="op-label mb-1">
+                        API Key
+                        {settings.hasChatbotApiKey ? (
+                          <span className="ml-2 text-success">Key saved</span>
+                        ) : null}
+                      </span>
+                      <input
+                        type="password"
+                        className="input input-bordered input-sm w-full font-mono"
+                        placeholder="sk-ant-..."
+                        value={chatbotForm.chatbotApiKey}
+                        onChange={(e) =>
+                          setChatbotForm((s) => ({ ...s, chatbotApiKey: e.target.value }))
+                        }
+                      />
+                      <span className="mt-1 text-[0.6875rem] text-base-content/40">
+                        Leave blank to keep the existing key. Enter a new value to replace it.
+                      </span>
+                    </label>
+                  ) : null}
+
+                  <label className="form-control w-full">
+                    <span className="op-label mb-1">System Prompt</span>
+                    <textarea
+                      className="textarea textarea-bordered textarea-sm w-full"
+                      rows={4}
+                      placeholder="You are a helpful customer support assistant for [Company]. Be concise, friendly, and helpful..."
+                      value={chatbotForm.chatbotSystemPrompt}
+                      onChange={(e) =>
+                        setChatbotForm((s) => ({ ...s, chatbotSystemPrompt: e.target.value }))
+                      }
+                    />
+                  </label>
+
+                  <a
+                    href="/settings/knowledge"
+                    className="link link-primary text-[0.8125rem]"
+                  >
+                    Manage knowledge base →
+                  </a>
+                  <p className="text-[0.6875rem] text-base-content/40">
+                    Ground replies in your own FAQs, policies, and product info.
+                  </p>
+                </>
+              ) : null}
+
+              {chatbotError ? (
+                <div className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
+                  <span className="op-label mb-1 block text-error">error</span>
+                  <p className="text-[0.8125rem]">{chatbotError}</p>
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-2 border-t border-base-300 pt-3">
+                {chatbotSaved ? (
+                  <span className="text-[0.75rem] text-success">Saved.</span>
+                ) : null}
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={onSaveChatbot}
+                  disabled={savingChatbot}
+                >
+                  {savingChatbot ? (
+                    <>
+                      <span className="loading loading-spinner loading-xs" />
+                      Saving…
+                    </>
+                  ) : (
+                    "Save chatbot settings"
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {/* ── Danger zone ── */}
+        {canDeleteWorkspaceAction ? (
+          <section className="space-y-3" id="danger-zone">
+            <span className="op-section-title text-error">Danger zone</span>
+            <div className="space-y-3">
+              <div className="rounded-box border border-error/20 bg-base-200 p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[0.875rem] font-semibold">Archive workspace</p>
+                    <p className="mt-0.5 text-[0.75rem] text-base-content/55">
+                      Pauses all integrations and automation. Reactivate anytime.
                     </p>
                   </div>
-                )}
-                <form onSubmit={handleCloudSubmit} className="space-y-4 mt-4">
-                  <label className="form-control">
-                    <span className="label">Phone number ID</span>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      value={cloudForm.phoneNumberId}
-                      onChange={(e) =>
-                        setCloudForm((p) => ({
-                          ...p,
-                          phoneNumberId: e.target.value,
-                        }))
-                      }
-                      required
-                      placeholder="e.g. 123456789"
-                    />
-                  </label>
-                  <label className="form-control">
-                    <span className="label">WABA ID</span>
-                    <input
-                      type="text"
-                      className="input input-bordered"
-                      value={cloudForm.wabaId}
-                      onChange={(e) =>
-                        setCloudForm((p) => ({
-                          ...p,
-                          wabaId: e.target.value,
-                        }))
-                      }
-                      required
-                      placeholder="WhatsApp Business Account ID"
-                    />
-                  </label>
-                  <label className="form-control">
-                    <span className="label">Access token (optional, to set or update)</span>
-                    <input
-                      type="password"
-                      className="input input-bordered"
-                      value={cloudForm.accessToken}
-                      onChange={(e) =>
-                        setCloudForm((p) => ({
-                          ...p,
-                          accessToken: e.target.value,
-                        }))
-                      }
-                      placeholder="Leave blank to keep existing"
-                    />
-                  </label>
                   <button
-                    type="submit"
-                    className="btn btn-primary"
-                    disabled={cloudSaving}
+                    type="button"
+                    className="btn btn-sm btn-outline btn-error"
+                    onClick={() => setShowConfirmDelete(true)}
+                    disabled={dangerBusy}
                   >
-                    {cloudSaving ? (
-                      <span className="loading loading-spinner loading-sm" />
+                    {dangerBusy ? (
+                      <>
+                        <span className="loading loading-spinner loading-xs" />
+                        Archiving…
+                      </>
                     ) : (
-                      "Save Cloud API config"
+                      "Archive"
                     )}
                   </button>
-                  {cloudError && (
-                    <div role="alert" className="alert alert-error">
-                      <span>{cloudError}</span>
-                    </div>
-                  )}
-                </form>
+                </div>
+              </div>
+
+              <PurgeContactsClient workspaceName={workspace.name} />
+            </div>
+          </section>
+        ) : null}
+      </div>
+
+      {/* ── Edit workspace modal ── */}
+      <dialog id="edit_workspace_modal" className="modal modal-middle">
+        <div className="modal-box max-w-3xl">
+          <span className="op-label mb-1 block">workspace</span>
+          <h3 className="text-[1.0625rem] font-semibold">Edit workspace</h3>
+          <p className="mt-0.5 text-[0.78125rem] text-base-content/55">
+            Changes apply to the entire workspace.
+          </p>
+
+          {error ? (
+            <div className="mt-4 rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
+              <span className="op-label mb-1 block text-error">error</span>
+              <p className="text-[0.8125rem]">{error}</p>
+            </div>
+          ) : null}
+
+          <details
+            open
+            className="group mt-4 rounded-box border border-base-300 bg-base-200/30"
+          >
+            <summary className="cursor-pointer select-none px-4 py-3 text-[0.8125rem] font-semibold">
+              General
+            </summary>
+            <div className="border-t border-base-300 px-4 py-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <ModalField label="Name" value={form.name} onChange={(v) => setForm((s) => ({ ...s, name: v }))} />
+                <ModalField label="Website" value={form.website} onChange={(v) => setForm((s) => ({ ...s, website: v }))} />
+                <ModalField label="Description" value={form.description} onChange={(v) => setForm((s) => ({ ...s, description: v }))} fullWidth textarea />
+                <ModalField label="Timezone" value={form.timezone} onChange={(v) => setForm((s) => ({ ...s, timezone: v }))} />
+                <ModalField label="Locale" value={form.locale} onChange={(v) => setForm((s) => ({ ...s, locale: v }))} />
+                <ModalField label="Logo URL" value={form.logoUrl} onChange={(v) => setForm((s) => ({ ...s, logoUrl: v }))} fullWidth />
               </div>
             </div>
-          )}
+          </details>
+
+          <details className="group mt-3 rounded-box border border-base-300 bg-base-200/30">
+            <summary className="cursor-pointer select-none px-4 py-3 text-[0.8125rem] font-semibold">
+              Business profile
+            </summary>
+            <div className="border-t border-base-300 px-4 py-3">
+              <div className="grid gap-3 md:grid-cols-2">
+                <ModalField label="Business name" value={form.businessName} onChange={(v) => setForm((s) => ({ ...s, businessName: v }))} />
+                <ModalField label="Industry" value={form.industry} onChange={(v) => setForm((s) => ({ ...s, industry: v }))} />
+                <ModalField label="Country" value={form.country} onChange={(v) => setForm((s) => ({ ...s, country: v }))} />
+                <ModalField label="Phone" value={form.phone} onChange={(v) => setForm((s) => ({ ...s, phone: v }))} />
+                <ModalField label="Billing email" value={form.email} onChange={(v) => setForm((s) => ({ ...s, email: v }))} />
+                <ModalField label="Vertical" value={form.businessVertical} onChange={(v) => setForm((s) => ({ ...s, businessVertical: v }))} />
+                <ModalField label="Business address" value={form.businessAddress} onChange={(v) => setForm((s) => ({ ...s, businessAddress: v }))} fullWidth />
+                <ModalField label="About" value={form.businessAbout} onChange={(v) => setForm((s) => ({ ...s, businessAbout: v }))} fullWidth textarea />
+              </div>
+            </div>
+          </details>
+
+          <div className="modal-action">
+            <button type="button" className="btn btn-ghost btn-sm" onClick={closeEdit}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={onSave}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <span className="loading loading-spinner loading-xs" />
+                  Saving…
+                </>
+              ) : (
+                "Save changes"
+              )}
+            </button>
+          </div>
         </div>
-      )}
+        <form method="dialog" className="modal-backdrop">
+          <button aria-label="close">close</button>
+        </form>
+      </dialog>
+
+      <ConfirmDialog
+        open={showConfirmDelete}
+        title="Archive this workspace?"
+        description="This is a soft-delete, but it will immediately block access."
+        confirmLabel="Archive Workspace"
+        tone="warning"
+        loading={dangerBusy}
+        onConfirm={() => {
+          setShowConfirmDelete(false);
+          onDeleteWorkspace();
+        }}
+        onClose={() => setShowConfirmDelete(false)}
+      />
+    </section>
+  );
+}
+
+/* ── Helper components ────────────────────────────────────────── */
+
+function InfoRow({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string;
+}) {
+  const display = value?.trim();
+  return (
+    <div className="space-y-0.5 px-1">
+      <span className="op-label">{label}</span>
+      <p className="text-[0.8125rem] font-medium text-base-content truncate">
+        {display || "—"}
+      </p>
     </div>
   );
 }
 
-function InfoCard({ label, value }: { label: string; value?: string }) {
+function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="card bg-base-200 shadow-sm">
-      <div className="card-body">
-        <div className="text-sm text-base-content/60">{label}</div>
-        <div className="text-lg font-semibold">{value || "-"}</div>
-      </div>
+    <div className="bg-base-200 px-3 py-2.5">
+      <span className="op-label">{label}</span>
+      <p className="mt-0.5 text-[0.8125rem] font-medium tabular-nums truncate">{value}</p>
     </div>
+  );
+}
+
+function ModalField({
+  label,
+  value,
+  onChange,
+  fullWidth = false,
+  textarea = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  fullWidth?: boolean;
+  textarea?: boolean;
+}) {
+  return (
+    <label className={`form-control w-full ${fullWidth ? "md:col-span-2" : ""}`}>
+      <span className="op-label mb-1">{label}</span>
+      {textarea ? (
+        <textarea
+          className="textarea textarea-bordered textarea-sm w-full"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      ) : (
+        <input
+          className="input input-bordered input-sm w-full"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </label>
   );
 }

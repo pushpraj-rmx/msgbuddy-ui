@@ -7,27 +7,44 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { contactsApi, tagsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { ContactFormModal } from "./ContactFormModal";
 import { CustomFieldsSection } from "./CustomFieldsSection";
 import { NotesSection } from "./NotesSection";
+import { InfoTip } from "@/components/ui/InfoTip";
 import { TagsPicker } from "./TagsPicker";
 
 const CONTACT_QUERY_KEY = (id: string) => ["contacts", id] as const;
 const TAGS_QUERY_KEY = ["tags"] as const;
 
+type TabKey = "details" | "tags" | "notes" | "activity";
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: "details", label: "Details" },
+  { key: "tags", label: "Tags" },
+  { key: "notes", label: "Notes" },
+  { key: "activity", label: "Activity" },
+];
+
 export function ContactDetailClient({
   initialContact,
   currentUserId,
+  meRole,
 }: {
   initialContact: Contact;
   currentUserId?: string;
+  meRole: string;
 }) {
-  const [activeTab, setActiveTab] = useState<"details" | "tags" | "notes" | "activity">("details");
+  const [activeTab, setActiveTab] = useState<TabKey>("details");
   const [editing, setEditing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const canEditContact = roleHasWorkspacePermission(meRole, "contacts.create");
+  const canDeleteContact = roleHasWorkspacePermission(meRole, "contacts.delete");
 
   const queryClient = useQueryClient();
   const { data: contact = initialContact, refetch } = useQuery({
@@ -85,162 +102,176 @@ export function ContactDetailClient({
   const deleteMutation = useMutation({
     mutationFn: () => contactsApi.delete(contact.id),
     onSuccess: () => {
-      if (typeof window !== "undefined") window.location.href = "/contacts";
+      if (typeof window !== "undefined")
+        window.location.href = "/people/contacts";
     },
   });
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Link href="/contacts" className="btn btn-ghost btn-sm">
-          ← Contacts
+      <div>
+        <Link
+          href="/people/contacts"
+          className="font-mono-op text-[0.6875rem] tracking-[0.04em] uppercase text-base-content/55 transition-colors hover:text-primary"
+        >
+          ← People
         </Link>
       </div>
 
-      <div className="rounded-box border border-base-300 bg-base-200 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-semibold">
+      {/* Hero card */}
+      <div className="op-grain rounded-box border border-base-300 bg-base-200">
+        <div className="flex flex-wrap items-start justify-between gap-4 p-5">
+          <div className="min-w-0">
+            <span className="op-label">contact</span>
+            <h1 className="mt-1 text-[1.375rem] font-semibold tracking-[-0.025em]">
               {contact.name || "Unnamed"}
             </h1>
-            <p className="text-sm text-base-content/70">
+            <p className="font-mono-op mt-1 text-[0.78125rem] tabular-nums text-base-content/70">
               {contact.phone}
               {contact.phoneLabel && (
-                <span className="ml-1 text-base-content/50">
-                  ({contact.phoneLabel})
+                <span className="ml-1.5 font-sans text-base-content/50">
+                  · {contact.phoneLabel}
                 </span>
               )}
             </p>
             {contact.email && (
-              <p className="text-sm text-base-content/70">
+              <p className="mt-0.5 text-[0.78125rem] text-base-content/70">
                 {contact.email}
                 {contact.emailLabel && (
-                  <span className="ml-1 text-base-content/50">
-                    ({contact.emailLabel})
+                  <span className="ml-1.5 text-base-content/50">
+                    · {contact.emailLabel}
                   </span>
                 )}
               </p>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-2 text-sm">
-              <span>Blocked</span>
+            <label className="flex items-center gap-2 text-[0.78125rem]">
+              <span className="op-label flex items-center gap-1">
+                Blocked <InfoTip tip="This contact cannot send messages to your workspace" />
+              </span>
               <input
                 type="checkbox"
                 className="toggle toggle-warning toggle-sm"
                 checked={contact.isBlocked}
+                disabled={!canEditContact}
                 onChange={(e) =>
-                  consentMutation.mutate({ isBlocked: e.target.checked })
+                  consentMutation.mutate({
+                    isBlocked: e.target.checked,
+                    isOptedOut: contact.isOptedOut,
+                  })
                 }
               />
             </label>
-            <label className="flex items-center gap-2 text-sm">
-              <span>Opted out</span>
+            <label className="flex items-center gap-2 text-[0.78125rem]">
+              <span className="op-label flex items-center gap-1">
+                Opted out <InfoTip tip="Contact requested to stop receiving messages (compliance)" />
+              </span>
               <input
                 type="checkbox"
                 className="toggle toggle-error toggle-sm"
                 checked={contact.isOptedOut}
+                disabled={!canEditContact}
                 onChange={(e) =>
-                  consentMutation.mutate({ isOptedOut: e.target.checked })
+                  consentMutation.mutate({
+                    isBlocked: contact.isBlocked,
+                    isOptedOut: e.target.checked,
+                  })
                 }
               />
             </label>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => setEditing(true)}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm text-error"
-              onClick={() => setDeleteConfirm(true)}
-            >
-              Delete
-            </button>
+            {canEditContact ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm gap-1"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </button>
+            ) : null}
+            {canDeleteContact ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm gap-1 text-error/70 hover:text-error"
+                onClick={() => setDeleteConfirm(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
 
-      <div role="tablist" className="tabs tabs-box bg-base-200 p-1">
-        <button
-          type="button"
-          role="tab"
-          className={`tab ${activeTab === "details" ? "tab-active" : ""}`}
-          onClick={() => setActiveTab("details")}
-        >
-          Details
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={`tab ${activeTab === "tags" ? "tab-active" : ""}`}
-          onClick={() => setActiveTab("tags")}
-        >
-          Tags
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={`tab ${activeTab === "notes" ? "tab-active" : ""}`}
-          onClick={() => setActiveTab("notes")}
-        >
-          Notes
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={`tab ${activeTab === "activity" ? "tab-active" : ""}`}
-          onClick={() => setActiveTab("activity")}
-        >
-          Activity
-        </button>
-      </div>
-
-      <div className="rounded-box border border-base-300 bg-base-100 p-4">
-        {activeTab === "details" && (
-          <div className="space-y-6">
-            <section>
-              <h2 className="text-sm font-semibold text-base-content/70 mb-2">
-                Custom fields
-              </h2>
+      {/* Operator-style underline tabs */}
+      <div className="rounded-box border border-base-300 bg-base-200">
+        <div className="flex border-b border-base-300 px-1" role="tablist" aria-label="Contact sections">
+          {TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`relative px-3 py-2.5 text-[0.8125rem] font-medium tracking-tight transition-colors ${
+                activeTab === t.key
+                  ? "text-primary after:absolute after:inset-x-0 after:-bottom-[1px] after:h-[2px] after:bg-primary"
+                  : "text-base-content/55 hover:text-base-content"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <div className="p-5">
+          {activeTab === "details" && (
+            <section className="space-y-2">
+              <h2 className="op-section-title">Custom fields</h2>
               <CustomFieldsSection contactId={contact.id} />
             </section>
-          </div>
-        )}
-        {activeTab === "tags" && (
-          <div>
-            <h2 className="text-sm font-semibold text-base-content/70 mb-2">
-              Tags
-            </h2>
-            <TagsPicker
-              tags={tags}
-              allTags={allTags}
-              onAssign={(tagIds) => assignTagsMutation.mutate(tagIds)}
-              onRemove={(tagIds) => removeTagsMutation.mutate(tagIds)}
-            />
-          </div>
-        )}
-        {activeTab === "notes" && (
-          <div>
-            <h2 className="text-sm font-semibold text-base-content/70 mb-2">
-              Notes
-            </h2>
-            <NotesSection
-              contactId={contact.id}
-              currentUserId={currentUserId}
-            />
-          </div>
-        )}
-        {activeTab === "activity" && (
-          <div>
-            <h2 className="text-sm font-semibold text-base-content/70 mb-2">
-              Activity
-            </h2>
-            <ActivityTimeline contactId={contact.id} />
-          </div>
-        )}
+          )}
+          {activeTab === "tags" && (
+            <section className="space-y-2">
+              <h2 className="op-section-title">Tags</h2>
+              {canEditContact ? (
+                <TagsPicker
+                  tags={tags}
+                  allTags={allTags}
+                  onAssign={(tagIds) => assignTagsMutation.mutate(tagIds)}
+                  onRemove={(tagIds) => removeTagsMutation.mutate(tagIds)}
+                />
+              ) : tags.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {tags.map((tag) => (
+                    <span
+                      key={tag.id}
+                      className="op-tag"
+                      style={tag.color ? { borderColor: tag.color, color: tag.color } : undefined}
+                    >
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[0.8125rem] text-base-content/55">No tags assigned.</p>
+              )}
+            </section>
+          )}
+          {activeTab === "notes" && (
+            <section className="space-y-2">
+              <h2 className="op-section-title">Notes</h2>
+              <NotesSection
+                contactId={contact.id}
+                currentUserId={currentUserId}
+              />
+            </section>
+          )}
+          {activeTab === "activity" && (
+            <section className="space-y-2">
+              <h2 className="op-section-title">Activity</h2>
+              <ActivityTimeline contactId={contact.id} />
+            </section>
+          )}
+        </div>
       </div>
 
       {editing && (
@@ -261,43 +292,17 @@ export function ContactDetailClient({
         />
       )}
 
-      {deleteConfirm && (
-        <dialog open className="modal modal-middle">
-          <div className="modal-box">
-            <h3 className="text-lg font-semibold">Delete contact</h3>
-            <p className="mt-2 text-sm text-base-content/70">
-              Soft-delete this contact? They will no longer appear in the list.
-            </p>
-            <div className="modal-action">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                onClick={() => setDeleteConfirm(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn btn-error"
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? (
-                  <span className="loading loading-spinner loading-sm" />
-                ) : (
-                  "Delete"
-                )}
-              </button>
-            </div>
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button
-              type="button"
-              onClick={() => setDeleteConfirm(false)}
-              aria-label="Close"
-            />
-          </form>
-        </dialog>
+      {canDeleteContact && (
+        <ConfirmDialog
+          open={deleteConfirm}
+          title="Delete contact"
+          description="Soft-delete this contact? They will no longer appear in the list."
+          confirmLabel="Delete"
+          tone="danger"
+          loading={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate()}
+          onClose={() => setDeleteConfirm(false)}
+        />
       )}
     </div>
   );

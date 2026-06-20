@@ -3,7 +3,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "@/lib/axios";
 import { endpoints } from "@/lib/endpoints";
-import type { WorkspaceCloudApiConfigResponse } from "@/lib/api";
+import { WhatsAppOnboardingPanel } from "@/components/integrations/WhatsAppOnboardingPanel";
+import { whatsappApi, type WorkspaceCloudApiConfigResponse } from "@/lib/api";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/lib/axios";
+
+const isDev = process.env.NODE_ENV === "development";
+
+function devLog(...args: unknown[]) {
+  if (isDev) console.log(...args);
+}
+
+function isMultiNumberPhoneIdRequiredMessage(message: string | null | undefined): boolean {
+  if (!message || typeof message !== "string") return false;
+  return message.includes("phone_number_id is required when the WABA has multiple");
+}
 
 const APP_ID = "303289632797814";
 const CONFIG_ID = "1592612271863244";
@@ -41,12 +55,17 @@ type ExchangeCodePayload = {
   code: string;
   waba_id: string;
   business_id?: string;
+  /** Optional: from Embedded Signup FINISH when user selected a number */
+  phone_number_id?: string;
 };
 
 type EmbeddedSignupContext = {
   waba_id: string | null;
   business_id: string | null;
+  phone_number_id: string | null;
 };
+
+type StatusErrorBody = { statusCode?: number; message?: string };
 
 function isConnected(config: WorkspaceCloudApiConfigResponse | null): boolean {
   return config != null && (config.status === "ACTIVE" || config.hasAccessToken === true);
@@ -54,8 +73,14 @@ function isConnected(config: WorkspaceCloudApiConfigResponse | null): boolean {
 
 export function WhatsAppIntegrationPage({
   initialCloudApiConfig = null,
+  variant = "single",
+  atLimit = false,
+  onConnected,
 }: {
   initialCloudApiConfig?: WorkspaceCloudApiConfigResponse | null;
+  variant?: "single" | "connectOnly";
+  atLimit?: boolean;
+  onConnected?: () => void;
 }) {
   const [status, setStatus] = useState<ConnectionStatus>(() =>
     isConnected(initialCloudApiConfig) ? "connected" : "idle"
@@ -79,47 +104,156 @@ export function WhatsAppIntegrationPage({
   const [signupContext, setSignupContext] = useState<EmbeddedSignupContext>({
     waba_id: null,
     business_id: null,
+    phone_number_id: null,
   });
   const pendingCodeRef = useRef<string | null>(null);
   const signupContextRef = useRef(signupContext);
-  signupContextRef.current = signupContext;
+  const lastExchangeRef = useRef<{
+    code: string;
+    waba: string;
+    business: string | null;
+    phoneNumberId?: string;
+  } | null>(null);
+  const [needsPhoneNumberId, setNeedsPhoneNumberId] = useState(false);
+  const [retryPhoneNumberId, setRetryPhoneNumberId] = useState("");
 
-  // Clear "not finished yet" error once we have waba_id (e.g. FINISH arrived after the click)
+  const queryClient = useQueryClient();
+
+  const connectionQuery = useQuery({
+    queryKey: ["whatsapp", "connection"],
+    queryFn: () => whatsappApi.getConnection(),
+    enabled: status === "connected",
+    staleTime: 15_000,
+    retry: 1,
+  });
+
+  const phoneNumberId =
+    connectedDisplay.phoneNumberId ||
+    connectionQuery.data?.phoneNumberId ||
+    initialCloudApiConfig?.phoneNumberId ||
+    "";
+
+  const phoneStatusQuery = useQuery({
+    queryKey: ["whatsapp", "phone-status", phoneNumberId],
+    queryFn: () => whatsappApi.fetchPhoneStatus(phoneNumberId),
+    enabled: status === "connected" && Boolean(phoneNumberId.trim()),
+    staleTime: 30_000,
+    retry: 1,
+  });
+
+  const performExchange = useCallback(
+    (
+      code: string,
+      waba: string,
+      business: string | null,
+      phoneNumberIdOpt?: string | null
+    ) => {
+      setStatus("loading");
+      setNeedsPhoneNumberId(false);
+      const payload: ExchangeCodePayload = {
+        code,
+        waba_id: waba,
+        ...(business ? { business_id: business } : {}),
+        ...(phoneNumberIdOpt?.trim()
+          ? { phone_number_id: phoneNumberIdOpt.trim() }
+          : {}),
+      };
+      lastExchangeRef.current = {
+        code,
+        waba,
+        business,
+        phoneNumberId: phoneNumberIdOpt?.trim() || undefined,
+      };
+      devLog("[WhatsApp] POST /whatsapp/exchange-code (authorization code not logged)");
+      api
+        .post(endpoints.whatsapp.exchangeCode, payload)
+        .then(async (exchangeResponse) => {
+          const body = exchangeResponse?.data as {
+            phoneNumberId?: string;
+            wabaId?: string;
+          };
+          setConnectedDisplay({
+            wabaId: body?.wabaId ?? waba,
+            phoneNumberId: body?.phoneNumberId,
+          });
+          setStatus("connected");
+          setNeedsPhoneNumberId(false);
+          setRetryPhoneNumberId("");
+          await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connections"] });
+          await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connection"] });
+          onConnected?.();
+        })
+        .catch((error: unknown) => {
+          const details = (error as { response?: { data?: unknown; status?: number } })
+            ?.response;
+          const backendMessage =
+            (details?.data as { message?: string } | undefined)?.message ?? null;
+          if (isDev) {
+            devLog("[WhatsApp] exchange-code failed", details?.status);
+          }
+          if (
+            details?.status === 400 &&
+            isMultiNumberPhoneIdRequiredMessage(backendMessage)
+          ) {
+            setNeedsPhoneNumberId(true);
+            setExchangeError(
+              `${backendMessage} Paste the Meta phone number ID for the number you want, then retry. OAuth codes may be single-use — if retry fails, use Connect with Facebook again.`
+            );
+            setStatus("idle");
+            return;
+          }
+          setExchangeError(
+            typeof backendMessage === "string"
+              ? backendMessage
+              : "Failed to connect. Please try again."
+          );
+          setStatus("error");
+        });
+    },
+    [queryClient, onConnected]
+  );
+
   useEffect(() => {
-    if (signupContext.waba_id?.trim() && exchangeError?.includes("Embedded Signup not finished yet")) {
-      setExchangeError(null);
-    }
-  }, [signupContext.waba_id, exchangeError]);
+    signupContextRef.current = signupContext;
+  }, [signupContext]);
 
-  // Load Facebook JS SDK asynchronously (do not remove fbAsyncInit in cleanup so script can call it after load)
+  // Load Facebook JS SDK
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    // Already loaded
     if (window.FB) {
       setSdkReady(true);
       return;
     }
+
+    // Set init callback (must be set before script loads)
     window.fbAsyncInit = () => {
-      if (window.FB) {
-        window.FB.init({
-          appId: APP_ID,
-          xfbml: true,
-          version: "v24.0",
-        });
-      }
+      window.FB?.init({ appId: APP_ID, xfbml: false, version: "v24.0" });
       setSdkReady(true);
     };
+
+    // If script tag already in DOM (re-mount / HMR), just poll for FB
+    const existingScript = document.querySelector(`script[src="${FB_SDK_URL}"]`);
+    if (existingScript) {
+      const poll = setInterval(() => {
+        if (window.FB) {
+          clearInterval(poll);
+          setSdkReady(true);
+        }
+      }, 200);
+      return () => clearInterval(poll);
+    }
+
+    // Insert the script
     const script = document.createElement("script");
     script.src = FB_SDK_URL;
     script.async = true;
-    script.defer = true;
-    script.crossOrigin = "anonymous";
-    script.setAttribute("data-app-id", APP_ID);
-    script.onload = () => {
-      if (window.FB) setSdkReady(true);
+    script.onerror = () => {
+      console.error("[WhatsApp] Failed to load Facebook SDK from connect.facebook.net");
     };
-    const firstScript = document.getElementsByTagName("script")[0];
-    firstScript?.parentNode?.insertBefore(script, firstScript);
-  }, []);
+    document.head.appendChild(script);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Meta Embedded Signup session events
   useEffect(() => {
@@ -138,7 +272,7 @@ export function WhatsAppIntegrationPage({
             })()
           : rawData;
       if ((data as { type?: string } | null)?.type === "WA_EMBEDDED_SIGNUP") {
-        console.log("[WhatsApp][Meta Event] WA_EMBEDDED_SIGNUP:", data);
+        devLog("[WhatsApp][Meta Event] WA_EMBEDDED_SIGNUP type received");
 
         const eventName =
           (data as { event?: string })?.event ||
@@ -152,109 +286,109 @@ export function WhatsAppIntegrationPage({
             (data as { business_id?: string })?.business_id ||
             (data as { data?: { business_id?: string } })?.data?.business_id ||
             null;
+          const finishPhoneNumberId =
+            (data as { phone_number_id?: string })?.phone_number_id ||
+            (data as { data?: { phone_number_id?: string } })?.data?.phone_number_id ||
+            null;
 
           setSignupContext({
             waba_id: wabaId,
             business_id: businessId,
+            phone_number_id: finishPhoneNumberId,
           });
           setExchangeError(null);
-          console.log("[WhatsApp] Embedded Signup FINISH captured:", {
-            waba_id: wabaId,
-            business_id: businessId,
-          });
+          devLog("[WhatsApp] Embedded Signup FINISH (waba_id / business_id captured; phone_number_id not logged)");
 
           const wabaIdTrimmed = wabaId?.trim() || null;
-          const runExchange = (code: string, waba: string, business: string | null) => {
-            setStatus("loading");
-            const payload: ExchangeCodePayload = {
-              code,
-              waba_id: waba,
-              ...(business ? { business_id: business } : {}),
-            };
-            console.log("[WhatsApp] Exchanging code with backend:", payload);
-            api
-              .post(endpoints.whatsapp.exchangeCode, payload)
-              .then((exchangeResponse) => {
-                console.log(
-                  "[WhatsApp] Backend /whatsapp/exchange-code success:",
-                  exchangeResponse?.data
-                );
-                setConnectedDisplay({ wabaId: waba });
-                setStatus("connected");
-              })
-              .catch((error: unknown) => {
-                const details = (error as { response?: { data?: unknown; status?: number } })
-                  ?.response;
-                const backendMessage =
-                  (details?.data as { message?: string } | undefined)?.message ?? null;
-                console.error("[WhatsApp] Backend /whatsapp/exchange-code failed:", {
-                  status: details?.status,
-                  data: details?.data,
-                  error,
-                });
-                setExchangeError(
-                  typeof backendMessage === "string" ? backendMessage : "Failed to connect. Please try again."
-                );
-                setStatus("error");
-              });
-          };
 
+          // If we already have a pending auth code from the FB.login callback
+          // (code arrived before FINISH event), use it now.
           const pendingCode = pendingCodeRef.current;
           if (pendingCode && wabaIdTrimmed) {
             pendingCodeRef.current = null;
-            runExchange(pendingCode, wabaIdTrimmed, businessId ?? null);
-          } else if (wabaIdTrimmed && window.FB) {
-            setStatus("loading");
-            setExchangeError(null);
-            console.log("[WhatsApp] FINISH received with waba_id but no pending code; opening FB.login to get code.");
-            window.FB.login(
-              (response) => {
-                const code = response.authResponse?.code;
-                if (!code) {
-                  setStatus("idle");
-                  if (response.status === "unknown" || !response.authResponse) {
-                    setExchangeError("Connection cancelled. Click Connect with Facebook to try again.");
-                  } else {
-                    setExchangeError("Facebook login did not return a code. Please try again.");
-                  }
-                  return;
-                }
-                runExchange(code, wabaIdTrimmed, businessId ?? null);
-              },
-              {
-                config_id: CONFIG_ID,
-                response_type: "code",
-                override_default_response_type: true,
-                extras: { setup: {} },
-              }
+            performExchange(
+              pendingCode,
+              wabaIdTrimmed,
+              businessId ?? null,
+              finishPhoneNumberId
             );
           }
+          // Do NOT open a second FB.login popup here — the original FB.login
+          // callback from handleConnect will fire with the auth code.
+          // Opening another popup causes browsers to block it.
         }
       }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
+  }, [performExchange]);
 
   const handleConnect = useCallback(() => {
-    if (!window.FB || !sdkReady) return;
+    if (!window.FB) {
+      // Remove any existing failed script tag and try fresh
+      const existing = document.querySelector(`script[src="${FB_SDK_URL}"]`);
+      if (existing) existing.remove();
+
+      console.warn("[WhatsApp] FB SDK not available — loading on demand");
+      setExchangeError("Loading Facebook SDK…");
+      window.fbAsyncInit = () => {
+        if (window.FB) {
+          window.FB.init({ appId: APP_ID, xfbml: true, version: "v24.0" });
+        }
+        setSdkReady(true);
+        setExchangeError(null);
+      };
+      const s = document.createElement("script");
+      s.src = FB_SDK_URL;
+      s.async = true;
+      s.crossOrigin = "anonymous";
+      s.onload = () => {
+        // fbAsyncInit should fire, but as a safety net:
+        setTimeout(() => {
+          if (window.FB && !sdkReady) {
+            window.FB.init({ appId: APP_ID, xfbml: true, version: "v24.0" });
+            setSdkReady(true);
+            setExchangeError(null);
+          }
+        }, 500);
+      };
+      s.onerror = () => setExchangeError("Facebook SDK failed to load. Disable ad blockers and refresh the page.");
+      document.head.appendChild(s);
+      return;
+    }
     setCancelMessage(null);
     setExchangeError(null);
+    setNeedsPhoneNumberId(false);
+    setRetryPhoneNumberId("");
     setStatus("loading");
-    console.log("[WhatsApp] Opening Facebook login popup...");
+    devLog("[WhatsApp] Opening Facebook login popup");
     window.FB.login(
       (response) => {
-        console.log("[WhatsApp][FB.login] Callback response:", response);
+        devLog("[WhatsApp] FB.login callback", { status: response.status, hasCode: !!response.authResponse?.code });
         const code = response.authResponse?.code;
 
         if (!code) {
-          setStatus("idle");
-          if (response.status === "unknown" || !response.authResponse) {
+          // The Embedded Signup FINISH event may have already fired with waba_id.
+          // If so, we just don't have a code yet — don't show an error.
+          // Give the FINISH handler a chance to arrive and retry.
+          const ctx = signupContextRef.current;
+          if (ctx.waba_id) {
+            // FINISH already arrived but no code — the user completed signup
+            // but FB.login didn't return a code. This is a known Meta quirk.
+            // Wait briefly, then show a clear message.
+            devLog("[WhatsApp] FB.login returned no code but FINISH already fired — waiting for retry");
+            setStatus("idle");
+            setExchangeError(
+              "Meta login completed but did not return an authorization code. Please click Connect with Facebook again."
+            );
+          } else if (response.status === "unknown" || !response.authResponse) {
+            // User explicitly cancelled or closed the popup early
+            setStatus("idle");
             setCancelMessage("Connection cancelled.");
-            console.log("[WhatsApp] Connection cancelled or failed.", response);
           } else {
-            setExchangeError("Facebook login did not return a code.");
-            console.warn("[WhatsApp] Meta login did not return auth code.", response);
+            // Unexpected: FB returned a non-unknown status but no code
+            setStatus("idle");
+            setExchangeError("Facebook login did not return a code. Please try again.");
           }
           return;
         }
@@ -262,53 +396,19 @@ export function WhatsAppIntegrationPage({
         const ctx = signupContextRef.current;
         const wabaId = ctx.waba_id?.trim() || null;
         if (!wabaId) {
+          // Code arrived before FINISH event — store it and wait for FINISH
           pendingCodeRef.current = code;
-          setStatus("idle");
-          setExchangeError(
-            "Embedded Signup not finished yet. Complete the Meta flow first—or if you just did, connection will complete automatically when it finishes."
-          );
-          console.warn("[WhatsApp] Got code but waba_id not set yet; storing code until FINISH.", {
-            signupContext: ctx,
-          });
+          devLog("[WhatsApp] Code received, waiting for FINISH event with waba_id");
+          // Don't show an error — the FINISH handler will pick up the pending code
           return;
         }
 
-        const payload: ExchangeCodePayload = {
+        performExchange(
           code,
-          waba_id: wabaId,
-          ...(ctx.business_id ? { business_id: ctx.business_id } : {}),
-        };
-        console.log("[WhatsApp] Sending exchange payload (both code and waba_id):", payload);
-        api
-          .post(endpoints.whatsapp.exchangeCode, payload)
-          .then((exchangeResponse) => {
-            console.log(
-              "[WhatsApp] Backend /whatsapp/exchange-code success:",
-              exchangeResponse?.data
-            );
-            setConnectedDisplay({ wabaId: wabaId });
-            setStatus("connected");
-          })
-          .catch((error: unknown) => {
-            const details = (error as { response?: { data?: unknown; status?: number } })
-              ?.response;
-            const backendMessage =
-              (details?.data as { message?: string } | undefined)?.message ??
-              null;
-            console.error("[WhatsApp] Backend /whatsapp/exchange-code failed:", {
-              status: details?.status,
-              data: details?.data,
-              error,
-            });
-            if (details?.status === 400 && backendMessage) {
-              setExchangeError(backendMessage);
-            } else if (backendMessage) {
-              setExchangeError(backendMessage);
-            } else {
-              setExchangeError("Failed to connect. Please try again.");
-            }
-            setStatus("error");
-          });
+          wabaId,
+          ctx.business_id ?? null,
+          ctx.phone_number_id?.trim() ? ctx.phone_number_id : null
+        );
       },
       {
         config_id: CONFIG_ID,
@@ -317,90 +417,268 @@ export function WhatsAppIntegrationPage({
         extras: { setup: {} },
       }
     );
-  }, [sdkReady]);
+  }, [performExchange, sdkReady]);
 
-  if (status === "connected") {
+  const handleRetryExchangeWithPhoneId = useCallback(() => {
+    const last = lastExchangeRef.current;
+    if (!last) return;
+    const extra =
+      retryPhoneNumberId.trim() || last.phoneNumberId || signupContextRef.current.phone_number_id?.trim();
+    performExchange(last.code, last.waba, last.business, extra || null);
+  }, [performExchange, retryPhoneNumberId]);
+
+  if (variant === "connectOnly") {
+    if (atLimit) {
+      return (
+        <p className="text-[0.75rem] text-warning">
+          Phone number limit reached. Upgrade your plan to connect more.
+        </p>
+      );
+    }
+
     return (
-      <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-semibold">WhatsApp Integration</h1>
-          <p className="text-sm text-base-content/60">
-            Manage your WhatsApp Business connection.
-          </p>
-        </div>
-        <div className="card card-border bg-base-200">
-          <div className="card-body">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="badge badge-success badge-lg">
-                Connected
-              </span>
-              <span className="text-base-content/80">
-                {connectedDisplay.phoneNumberId || connectedDisplay.wabaId || "WhatsApp Business linked"}
-              </span>
-            </div>
-            <p className="text-sm text-base-content/60">
-              Your WhatsApp Business account is linked. Connection state is loaded from the server on refresh.
+      <div className="space-y-2">
+        {cancelMessage && <p className="text-[0.75rem] text-warning">{cancelMessage}</p>}
+        {exchangeError && <p className="text-[0.75rem] text-error">{exchangeError}</p>}
+
+        {needsPhoneNumberId ? (
+          <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
+            <p className="text-[0.75rem] text-base-content/65">
+              This WABA has multiple numbers. Enter the phone number ID you want, then retry.
             </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="form-control flex-1 min-w-[200px] max-w-xs">
+                <span className="op-label mb-1">Phone number ID</span>
+                <input
+                  type="text"
+                  className="input input-bordered input-sm font-mono"
+                  value={retryPhoneNumberId}
+                  onChange={(e) => setRetryPhoneNumberId(e.target.value.trim())}
+                  placeholder="From Meta Business Suite"
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleRetryExchangeWithPhoneId}
+                disabled={!retryPhoneNumberId.trim()}
+              >
+                Retry
+              </button>
+            </div>
           </div>
-        </div>
+        ) : null}
+
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={handleConnect}
+          disabled={status === "loading"}
+        >
+          {status === "loading" ? (
+            <>
+              <span className="loading loading-spinner loading-xs" />
+              Connecting…
+            </>
+          ) : (
+            "Connect with Facebook"
+          )}
+        </button>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">WhatsApp Integration</h1>
-        <p className="text-sm text-base-content/60">
-          Connect your WhatsApp Business account to start messaging customers.
-        </p>
-      </div>
-      <div className="card card-border bg-base-200">
-        <div className="card-body">
-          <h2 className="card-title">Connect WhatsApp Business</h2>
-          <p className="text-base-content/80">
-            Connect your WhatsApp Business account to start messaging customers.
+  /* ── Single variant: connected state ── */
+  if (status === "connected") {
+    const queryError = phoneStatusQuery.error as ApiError | null;
+    const errorStatus = queryError?.status;
+    const errorMessage =
+      (queryError?.data as StatusErrorBody | undefined)?.message ||
+      queryError?.message ||
+      "Failed to load phone number status.";
+
+    const statusData = phoneStatusQuery.data;
+    const displayPhone = statusData?.displayPhoneNumber || phoneNumberId || "Unknown";
+
+    return (
+      <div className="space-y-5">
+        <div>
+          <span className="op-label">integration</span>
+          <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">WhatsApp</h1>
+          <p className="mt-0.5 text-[0.8125rem] text-base-content/60">
+            Manage your WhatsApp Business connection.
           </p>
-          <div className="text-xs text-base-content/60">
-            <div>
-              Embedded Signup waba_id:{" "}
-              <span className="font-medium">
-                {signupContext.waba_id ?? "Not captured yet"}
-              </span>
-            </div>
-            <div>
-              Embedded Signup business_id:{" "}
-              <span className="font-medium">
-                {signupContext.business_id ?? "Not captured yet"}
-              </span>
-            </div>
+        </div>
+
+        {/* Connection status */}
+        <div className="rounded-box border border-base-300 bg-base-200 p-4 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="op-tag op-tag-ok">Connected</span>
+            <span className="text-[0.8125rem] font-medium tabular-nums">
+              {connectedDisplay.phoneNumberId || connectedDisplay.wabaId || "WhatsApp Business linked"}
+            </span>
           </div>
-          {cancelMessage && (
-            <p className="text-sm text-warning">{cancelMessage}</p>
-          )}
-          {exchangeError && <p className="text-sm text-error">{exchangeError}</p>}
-          <div className="card-actions">
+
+          {/* Phone status */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="op-label">phone status</span>
             <button
               type="button"
-              className="btn btn-primary"
-              onClick={handleConnect}
-              disabled={!sdkReady || status === "loading"}
+              className="btn btn-ghost btn-xs"
+              onClick={() => phoneStatusQuery.refetch()}
+              disabled={!phoneStatusQuery.isFetched || phoneStatusQuery.isFetching}
             >
-              {status === "loading" ? (
-                <>
-                  <span className="loading loading-spinner loading-sm" />
-                  Connecting…
-                </>
+              {phoneStatusQuery.isFetching ? (
+                <span className="loading loading-spinner loading-xs" />
               ) : (
-                "Connect with Facebook"
+                "Refresh"
               )}
             </button>
           </div>
+
+          {!phoneNumberId?.trim() ? (
+            <p className="text-[0.75rem] text-warning">
+              No phone number ID found. Refresh after connecting.
+            </p>
+          ) : phoneStatusQuery.isLoading ? (
+            <div className="flex gap-2">
+              <div className="skeleton h-5 w-24" />
+              <div className="skeleton h-5 w-20" />
+            </div>
+          ) : errorStatus === 404 ? (
+            <p className="text-[0.75rem] text-base-content/50">Not connected.</p>
+          ) : errorStatus === 422 ? (
+            <p className="text-[0.75rem] text-warning">{errorMessage}</p>
+          ) : phoneStatusQuery.isError ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[0.75rem] text-error/70">{errorMessage}</p>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => phoneStatusQuery.refetch()}
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              <div className="space-y-0.5">
+                <span className="op-label">phone</span>
+                <p className="text-[0.8125rem] font-medium tabular-nums">{displayPhone}</p>
+              </div>
+              {statusData?.verifiedName && (
+                <div className="space-y-0.5">
+                  <span className="op-label">verified name</span>
+                  <p className="text-[0.8125rem] font-medium">{statusData.verifiedName}</p>
+                </div>
+              )}
+              <div className="flex flex-wrap items-end gap-1.5 pb-0.5">
+                {statusData?.qualityRating && (
+                  <span
+                    className={
+                      statusData.qualityRating === "GREEN"
+                        ? "op-tag op-tag-ok"
+                        : statusData.qualityRating === "RED"
+                          ? "op-tag op-tag-danger"
+                          : "op-tag op-tag-warn"
+                    }
+                  >
+                    {statusData.qualityRating}
+                  </span>
+                )}
+                {statusData?.verificationStatus && (
+                  <span className="op-tag">{statusData.verificationStatus}</span>
+                )}
+                {statusData?.status && (
+                  <span className="op-tag">{statusData.status}</span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
+
+        {phoneNumberId?.trim() ? (
+          <WhatsAppOnboardingPanel
+            phoneNumberId={phoneNumberId}
+            registrationPending={connectionQuery.data?.registrationPending}
+            metaPhoneStatus={connectionQuery.data?.metaPhoneStatus ?? undefined}
+            metaVerificationStatus={connectionQuery.data?.metaVerificationStatus ?? undefined}
+          />
+        ) : null}
       </div>
-      {status === "error" && (
-        <div role="alert" className="alert alert-error">
-          <span>Failed to connect. Please try again.</span>
+    );
+  }
+
+  /* ── Single variant: idle / error state ── */
+  return (
+    <div className="space-y-5">
+      <div>
+        <span className="op-label">integration</span>
+        <h1 className="mt-1 text-xl font-semibold tracking-[-0.01em]">WhatsApp</h1>
+        <p className="mt-0.5 text-[0.8125rem] text-base-content/60">
+          Connect your WhatsApp Business account to start messaging.
+        </p>
+      </div>
+
+      <div className="op-grain relative rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-3">
+        <span className="op-label">connect</span>
+        <p className="text-[0.875rem] font-semibold">Connect WhatsApp Business</p>
+        <p className="text-[0.75rem] text-base-content/55">
+          Link your WhatsApp Business account via Meta Embedded Signup.
+        </p>
+
+        {cancelMessage && <p className="text-[0.75rem] text-warning">{cancelMessage}</p>}
+        {exchangeError && <p className="text-[0.75rem] text-error">{exchangeError}</p>}
+
+        {needsPhoneNumberId ? (
+          <div className="rounded-box border border-base-300 bg-base-100 p-3 space-y-2">
+            <p className="text-[0.75rem] text-base-content/65">
+              This WABA has multiple numbers. Enter the phone number ID you want, then retry.
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="form-control flex-1 min-w-[200px] max-w-xs">
+                <span className="op-label mb-1">Phone number ID</span>
+                <input
+                  type="text"
+                  className="input input-bordered input-sm font-mono"
+                  value={retryPhoneNumberId}
+                  onChange={(e) => setRetryPhoneNumberId(e.target.value.trim())}
+                  placeholder="From Meta Business Suite"
+                />
+              </label>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={handleRetryExchangeWithPhoneId}
+                disabled={!retryPhoneNumberId.trim()}
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={handleConnect}
+          disabled={status === "loading"}
+        >
+          {status === "loading" ? (
+            <>
+              <span className="loading loading-spinner loading-xs" />
+              Connecting…
+            </>
+          ) : (
+            "Connect with Facebook"
+          )}
+        </button>
+      </div>
+
+      {status === "error" && exchangeError && (
+        <div className="rounded-box border-l-2 border border-error/30 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[0.8125rem]">{exchangeError}</p>
         </div>
       )}
     </div>

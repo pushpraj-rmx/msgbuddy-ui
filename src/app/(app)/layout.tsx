@@ -1,13 +1,38 @@
 import { AppLayout } from "@/components/AppLayout";
-import { serverFetch, type MeResponse } from "@/lib/api";
+import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
+import { ReloadButton } from "@/components/ui/ReloadButton";
+import { unstable_rethrow } from "next/navigation";
 
 export default async function AppGroupLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const me = await serverFetch<MeResponse>(endpoints.auth.me);
+  let me: MeResponse;
+  try {
+    me = await serverFetch<MeResponse>(endpoints.auth.me);
+  } catch (err: unknown) {
+    unstable_rethrow(err);
+    const message =
+      err instanceof Error ? err.message : "Failed to load current user.";
+    return (
+      <div className="min-h-[60dvh] flex items-center justify-center p-6">
+        <div className="max-w-md w-full space-y-4 card bg-base-100 border border-base-300 p-6">
+          <div className="space-y-1">
+            <h1 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">Service temporarily unavailable</h1>
+            <p className="text-sm text-base-content/70">
+              The server returned an error. Your session is fine — this is not a
+              logout. Please wait a moment and try again.
+            </p>
+          </div>
+          <p className="font-mono text-xs text-base-content/40">{message}</p>
+          <ReloadButton />
+        </div>
+      </div>
+    );
+  }
 
   return <AppLayout me={me}>{children}</AppLayout>;
 }

@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import {
   useAssignChannelAccount,
-  useBspCredentials,
   useChannelAccounts,
+  useConnectedClientBusinesses,
+  usePlatformAuditLogs,
   usePlatformUsageEvents,
   usePlatformUser,
+  usePlatformUserLoginHistory,
   usePlatformUsers,
   usePlatformWebhookLogs,
   usePlatformWorkspace,
@@ -14,25 +17,19 @@ import {
   useReactivateWorkspace,
   useSuspendWorkspace,
   useUpdatePlatformRole,
-  useUpsertBspCredential,
 } from "@/hooks/use-platform";
 import { isSuperAdmin } from "@/lib/platform-access";
-import type { PlatformBsp, PlatformRole, PlatformWorkspaceStatus } from "@/lib/types";
+import type { PlatformRole, PlatformWorkspaceStatus } from "@/lib/types";
+import { getApiError } from "@/lib/api-error";
 
 type TabKey =
   | "workspaces"
   | "users"
   | "webhookLogs"
   | "usageEvents"
-  | "bspCredentials"
-  | "channelAccounts";
-
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message
-    ? String((err as { response?: { data?: { message?: string } } }).response?.data?.message)
-    : "Something went wrong.";
-}
+  | "auditLogs"
+  | "channelAccounts"
+  | "connectedClientBusinesses";
 
 function formatDate(value?: string | null): string {
   if (!value) return "-";
@@ -50,7 +47,6 @@ const WORKSPACE_STATUSES: PlatformWorkspaceStatus[] = [
 ];
 
 const PLATFORM_ROLES: PlatformRole[] = ["SUPERADMIN", "SUPPORT", "NONE"];
-const BSPS: PlatformBsp[] = ["TWILIO", "INTERAKT", "AISENSY", "OTHER"];
 
 export function PlatformConsoleClient({
   platformRole,
@@ -66,14 +62,18 @@ export function PlatformConsoleClient({
             { key: "users", label: "Users" },
             { key: "webhookLogs", label: "Webhook Logs" },
             { key: "usageEvents", label: "Usage Events" },
-            { key: "bspCredentials", label: "BSP Credentials" },
             { key: "channelAccounts", label: "Channel Accounts" },
+            {
+              key: "connectedClientBusinesses",
+              label: "Client Businesses",
+            },
           ] as Array<{ key: TabKey; label: string }>)
         : ([
             { key: "workspaces", label: "Workspaces" },
             { key: "users", label: "Users" },
             { key: "webhookLogs", label: "Webhook Logs" },
             { key: "usageEvents", label: "Usage Events" },
+            { key: "auditLogs", label: "Audit Logs" },
           ] as Array<{ key: TabKey; label: string }>),
     [superAdmin]
   );
@@ -81,12 +81,16 @@ export function PlatformConsoleClient({
 
   return (
     <div className="space-y-4">
-      <div role="tablist" className="tabs tabs-box">
+      <div role="tablist" className="flex gap-1 border-b border-base-300 overflow-x-auto">
         {tabs.map((entry) => (
           <button
             key={entry.key}
             role="tab"
-            className={`tab ${tab === entry.key ? "tab-active" : ""}`}
+            className={`relative px-3 py-2 font-mono-op text-[0.6875rem] tracking-[0.08em] uppercase transition-colors whitespace-nowrap ${
+              tab === entry.key
+                ? "text-primary after:absolute after:inset-x-0 after:-bottom-px after:h-[2px] after:bg-primary"
+                : "text-base-content/55 hover:text-base-content"
+            }`}
             onClick={() => setTab(entry.key)}
           >
             {entry.label}
@@ -98,8 +102,11 @@ export function PlatformConsoleClient({
       {tab === "users" && <UsersTab superAdmin={superAdmin} />}
       {tab === "webhookLogs" && <WebhookLogsTab />}
       {tab === "usageEvents" && <UsageEventsTab />}
-      {tab === "bspCredentials" && superAdmin && <BspCredentialsTab />}
+      {tab === "auditLogs" && <AuditLogsTab />}
       {tab === "channelAccounts" && superAdmin && <ChannelAccountsTab />}
+      {tab === "connectedClientBusinesses" && superAdmin && (
+        <ConnectedClientBusinessesTab />
+      )}
     </div>
   );
 }
@@ -111,6 +118,7 @@ function WorkspacesTab() {
   const [offset, setOffset] = useState(0);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
+  const [suspendWorkspaceId, setSuspendWorkspaceId] = useState<string | null>(null);
 
   const list = usePlatformWorkspaces({
     search: search.trim() || undefined,
@@ -119,14 +127,31 @@ function WorkspacesTab() {
     offset,
   });
   const detail = usePlatformWorkspace(selectedWorkspaceId);
+  const channelAccounts = useChannelAccounts();
   const suspend = useSuspendWorkspace();
   const reactivate = useReactivateWorkspace();
 
+  const numbersByWorkspaceId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const a of channelAccounts.data ?? []) {
+      const wid = (a.workspaceId ?? "").trim();
+      if (!wid) continue;
+      const label =
+        (a.externalId ?? "").trim() ||
+        (a.displayName ?? "").trim() ||
+        a.id;
+      const next = map.get(wid) ?? [];
+      next.push(label);
+      map.set(wid, next);
+    }
+    return map;
+  }, [channelAccounts.data]);
+
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Workspace Filters</h2>
+      <div className="card bg-base-100 border border-base-300">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Workspace Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
               className="input input-bordered"
@@ -171,41 +196,59 @@ function WorkspacesTab() {
       </div>
 
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {mutationError && (
-        <div role="alert" className="alert alert-error">
-          <span>{mutationError}</span>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[0.8125rem] text-base-content">{mutationError}</p>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
           <thead>
-            <tr>
-              <th>Name</th>
-              <th>Status</th>
-              <th>Suspended</th>
-              <th>Members</th>
-              <th>Messages</th>
-              <th></th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Name</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Plan</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Expiry</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Numbers</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Status</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Suspended</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium">Members</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium">Messages</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((workspace) => (
-              <tr key={workspace.id}>
-                <td>
+              <tr key={workspace.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="px-3 py-3">
                   <div className="font-medium">{workspace.name}</div>
-                  <div className="text-xs text-base-content/60">{workspace.slug}</div>
+                  <div className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/50">{workspace.slug}</div>
                 </td>
-                <td>{workspace.status}</td>
-                <td>{workspace.isSuspended ? "Yes" : "No"}</td>
-                <td>{workspace._count.workspaceMembers}</td>
-                <td>{workspace._count.messages}</td>
-                <td>
-                  <div className="flex flex-wrap gap-1">
+                <td className="px-3 py-3 text-base-content/80">{workspace.plan || "—"}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(workspace.planExpiresAt ?? null)}</td>
+                <td className="px-3 py-3">
+                  <div className="font-mono-op text-[0.6875rem] text-base-content/70">
+                    {(numbersByWorkspaceId.get(workspace.id) ?? []).slice(0, 2).join(", ") || "—"}
+                    {(numbersByWorkspaceId.get(workspace.id) ?? []).length > 2 && (
+                      <span className="ml-1">
+                        +{(numbersByWorkspaceId.get(workspace.id) ?? []).length - 2} more
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td className="px-3 py-3">
+                  <span className={`op-tag ${workspace.status === "ACTIVE" ? "op-tag-ok" : ""}`}>{workspace.status}</span>
+                </td>
+                <td className="px-3 py-3">
+                  {workspace.isSuspended ? <span className="op-tag op-tag-warn">Yes</span> : <span className="op-tag">No</span>}
+                </td>
+                <td className="font-mono-op px-3 py-3 text-right tabular-nums">{workspace._count.workspaceMembers}</td>
+                <td className="font-mono-op px-3 py-3 text-right tabular-nums">{workspace._count.messages.toLocaleString()}</td>
+                <td className="px-3 py-3 text-right">
+                  <div className="flex flex-wrap justify-end gap-1">
                     <button
                       className="btn btn-ghost btn-xs"
                       onClick={() => setSelectedWorkspaceId(workspace.id)}
@@ -214,7 +257,7 @@ function WorkspacesTab() {
                     </button>
                     {workspace.isSuspended ? (
                       <button
-                        className="btn btn-success btn-soft btn-xs"
+                        className="btn btn-xs"
                         disabled={reactivate.isPending}
                         onClick={() => {
                           setMutationError(null);
@@ -227,16 +270,9 @@ function WorkspacesTab() {
                       </button>
                     ) : (
                       <button
-                        className="btn btn-warning btn-soft btn-xs"
+                        className="btn btn-xs border-warning/40 text-warning hover:bg-warning/10"
                         disabled={suspend.isPending}
-                        onClick={() => {
-                          const reason = window.prompt("Suspend reason (optional)") ?? "";
-                          setMutationError(null);
-                          suspend.mutate(
-                            { id: workspace.id, reason: reason.trim() || undefined },
-                            { onError: (error) => setMutationError(getApiError(error)) }
-                          );
-                        }}
+                        onClick={() => setSuspendWorkspaceId(workspace.id)}
                       >
                         Suspend
                       </button>
@@ -247,7 +283,7 @@ function WorkspacesTab() {
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={6} className="text-center text-base-content/60">
+                <td colSpan={9} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No workspaces found.
                 </td>
               </tr>
@@ -277,10 +313,10 @@ function WorkspacesTab() {
       </div>
 
       {selectedWorkspaceId && (
-        <div className="card card-border bg-base-200">
-          <div className="card-body">
+        <div className="card bg-base-100 border border-base-300">
+          <div className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
-              <h3 className="card-title text-base">Workspace Inspection</h3>
+              <h3 className="text-base font-semibold">Workspace Inspection</h3>
               <button
                 className="btn btn-ghost btn-xs"
                 onClick={() => setSelectedWorkspaceId(null)}
@@ -290,9 +326,7 @@ function WorkspacesTab() {
             </div>
             {detail.isLoading && <span className="loading loading-spinner loading-sm" />}
             {detail.error && (
-              <div role="alert" className="alert alert-error">
-                <span>{getApiError(detail.error)}</span>
-              </div>
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(detail.error)}</p></div>
             )}
             {detail.data && (
               <div className="space-y-2 text-sm">
@@ -301,6 +335,32 @@ function WorkspacesTab() {
                 </div>
                 <div>
                   <span className="font-medium">Slug:</span> {detail.data.slug}
+                </div>
+                <div>
+                  <span className="font-medium">Plan:</span> {String(detail.data.plan ?? "-")}
+                </div>
+                <div>
+                  <span className="font-medium">Plan expires at:</span>{" "}
+                  {formatDate(String(detail.data.planExpiresAt ?? ""))}
+                </div>
+                <div>
+                  <span className="font-medium">Billing email:</span>{" "}
+                  {String(detail.data.billingEmail ?? "-")}
+                </div>
+                <div>
+                  <span className="font-medium">Subscription:</span>{" "}
+                  {String(detail.data.subscriptionId ?? "-")}
+                </div>
+                <div>
+                  <span className="font-medium">Trial ends at:</span>{" "}
+                  {formatDate(String(detail.data.trialEndsAt ?? ""))}
+                </div>
+                <div>
+                  <span className="font-medium">Numbers (accounts):</span>{" "}
+                  {(detail.data.cloudApiAccounts ?? [])
+                    .map((a) => a.displayPhoneNumber || a.phoneNumberId || a.id)
+                    .filter(Boolean)
+                    .join(", ") || "-"}
                 </div>
                 <div>
                   <span className="font-medium">Status:</span> {detail.data.status}
@@ -322,6 +382,28 @@ function WorkspacesTab() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={suspendWorkspaceId !== null}
+        title="Suspend workspace"
+        description="The workspace will be suspended immediately."
+        confirmLabel="Suspend"
+        tone="warning"
+        loading={suspend.isPending}
+        promptLabel="Reason (optional)"
+        promptPlaceholder="e.g. payment overdue"
+        onConfirm={(reason) => {
+          if (!suspendWorkspaceId) return;
+          setMutationError(null);
+          suspend.mutate(
+            { id: suspendWorkspaceId, reason: reason?.trim() || undefined },
+            {
+              onError: (error) => setMutationError(getApiError(error)),
+              onSettled: () => setSuspendWorkspaceId(null),
+            }
+          );
+        }}
+        onClose={() => setSuspendWorkspaceId(null)}
+      />
     </div>
   );
 }
@@ -342,13 +424,14 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
     limit,
   });
   const detail = usePlatformUser(selectedUserId);
+  const loginHistory = usePlatformUserLoginHistory(selectedUserId);
   const updatePlatformRole = useUpdatePlatformRole();
 
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">User Filters</h2>
+      <div className="card bg-base-100 border border-base-300">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">User Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
               className="input input-bordered"
@@ -393,33 +476,34 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
       </div>
 
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {mutationError && (
-        <div role="alert" className="alert alert-error">
-          <span>{mutationError}</span>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[0.8125rem] text-base-content">{mutationError}</p>
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
           <thead>
-            <tr>
-              <th>Email</th>
-              <th>Platform Role</th>
-              <th>Memberships</th>
-              <th></th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Email</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Platform Role</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium">Memberships</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium"></th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((user) => (
-              <tr key={user.id}>
-                <td>{user.email}</td>
-                <td>{user.platformRole}</td>
-                <td>{user.memberships?.length ?? 0}</td>
-                <td>
+              <tr key={user.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="px-3 py-3 font-medium">{user.email}</td>
+                <td className="px-3 py-3">
+                  <span className="op-tag">{user.platformRole}</span>
+                </td>
+                <td className="font-mono-op px-3 py-3 text-right tabular-nums">{user.memberships?.length ?? 0}</td>
+                <td className="px-3 py-3 text-right">
                   <button
                     className="btn btn-ghost btn-xs"
                     onClick={() => {
@@ -434,7 +518,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/60">
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No users found.
                 </td>
               </tr>
@@ -464,10 +548,10 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
       </div>
 
       {selectedUserId && (
-        <div className="card card-border bg-base-200">
-          <div className="card-body">
+        <div className="card bg-base-100 border border-base-300">
+          <div className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
-              <h3 className="card-title text-base">User Inspection</h3>
+              <h3 className="text-base font-semibold">User Inspection</h3>
               <button
                 className="btn btn-ghost btn-xs"
                 onClick={() => setSelectedUserId(null)}
@@ -477,9 +561,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
             </div>
             {detail.isLoading && <span className="loading loading-spinner loading-sm" />}
             {detail.error && (
-              <div role="alert" className="alert alert-error">
-                <span>{getApiError(detail.error)}</span>
-              </div>
+              <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(detail.error)}</p></div>
             )}
             {detail.data && (
               <div className="space-y-3">
@@ -500,13 +582,41 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
                         <div className="text-sm">
                           {membership.workspace?.name ?? membership.workspaceId}
                         </div>
-                        <div className="badge badge-ghost">{membership.role}</div>
+                        <span className="op-tag">{membership.role}</span>
                       </li>
                     ))}
                     {!detail.data.memberships?.length && (
                       <li className="list-row text-base-content/60">No memberships.</li>
                     )}
                   </ul>
+                </div>
+                <div className="text-sm">
+                  <div className="font-medium">Login history</div>
+                  {loginHistory.isLoading ? (
+                    <span className="loading loading-spinner loading-xs" />
+                  ) : loginHistory.error ? (
+                    <div className="text-error text-xs">
+                      {getApiError(loginHistory.error)}
+                    </div>
+                  ) : (
+                    <ul className="list rounded-box border border-base-300 bg-base-100">
+                      {loginHistory.data?.slice(0, 20).map((entry, idx) => (
+                        <li
+                          className="list-row text-xs"
+                          key={String(entry.id ?? `${entry.createdAt ?? "unknown"}-${idx}`)}
+                        >
+                          <div>{formatDate(String(entry.createdAt ?? ""))}</div>
+                          <div className="truncate">{String(entry.ipAddress ?? "-")}</div>
+                          <div className="truncate">{String(entry.userAgent ?? "-")}</div>
+                        </li>
+                      ))}
+                      {!loginHistory.data?.length && (
+                        <li className="list-row text-base-content/60">
+                          No login history.
+                        </li>
+                      )}
+                    </ul>
+                  )}
                 </div>
                 {superAdmin ? (
                   <div className="flex flex-wrap items-center gap-2">
@@ -538,7 +648,7 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
                     </button>
                   </div>
                 ) : (
-                  <div role="alert" className="alert alert-info alert-soft">
+                  <div role="alert" className="rounded-box border border-info/30 border-l-2 border-l-info bg-base-200 px-4 py-3">
                     <span>Role updates require SUPERADMIN.</span>
                   </div>
                 )}
@@ -568,9 +678,9 @@ function WebhookLogsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Webhook Logs Filters</h2>
+      <div className="card bg-base-100 border border-base-300">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Webhook Logs Filters</h2>
           <div className="grid gap-2 sm:grid-cols-4">
             <input
               className="input input-bordered"
@@ -620,36 +730,36 @@ function WebhookLogsTab() {
         </div>
       </div>
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
           <thead>
-            <tr>
-              <th>ID</th>
-              <th>Workspace</th>
-              <th>Provider</th>
-              <th>Event</th>
-              <th>Processed</th>
-              <th>Created</th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Workspace</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Provider</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Event</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Processed</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Created</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((row) => (
-              <tr key={row.id}>
-                <td className="max-w-48 truncate">{row.id}</td>
-                <td>{row.workspaceId}</td>
-                <td>{row.provider}</td>
-                <td>{row.eventType}</td>
-                <td>{row.processed ? "Yes" : "No"}</td>
-                <td>{formatDate(row.createdAt)}</td>
+              <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.625rem] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3"><span className="op-tag">{row.provider}</span></td>
+                <td className="px-3 py-3 font-medium">{row.eventType}</td>
+                <td className="px-3 py-3">
+                  {row.processed ? <span className="op-tag op-tag-ok">Yes</span> : <span className="op-tag op-tag-warn">No</span>}
+                </td>
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={6} className="text-center text-base-content/60">
+                <td colSpan={6} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No webhook logs found.
                 </td>
               </tr>
@@ -683,9 +793,9 @@ function UsageEventsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Usage Events Filters</h2>
+      <div className="card bg-base-100 border border-base-300">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Usage Events Filters</h2>
           <div className="grid gap-2 sm:grid-cols-3">
             <input
               className="input input-bordered"
@@ -723,32 +833,30 @@ function UsageEventsTab() {
         </div>
       </div>
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
           <thead>
-            <tr>
-              <th>ID</th>
-              <th>Workspace</th>
-              <th>Event Type</th>
-              <th>Created</th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Workspace</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Event Type</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Created</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.items.map((row) => (
-              <tr key={row.id}>
-                <td className="max-w-48 truncate">{row.id}</td>
-                <td>{row.workspaceId}</td>
-                <td>{row.eventType}</td>
-                <td>{formatDate(row.createdAt)}</td>
+              <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.625rem] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3 font-medium">{row.eventType}</td>
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
               </tr>
             ))}
             {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/60">
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No usage events found.
                 </td>
               </tr>
@@ -767,54 +875,114 @@ function UsageEventsTab() {
   );
 }
 
-function BspCredentialsTab() {
-  const [bsp, setBsp] = useState<PlatformBsp>("TWILIO");
-  const [credentialsJson, setCredentialsJson] = useState("{}");
-  const [webhookUrl, setWebhookUrl] = useState("");
-  const [webhookSecret, setWebhookSecret] = useState("");
-  const [isActive, setIsActive] = useState(true);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+function AuditLogsTab() {
+  const [action, setAction] = useState("");
+  const [targetType, setTargetType] = useState("");
+  const [targetId, setTargetId] = useState("");
+  const [actorUserId, setActorUserId] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [limit, setLimit] = useState(50);
 
-  const list = useBspCredentials();
-  const upsert = useUpsertBspCredential();
+  const list = usePlatformAuditLogs({
+    action: action.trim() || undefined,
+    targetType: targetType.trim() || undefined,
+    targetId: targetId.trim() || undefined,
+    actorUserId: actorUserId.trim() || undefined,
+    offset,
+    limit,
+  });
 
   return (
     <div className="space-y-4">
+      <div className="card bg-base-100 border border-base-300">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Audit Logs Filters</h2>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <input
+              className="input input-bordered"
+              placeholder="Action (e.g. USER_PLATFORM_ROLE_UPDATED)"
+              value={action}
+              onChange={(e) => {
+                setAction(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <input
+              className="input input-bordered"
+              placeholder="Target type (e.g. USER, WORKSPACE)"
+              value={targetType}
+              onChange={(e) => {
+                setTargetType(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <input
+              className="input input-bordered"
+              placeholder="Target ID"
+              value={targetId}
+              onChange={(e) => {
+                setTargetId(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <input
+              className="input input-bordered"
+              placeholder="Actor user ID"
+              value={actorUserId}
+              onChange={(e) => {
+                setActorUserId(e.target.value);
+                setOffset(0);
+              }}
+            />
+            <select
+              className="select select-bordered"
+              value={String(limit)}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setOffset(0);
+              }}
+            >
+              {[25, 50, 100, 200].map((n) => (
+                <option key={n} value={n}>
+                  {n} per page
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
-      {submitError && (
-        <div role="alert" className="alert alert-error">
-          <span>{submitError}</span>
-        </div>
-      )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
           <thead>
             <tr>
-              <th>BSP</th>
-              <th>Webhook URL</th>
-              <th>Secret</th>
-              <th>Active</th>
-              <th>Credential keys</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Created</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Action</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Target</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Actor</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Request</th>
             </tr>
           </thead>
           <tbody>
-            {list.data?.map((item) => (
-              <tr key={item.id}>
-                <td>{item.bsp}</td>
-                <td>{item.webhookUrl || "-"}</td>
-                <td>{item.hasWebhookSecret ? "Yes" : "No"}</td>
-                <td>{item.isActive ? "Yes" : "No"}</td>
-                <td>{item.credentialKeys.join(", ") || "-"}</td>
+            {list.data?.items.map((row) => (
+              <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
+                <td className="max-w-48 truncate px-3 py-3 font-medium">{row.action}</td>
+                <td className="font-mono-op max-w-64 truncate px-3 py-3 text-[0.6875rem] text-base-content/70">
+                  {row.targetType}:{row.targetId}
+                </td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.actorUserId.slice(0, 8).toUpperCase()}</td>
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.requestId || "—"}</td>
               </tr>
             ))}
-            {!list.isLoading && !list.data?.length && (
+            {!list.isLoading && !list.data?.items.length && (
               <tr>
-                <td colSpan={5} className="text-center text-base-content/60">
-                  No BSP credentials found.
+                <td colSpan={5} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
+                  No audit logs found.
                 </td>
               </tr>
             )}
@@ -822,88 +990,13 @@ function BspCredentialsTab() {
         </table>
       </div>
 
-      <div className="card card-border bg-base-200">
-        <div className="card-body gap-3">
-          <h2 className="card-title text-base">Upsert BSP Credential</h2>
-          <div className="grid gap-2 sm:grid-cols-2">
-            <select
-              className="select select-bordered"
-              value={bsp}
-              onChange={(e) => setBsp(e.target.value as PlatformBsp)}
-            >
-              {BSPS.map((entry) => (
-                <option key={entry} value={entry}>
-                  {entry}
-                </option>
-              ))}
-            </select>
-            <input
-              className="input input-bordered"
-              placeholder="Webhook URL"
-              value={webhookUrl}
-              onChange={(e) => setWebhookUrl(e.target.value)}
-            />
-            <input
-              className="input input-bordered"
-              placeholder="Webhook Secret (optional)"
-              value={webhookSecret}
-              onChange={(e) => setWebhookSecret(e.target.value)}
-            />
-            <label className="label cursor-pointer justify-start gap-2">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-              />
-              <span className="label-text">Active</span>
-            </label>
-          </div>
-          <textarea
-            className="textarea textarea-bordered min-h-32"
-            placeholder='{"accountSid":"AC...", "authToken":"..."}'
-            value={credentialsJson}
-            onChange={(e) => setCredentialsJson(e.target.value)}
-          />
-          <div className="card-actions">
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={upsert.isPending}
-              onClick={() => {
-                setSubmitError(null);
-                let parsed: Record<string, string>;
-                try {
-                  const value = JSON.parse(credentialsJson);
-                  if (!value || typeof value !== "object") {
-                    throw new Error("Credentials JSON must be an object.");
-                  }
-                  parsed = Object.fromEntries(
-                    Object.entries(value).map(([k, v]) => [k, String(v)])
-                  );
-                } catch {
-                  setSubmitError("Credentials JSON is invalid.");
-                  return;
-                }
-
-                upsert.mutate(
-                  {
-                    bsp,
-                    data: {
-                      credentials: parsed,
-                      webhookUrl: webhookUrl || undefined,
-                      webhookSecret: webhookSecret || undefined,
-                      isActive,
-                    },
-                  },
-                  { onError: (error) => setSubmitError(getApiError(error)) }
-                );
-              }}
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
+      <Pager
+        offset={offset}
+        limit={limit}
+        total={list.data?.total ?? 0}
+        onPrev={() => setOffset((v) => Math.max(0, v - limit))}
+        onNext={() => setOffset((v) => v + limit)}
+      />
     </div>
   );
 }
@@ -917,37 +1010,33 @@ function ChannelAccountsTab() {
   return (
     <div className="space-y-4">
       {list.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(list.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
       )}
       {errorMessage && (
-        <div role="alert" className="alert alert-error">
-          <span>{errorMessage}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{errorMessage}</p></div>
       )}
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table table-sm">
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
           <thead>
-            <tr>
-              <th>Account</th>
-              <th>Provider</th>
-              <th>Assigned Workspace</th>
-              <th>Re-assign</th>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Account</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Provider</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Assigned Workspace</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Re-assign</th>
             </tr>
           </thead>
           <tbody>
             {list.data?.map((account) => (
-              <tr key={account.id}>
-                <td>
+              <tr key={account.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="px-3 py-3">
                   <div className="font-medium">{account.displayName || account.id}</div>
-                  <div className="text-xs text-base-content/60">
-                    {account.externalId || "-"}
+                  <div className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/50">
+                    {account.externalId || "—"}
                   </div>
                 </td>
-                <td>{account.provider || account.channel || "-"}</td>
-                <td>{account.workspace?.name || account.workspaceId || "-"}</td>
-                <td>
+                <td className="px-3 py-3"><span className="op-tag">{account.provider || account.channel || "—"}</span></td>
+                <td className="px-3 py-3 text-base-content/80">{account.workspace?.name || account.workspaceId || "—"}</td>
+                <td className="px-3 py-3">
                   <div className="join">
                     <input
                       className="input input-bordered input-sm join-item"
@@ -983,8 +1072,49 @@ function ChannelAccountsTab() {
             ))}
             {!list.isLoading && !list.data?.length && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/60">
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
                   No channel accounts found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ConnectedClientBusinessesTab() {
+  const list = useConnectedClientBusinesses();
+
+  return (
+    <div className="space-y-4">
+      {list.error && (
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
+      )}
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
+          <thead>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Name</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Verification</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Business status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.data?.map((business) => (
+              <tr key={business.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
+                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{business.id.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3 font-medium">{business.name}</td>
+                <td className="px-3 py-3"><span className="op-tag">{business.verification_status || "—"}</span></td>
+                <td className="px-3 py-3"><span className="op-tag">{business.business_status || "—"}</span></td>
+              </tr>
+            ))}
+            {!list.isLoading && !list.data?.length && (
+              <tr>
+                <td colSpan={4} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
+                  No connected client businesses found.
                 </td>
               </tr>
             )}

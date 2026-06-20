@@ -1,29 +1,36 @@
-import {
-  CampaignsClient,
-  type Campaign,
-  type Template,
-} from "@/components/campaigns/CampaignsClient";
-import { serverFetch } from "@/lib/api";
+import { CampaignsAccessDenied } from "@/components/campaigns/CampaignsAccessDenied";
+import { CampaignsClient, type Campaign } from "@/components/campaigns/CampaignsClient";
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
+import type { MeResponse } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
+import { canAccessCampaigns } from "@/lib/workspace-access";
 
 export default async function CampaignsPage() {
-  const [campaigns, templatesRes] = await Promise.all([
-    serverFetch<Campaign[]>(endpoints.campaigns.list),
-    serverFetch<{ items: Template[] }>(
-      `${endpoints.templates.list}?limit=100`
-    ),
-  ]);
-  const templates = templatesRes?.items ?? [];
+  const me = await serverFetch<MeResponse>(endpoints.auth.me);
+
+  if (!canAccessCampaigns(String(me.role))) {
+    return (
+      <PageContainer>
+        <PageHeader
+          title="Campaigns"
+          description="Outbound campaigns for this workspace."
+        />
+        <CampaignsAccessDenied workspaceName={me.workspace.name} />
+      </PageContainer>
+    );
+  }
+
+  const campaigns = await serverFetch<Campaign[]>(endpoints.campaigns.list);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Campaigns</h1>
-        <p className="text-sm text-base-content/60">
-          Create and monitor outbound campaigns.
-        </p>
-      </div>
-      <CampaignsClient initialCampaigns={campaigns} templates={templates} />
-    </div>
+    <PageContainer>
+      <PageHeader
+        title="Campaigns"
+        description="Create and monitor outbound campaigns."
+      />
+      <CampaignsClient initialCampaigns={campaigns} workspaceId={me.workspace.id} />
+    </PageContainer>
   );
 }

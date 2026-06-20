@@ -7,8 +7,9 @@ import {
   type PlatformUsageEventsParams,
   type PlatformUsersListParams,
   type PlatformWorkspacesListParams,
+  type PlatformAuditLogsParams,
 } from "@/lib/api";
-import type { PlatformBsp, PlatformRole } from "@/lib/types";
+import type { PlatformRole } from "@/lib/types";
 
 export const platformKeys = {
   all: ["platform"] as const,
@@ -18,12 +19,17 @@ export const platformKeys = {
   users: (params: PlatformUsersListParams) =>
     [...platformKeys.all, "users", params] as const,
   user: (id: string) => [...platformKeys.all, "user", id] as const,
+  userLoginHistory: (id: string) =>
+    [...platformKeys.all, "userLoginHistory", id] as const,
   webhookLogs: (params: PlatformWebhookLogsParams) =>
     [...platformKeys.all, "webhookLogs", params] as const,
   usageEvents: (params: PlatformUsageEventsParams) =>
     [...platformKeys.all, "usageEvents", params] as const,
-  bspCredentials: () => [...platformKeys.all, "bspCredentials"] as const,
+  auditLogs: (params: PlatformAuditLogsParams) =>
+    [...platformKeys.all, "auditLogs", params] as const,
   channelAccounts: () => [...platformKeys.all, "channelAccounts"] as const,
+  connectedClientBusinesses: () =>
+    [...platformKeys.all, "connectedClientBusinesses"] as const,
 };
 
 export function usePlatformWorkspaces(params: PlatformWorkspacesListParams) {
@@ -79,6 +85,14 @@ export function usePlatformUser(id: string | null) {
   });
 }
 
+export function usePlatformUserLoginHistory(id: string | null) {
+  return useQuery({
+    queryKey: platformKeys.userLoginHistory(id ?? ""),
+    queryFn: () => platformApi.getUserLoginHistory(id!),
+    enabled: !!id,
+  });
+}
+
 export function useUpdatePlatformRole() {
   const qc = useQueryClient();
   return useMutation({
@@ -106,31 +120,10 @@ export function usePlatformUsageEvents(params: PlatformUsageEventsParams) {
   });
 }
 
-export function useBspCredentials() {
+export function usePlatformAuditLogs(params: PlatformAuditLogsParams) {
   return useQuery({
-    queryKey: platformKeys.bspCredentials(),
-    queryFn: () => platformApi.listBspCredentials(),
-  });
-}
-
-export function useUpsertBspCredential() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      bsp,
-      data,
-    }: {
-      bsp: PlatformBsp;
-      data: {
-        credentials: Record<string, string>;
-        webhookUrl?: string;
-        webhookSecret?: string;
-        isActive?: boolean;
-      };
-    }) => platformApi.upsertBspCredential(bsp, data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: platformKeys.bspCredentials() });
-    },
+    queryKey: platformKeys.auditLogs(params),
+    queryFn: () => platformApi.listAuditLogs(params),
   });
 }
 
@@ -138,6 +131,13 @@ export function useChannelAccounts() {
   return useQuery({
     queryKey: platformKeys.channelAccounts(),
     queryFn: () => platformApi.listChannelAccounts(),
+  });
+}
+
+export function useConnectedClientBusinesses() {
+  return useQuery({
+    queryKey: platformKeys.connectedClientBusinesses(),
+    queryFn: () => platformApi.listConnectedClientBusinesses(),
   });
 }
 

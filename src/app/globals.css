@@ -1,72 +1,420 @@
 @import "tailwindcss";
-@plugin "daisyui" {
-  themes: light --default, dark --prefersdark;
-}
-@plugin "daisyui/theme" {
-  name: "light";
-  default: true;
-  prefersdark: false;
-  color-scheme: light;
 
-  --color-base-100: oklch(99% 0.005 240);
-  --color-base-200: oklch(97% 0.01 240);
-  --color-base-300: oklch(94% 0.015 240);
-  --color-base-content: oklch(25% 0.02 240);
-  --color-primary: oklch(55% 0.25 250);
-  --color-primary-content: oklch(98% 0.01 250);
-  --color-secondary: oklch(70% 0.2 250);
-  --color-secondary-content: oklch(98% 0.01 250);
-  --color-accent: oklch(65% 0.22 250);
-  --color-accent-content: oklch(98% 0.01 250);
-  --color-neutral: oklch(45% 0.03 240);
-  --color-neutral-content: oklch(98% 0.01 240);
-  --color-info: oklch(70% 0.2 220);
-  --color-info-content: oklch(98% 0.01 220);
-  --color-success: oklch(65% 0.25 140);
-  --color-success-content: oklch(98% 0.01 140);
-  --color-warning: oklch(80% 0.2 80);
-  --color-warning-content: oklch(20% 0.05 80);
-  --color-error: oklch(60% 0.25 25);
-  --color-error-content: oklch(98% 0.01 25);
+/* ──────────────────────────────────────────────────────────────────
+   MsgBuddy · "Bootstrap" colour-variant of the Operator design system
+   (EXPERIMENTAL). Backup of the original Operator palette lives in
+   `globals.operator-backup.css` — restore with one `cp`.
 
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
-  --border: 1px;
-  --depth: 1;
-  --noise: 0;
+   What stays the same as Operator:
+     - Fonts (Geist + Geist Mono + Instrument Serif)
+     - Dark-first (dark is still the default, light is still the pair)
+     - Shape (6/8 radii, borders-over-shadows, depth: 0)
+     - Custom utility classes (op-label, op-tag, op-section-title, …)
+
+   What changes:
+     - Accent / signal colour swapped from WhatsApp-green to Bootstrap-blue
+     - Semantic palette (success / warning / error) realigned with
+       Bootstrap-ish hues, kept legible on the dark slate background
+   ────────────────────────────────────────────────────────────────── */
+
+@theme {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-heading: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
-@plugin "daisyui/theme" {
+
+@plugin "../../node_modules/daisyui" {
+  themes: dark --default, light;
+}
+
+/* ─── DARK (default): deep slate, Bootstrap-blue accent ───────────── */
+@plugin "../../node_modules/daisyui/theme" {
   name: "dark";
-  default: false;
+  default: true;
   prefersdark: true;
   color-scheme: dark;
 
-  --color-base-100: oklch(18% 0.02 240);
-  --color-base-200: oklch(22% 0.025 240);
-  --color-base-300: oklch(26% 0.03 240);
-  --color-base-content: oklch(92% 0.02 240);
-  --color-primary: oklch(65% 0.25 250);
-  --color-primary-content: oklch(98% 0.01 250);
-  --color-secondary: oklch(70% 0.2 250);
-  --color-secondary-content: oklch(98% 0.01 250);
-  --color-accent: oklch(65% 0.22 250);
-  --color-accent-content: oklch(98% 0.01 250);
-  --color-neutral: oklch(35% 0.03 240);
-  --color-neutral-content: oklch(92% 0.02 240);
-  --color-info: oklch(70% 0.2 220);
-  --color-info-content: oklch(98% 0.01 220);
-  --color-success: oklch(65% 0.25 140);
-  --color-success-content: oklch(98% 0.01 140);
-  --color-warning: oklch(80% 0.2 80);
-  --color-warning-content: oklch(20% 0.05 80);
-  --color-error: oklch(65% 0.28 25);
-  --color-error-content: oklch(98% 0.01 25);
+  /* surfaces — same dark slate as Operator */
+  --color-base-100: #0B0B0D;
+  --color-base-200: #101114;
+  --color-base-300: #23252B;
+  --color-base-content: #E8E9EC;
 
-  --radius-selector: 0.5rem;
-  --radius-field: 0.5rem;
-  --radius-box: 0.75rem;
+  /* primary = Bootstrap blue (lightened so it sits well on dark slate) */
+  --color-primary: #6EA8FE;
+  --color-primary-content: #052C65;
+
+  /* secondary kept as neutral grey — Bootstrap's bs-gray-500-ish */
+  --color-secondary: #ADB5BD;
+  --color-secondary-content: #212529;
+  --color-accent: #6EA8FE;
+  --color-accent-content: #052C65;
+
+  /* neutrals */
+  --color-neutral: #1C1D22;
+  --color-neutral-content: #E8E9EC;
+
+  /* semantic — dark-mode-tuned Bootstrap palette */
+  --color-info: #6EDFF6;        /* bs-info on dark */
+  --color-info-content: #055160;
+  --color-success: #75B798;     /* bs-success on dark */
+  --color-success-content: #051B11;
+  --color-warning: #FFDA6A;     /* bs-warning on dark */
+  --color-warning-content: #332701;
+  --color-error: #EA868F;       /* bs-danger on dark */
+  --color-error-content: #58151C;
+
+  /* shape — UNCHANGED from Operator (your call: colours only) */
+  --radius-selector: 0.375rem;
+  --radius-field:    0.375rem;
+  --radius-box:      0.5rem;
   --border: 1px;
-  --depth: 1;
+  --depth: 0;
   --noise: 0;
+}
+
+/* ─── LIGHT pair: same Bootstrap-blue accent on a light canvas ────── */
+@plugin "../../node_modules/daisyui/theme" {
+  name: "light";
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #FFFFFF;
+  --color-base-200: #F8F9FA;
+  --color-base-300: #DEE2E6;
+  --color-base-content: #212529;
+
+  --color-primary: #0D6EFD;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #6C757D;
+  --color-secondary-content: #FFFFFF;
+  --color-accent: #0D6EFD;
+  --color-accent-content: #FFFFFF;
+
+  --color-neutral: #E9ECEF;
+  --color-neutral-content: #212529;
+
+  --color-info: #0DCAF0;
+  --color-info-content: #212529;
+  --color-success: #198754;
+  --color-success-content: #FFFFFF;
+  --color-warning: #FFC107;
+  --color-warning-content: #212529;
+  --color-error: #DC3545;
+  --color-error-content: #FFFFFF;
+
+  --radius-selector: 0.375rem;
+  --radius-field:    0.375rem;
+  --radius-box:      0.5rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* ─── Re-skin the "op-*" utility vars to the Bootstrap-blue accent.
+       Dark stays default (matches the daisyUI theme order above); op-*
+       still uses the Operator's slate surfaces — only the accent and
+       semantic hues swap to the Bootstrap-tinted palette. ──────────── */
+:root[data-theme="dark"], :root {
+  --op-bg-0:         #0B0B0D;
+  --op-bg-1:         #101114;
+  --op-bg-2:         #16171B;
+  --op-bg-3:         #1C1D22;
+  --op-bg-hover:     #1E1F24;
+  --op-ink:          #E8E9EC;
+  --op-ink-muted:    #9093A0;
+  --op-ink-dim:      #6B6F7A;
+  --op-line:         #23252B;
+  --op-line-strong:  #2E3037;
+  /* accent swapped: signal-green → Bootstrap blue (lightened for dark) */
+  --op-accent:       #6EA8FE;
+  --op-accent-ink:   #052C65;
+  --op-accent-soft:  rgba(110, 168, 254, 0.10);
+  --op-info:         #6EDFF6;
+  --op-warn:         #FFDA6A;
+  --op-danger:       #EA868F;
+  --op-ok:           #75B798;
+  --op-grain-color:  rgba(255, 255, 255, 0.014);
+}
+:root[data-theme="light"] {
+  --op-bg-0:         #FFFFFF;
+  --op-bg-1:         #F8F9FA;
+  --op-bg-2:         #F1F3F5;
+  --op-bg-3:         #E9ECEF;
+  --op-bg-hover:     #EFF1F3;
+  --op-ink:          #212529;
+  --op-ink-muted:    #495057;
+  --op-ink-dim:      #6C757D;
+  --op-line:         #DEE2E6;
+  --op-line-strong:  #CED4DA;
+  --op-accent:       #0D6EFD;
+  --op-accent-ink:   #FFFFFF;
+  --op-accent-soft:  rgba(13, 110, 253, 0.08);
+  --op-info:         #0DCAF0;
+  --op-warn:         #FFC107;
+  --op-danger:       #DC3545;
+  --op-ok:           #198754;
+  --op-grain-color:  rgba(0, 0, 0, 0.015);
+}
+
+html, body {
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+/* ─── Scrollbar — Operator aesthetic ─────────────────────────────── */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--op-line-strong) transparent;
+}
+
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--op-line);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--op-line-strong);
+}
+::-webkit-scrollbar-thumb:active {
+  background: color-mix(in oklab, var(--op-accent) 40%, var(--op-line-strong));
+}
+/* Hide scrollbar corner where horizontal + vertical meet */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@layer base {
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: -0.02em;
+  }
+  /* Numbers render tabular by default inside tables and KPI surfaces */
+  .tabular-nums, table, .num { font-variant-numeric: tabular-nums; }
+  ::selection { background: var(--op-accent); color: var(--op-accent-ink); }
+
+  /* User text-size preference. Drives the root font-size; rem-based and
+     text-[N rem] sizes scale with this. Defaults to MEDIUM (16px). */
+  html                          { font-size: 16px; }
+  html[data-density="small"]    { font-size: 14px; }
+  html[data-density="medium"]   { font-size: 16px; }
+  html[data-density="large"]    { font-size: 18px; }
+}
+
+/* ─── Operator utility classes ────────────────────────────────────── */
+@layer utilities {
+  /* Monospace stack — for numerics, IDs, timestamps, micro-labels */
+  .font-mono-op { font-family: var(--font-geist-mono), ui-monospace, monospace; font-feature-settings: "zero", "ss01"; }
+
+  /* Uppercase mono micro-label used for section headers + overlines */
+  .op-label {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--op-ink-dim);
+  }
+
+  /* Subtle radial grain overlay — use on panels for tactile depth */
+  .op-grain {
+    position: relative;
+  }
+  .op-grain::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(var(--op-grain-color) 1px, transparent 1px);
+    background-size: 3px 3px;
+    opacity: 0.6;
+    border-radius: inherit;
+  }
+
+  /* Flat mono capsule tag */
+  .op-tag {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--op-line);
+    background: var(--op-bg-2);
+    color: var(--op-ink-muted);
+    white-space: nowrap;
+  }
+  .op-tag-ok      { color: var(--op-ok);     border-color: color-mix(in oklab, var(--op-ok)    30%, transparent); background: var(--op-accent-soft); }
+  .op-tag-warn    { color: var(--op-warn);   border-color: color-mix(in oklab, var(--op-warn)  30%, transparent); background: color-mix(in oklab, var(--op-warn)  10%, transparent); }
+  .op-tag-info    { color: var(--op-info);   border-color: color-mix(in oklab, var(--op-info)  30%, transparent); background: color-mix(in oklab, var(--op-info)  10%, transparent); }
+  .op-tag-danger  { color: var(--op-danger); border-color: color-mix(in oklab, var(--op-danger) 30%, transparent); background: color-mix(in oklab, var(--op-danger) 10%, transparent); }
+
+  /* Kbd hint — tight mono rectangle */
+  .op-kbd {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--op-line);
+    border-radius: 3px;
+    background: var(--op-bg-1);
+    color: var(--op-ink-dim);
+    line-height: 1.4;
+  }
+
+  /* Live signal chip */
+  .op-signal {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border: 1px solid var(--op-line);
+    border-radius: 999px;
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--op-ink-muted);
+    text-transform: uppercase;
+  }
+  .op-signal .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--op-accent);
+    animation: op-pulse 2s infinite;
+  }
+
+  /* Section title with leading accent square */
+  .op-section-title {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--op-ink-dim);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .op-section-title::before {
+    content: "";
+    width: 4px; height: 4px;
+    background: var(--op-accent);
+    display: inline-block;
+  }
+}
+
+/* ─── TipTap / ProseMirror rendered content ──────────────────────── */
+.ProseMirror {
+  outline: none;
+  color: var(--op-ink);
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.ProseMirror p { margin: 0 0 0.5em; }
+.ProseMirror p:last-child { margin-bottom: 0; }
+.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4 {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  margin: 0.8em 0 0.3em;
+  font-weight: 600;
+}
+.ProseMirror h1 { font-size: 1.5em; }
+.ProseMirror h2 { font-size: 1.25em; }
+.ProseMirror h3 { font-size: 1.1em; }
+.ProseMirror strong { font-weight: 600; color: var(--op-ink); }
+.ProseMirror em { font-style: italic; }
+.ProseMirror code {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--op-line);
+  background: var(--op-bg-2);
+}
+.ProseMirror pre {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.88em;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--op-line);
+  background: var(--op-bg-2);
+  overflow-x: auto;
+  margin: 0.6em 0;
+}
+.ProseMirror pre code { border: 0; padding: 0; background: transparent; }
+.ProseMirror ul, .ProseMirror ol { margin: 0.3em 0 0.6em; padding-left: 1.4em; }
+.ProseMirror ul { list-style: disc; }
+.ProseMirror ol { list-style: decimal; }
+.ProseMirror li { margin: 0.15em 0; }
+.ProseMirror blockquote {
+  border-left: 2px solid var(--op-line-strong);
+  padding-left: 0.9em;
+  margin: 0.4em 0;
+  color: var(--op-ink-muted);
+}
+.ProseMirror a {
+  color: var(--op-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: var(--op-ink-dim);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* ─── emoji-mart scoped override (used only inside the inbox composer) */
+.emoji-mart-scope em-emoji-picker {
+  --em-rgb-background: 22 23 27;
+  --em-rgb-color: 232 233 236;
+  --em-rgb-input: 16 17 20;
+  --em-rgb-accent: 74 222 128;
+  --em-color-border: var(--op-line);
+  --em-color-border-over: var(--op-line-strong);
+  --em-font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --border-radius: 8px;
+  --category-icon-size: 16px;
+}
+:root[data-theme="light"] .emoji-mart-scope em-emoji-picker {
+  --em-rgb-background: 255 255 255;
+  --em-rgb-color: 15 16 18;
+  --em-rgb-input: 251 251 249;
+  --em-rgb-accent: 27 127 58;
+}
+
+/* ─── Motion ──────────────────────────────────────────────────────── */
+@keyframes op-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--op-accent) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 6px rgba(0,0,0,0); }
+  100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes op-panel-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

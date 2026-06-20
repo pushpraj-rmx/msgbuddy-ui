@@ -4,14 +4,16 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 This is a pure client-side Next.js app that connects directly to the MsgBuddy backend API.
 
-### API URL Configuration
+### Environment
 
-The app connects to the MsgBuddy API. By default, it uses `https://v2.msgbuddy.com`.
-
-To configure a different API URL, create a `.env.local` file in the root directory:
+Production UI is served at **`https://app.msgbuddy.com`**. Copy `.env.example` to `.env.local` and set:
 
 ```bash
-NEXT_PUBLIC_API_URL=https://v2.msgbuddy.com
+# Canonical URL for this Next app (metadata, OG absolute URLs)
+NEXT_PUBLIC_APP_URL=https://app.msgbuddy.com
+
+# Nest API origin (paths in code add /v2/...)
+NEXT_PUBLIC_API_URL=https://api.msgbuddy.com
 ```
 
 ## Authentication
@@ -23,7 +25,7 @@ NEXT_PUBLIC_API_URL=https://v2.msgbuddy.com
 
 ## Getting Started
 
-First, make sure your MsgBuddy API is reachable at `https://v2.msgbuddy.com` (or configure the URL as shown above).
+First, make sure your MsgBuddy API is reachable at the URL you set in `NEXT_PUBLIC_API_URL`.
 
 Then, run the development server:
 

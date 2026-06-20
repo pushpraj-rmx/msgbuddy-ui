@@ -1,13 +1,8 @@
 "use client";
 
 import { useClientWabas, useOwnedWabas } from "@/hooks/use-onboarding";
-
-function getApiError(err: unknown): string {
-  return (err as { response?: { data?: { message?: string } } })?.response?.data
-    ?.message
-    ? String((err as { response?: { data?: { message?: string } } }).response?.data?.message)
-    : "Something went wrong.";
-}
+import { getApiError } from "@/lib/api-error";
+import { LoadingState, EmptyState } from "@/components/ui/states";
 
 function isMetaTokenMissingError(err: unknown): boolean {
   const message = getApiError(err);
@@ -22,11 +17,12 @@ export function OnboardingWabaClient() {
 
   if (tokenMissing) {
     return (
-      <div role="alert" className="alert alert-error">
-        <span>
+      <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+        <span className="op-label mb-1 block text-error">token missing</span>
+        <p className="text-[0.8125rem] text-base-content">
           META_SYSTEM_ACCESS_TOKEN is not configured. Ask an administrator to configure
           Meta system token before using onboarding discovery.
-        </span>
+        </p>
       </div>
     );
   }
@@ -34,14 +30,10 @@ export function OnboardingWabaClient() {
   return (
     <div className="space-y-4">
       {owned.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(owned.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(owned.error)}</p></div>
       )}
       {client.error && (
-        <div role="alert" className="alert alert-error">
-          <span>{getApiError(client.error)}</span>
-        </div>
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(client.error)}</p></div>
       )}
 
       <WabaSection
@@ -90,25 +82,31 @@ function WabaSection({
   }>;
 }) {
   return (
-    <div className="card card-border bg-base-200">
-      <div className="card-body space-y-3">
-        <div>
-          <h2 className="card-title text-base">{title}</h2>
-          <p className="text-sm text-base-content/70">{description}</p>
-          <p className="text-xs text-base-content/60">Count: {count}</p>
+    <div className="rounded-box border border-base-300 bg-base-200">
+      <div className="border-b border-base-300 px-4 py-3 sm:px-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">{title}</h2>
+            <span className="op-label">{description}</span>
+          </div>
+          <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
+            count · {count}
+          </span>
         </div>
-        {loading && <span className="loading loading-spinner loading-sm" />}
+      </div>
+      <div className="space-y-3 p-4 sm:p-5">
+        {loading && <LoadingState label="Loading WABAs…" />}
         {!loading && !wabas.length && (
-          <p className="text-sm text-base-content/60">No WABAs found.</p>
+          <EmptyState title="No WABAs found" description="Nothing matched the current search parameters." />
         )}
         {!!wabas.length && (
           <div className="grid gap-3 lg:grid-cols-2">
             {wabas.map((waba) => (
-              <div key={waba.id} className="card card-border bg-base-100">
-                <div className="card-body gap-2 p-4">
+              <div key={waba.id} className="rounded-box border border-base-300 bg-base-100">
+                <div className="flex flex-col gap-2 p-4">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-semibold">{waba.name}</h3>
-                    <span className="badge badge-ghost">{waba.id}</span>
+                    <span className="op-tag font-mono-op">{waba.id}</span>
                   </div>
                   <div className="text-sm space-y-1">
                     <p>Business: {waba.businessName || "-"}</p>
@@ -119,11 +117,9 @@ function WabaSection({
                       {waba.permissions?.length ? waba.permissions.join(", ") : "-"}
                     </p>
                   </div>
-                  <div className="divider my-0" />
+                  <div className="my-2 border-t border-base-300" />
                   <div className="space-y-1">
-                    <p className="text-xs font-medium uppercase text-base-content/70">
-                      Phone numbers
-                    </p>
+                    <p className="op-label">Phone numbers</p>
                     {waba.phoneNumbers.length ? (
                       waba.phoneNumbers.map((phone) => (
                         <div

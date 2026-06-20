@@ -1,16 +1,20 @@
+import { PageContainer } from "@/components/ui/PageContainer";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SettingsClient } from "@/components/settings/SettingsClient";
 import type {
   Member,
   Workspace,
   WorkspaceSettings,
 } from "@/components/settings/SettingsClient";
-import {
-  serverFetch,
-  type MeResponse,
-  type WorkspaceCloudApiConfigResponse,
-  type WorkspaceMessagingConfigPayload,
+import type {
+  LoginHistoryEvent,
+  MeResponse,
+  WhatsAppConnectionSummary,
+  WorkspaceCloudApiConfigResponse,
 } from "@/lib/api";
+import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
+import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 
 async function getCloudApiSafe(
   workspaceId: string
@@ -24,36 +28,63 @@ async function getCloudApiSafe(
   }
 }
 
+async function getWhatsAppConnectionSafe(): Promise<WhatsAppConnectionSummary | null> {
+  try {
+    return await serverFetch<WhatsAppConnectionSummary>(endpoints.whatsapp.connection);
+  } catch {
+    return null;
+  }
+}
+
 export default async function SettingsPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
-  const [workspace, settings, members, messagingConfig, cloudApiConfig] =
-    await Promise.all([
-      serverFetch<Workspace>(endpoints.workspaces.byId(me.workspace.id)),
-      serverFetch<WorkspaceSettings>(endpoints.workspaces.settings(me.workspace.id)),
-      serverFetch<Member[]>(endpoints.workspaces.members(me.workspace.id)),
-      // TODO: BSP | Fallback to BSP when messaging config fails; handle or remove when BSP is deprecated
-      serverFetch<WorkspaceMessagingConfigPayload>(
-        endpoints.workspaces.messagingConfig(me.workspace.id)
-      ).catch(() => ({ providerType: "BSP" as const })),
-      getCloudApiSafe(me.workspace.id),
-    ]);
+  const canSettings = roleHasWorkspacePermission(me.role, "settings.manage");
+  const canMembers = roleHasWorkspacePermission(me.role, "members.view");
+
+  const workspace = await serverFetch<Workspace>(
+    endpoints.workspaces.byId(me.workspace.id)
+  );
+
+  const [settings, members, cloudApiConfig, whatsappConnection, loginHistory] = await Promise.all([
+    canSettings
+      ? serverFetch<WorkspaceSettings>(
+          endpoints.workspaces.settings(me.workspace.id)
+        )
+      : Promise.resolve<WorkspaceSettings>({
+          timezone: workspace.timezone,
+          locale: workspace.locale,
+        }),
+    canMembers
+      ? serverFetch<Member[]>(endpoints.workspaces.members(me.workspace.id))
+      : Promise.resolve<Member[]>([]),
+    canSettings ? getCloudApiSafe(me.workspace.id) : Promise.resolve(null),
+    canSettings ? getWhatsAppConnectionSafe() : Promise.resolve(null),
+    serverFetch<LoginHistoryEvent[]>(`${endpoints.auth.loginHistory}?limit=50`).catch(
+      () => [] as LoginHistoryEvent[]
+    ),
+  ]);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-base-content/60">
-          Manage workspace details and access.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Settings"
+        description="Manage workspace details and access."
+      />
       <SettingsClient
-        workspaceId={me.workspace.id}
         workspace={workspace}
         settings={settings}
         members={members}
-        messagingConfig={messagingConfig}
         cloudApiConfig={cloudApiConfig}
+        whatsappConnection={whatsappConnection}
+        meRole={me.role}
+        meUserId={me.user.id}
+        accountEmail={me.user.email}
+        accountName={me.user.name}
+        accountAvatarUrl={me.user.avatarUrl}
+        hasPassword={me.user.hasPassword === true}
+        displayDensity={me.user.displayDensity ?? "MEDIUM"}
+        loginHistory={loginHistory}
       />
-    </div>
+    </PageContainer>
   );
 }

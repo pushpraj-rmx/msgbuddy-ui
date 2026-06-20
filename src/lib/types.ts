@@ -3,6 +3,18 @@
 /** Tag shape when returned with contact list/detail include=tags */
 export type ContactTag = { id: string; name: string; color: string };
 
+/** Ordered funnel — keep in sync with Prisma `ContactLifecycleStage`. */
+export const CONTACT_LIFECYCLE_STAGES = [
+  "LEAD",
+  "ENGAGED",
+  "QUALIFIED",
+  "CUSTOMER",
+  "DORMANT",
+  "LOST",
+] as const;
+export type ContactLifecycleStage =
+  (typeof CONTACT_LIFECYCLE_STAGES)[number];
+
 export type Contact = {
   id: string;
   workspaceId: string;
@@ -11,8 +23,13 @@ export type Contact = {
   name?: string;
   email?: string;
   emailLabel?: string;
+  designation?: string;
+  /** Profile / avatar image URL when provided by API (absolute or path served by API). */
+  avatarUrl?: string | null;
   isBlocked: boolean;
   isOptedOut: boolean;
+  /** Null when the contact hasn't been classified yet. */
+  lifecycleStage?: ContactLifecycleStage | null;
   lastMessageAt?: string;
   createdAt: string;
   updatedAt: string;
@@ -70,7 +87,10 @@ export type ContactNote = {
 };
 
 export type SegmentQuery = {
+  /** @deprecated Use tagIds. Legacy: tag names. */
   tags?: string[];
+  /** Preferred: tag IDs. Contacts must have ALL listed tags. */
+  tagIds?: string[];
   hasEmail?: boolean;
   hasPhone?: boolean;
   isBlocked?: boolean;
@@ -126,10 +146,116 @@ export type DuplicatesResponse = {
   duplicateGroups: DuplicateGroup[];
 };
 
-export type ImportResult = {
-  imported: number;
+export type ImportMode = "create_only" | "update_only" | "merge";
+
+export type ImportFieldDiff = {
+  from: string | null;
+  to: string | null;
+};
+
+export type ImportRowSample = {
+  row: number;
+  phone: string;
+  name?: string;
+  action: "create" | "update" | "skip" | "error";
+  diff?: Record<string, ImportFieldDiff>;
+  reason?: string;
+};
+
+export type ImportApplyResult = {
+  created: number;
+  updated: number;
+  skipped: number;
   failed: number;
   errors: Array<{ row: number; message: string }>;
+};
+
+export type ImportResult = {
+  mode: ImportMode;
+  dryRun: boolean;
+  totals: {
+    totalRows: number;
+    /** CSV rows merged into a previous row with the same normalized phone. */
+    mergedDuplicates: number;
+    willCreate: number;
+    willUpdate: number;
+    willSkip: number;
+    willError: number;
+  };
+  sample: {
+    create: ImportRowSample[];
+    update: ImportRowSample[];
+    skip: ImportRowSample[];
+    error: ImportRowSample[];
+  };
+  newTags: string[];
+  newCustomFields: Array<{ name: string; label: string }>;
+  result: ImportApplyResult | null;
+};
+
+// ===== Async import jobs =====
+
+export type ImportJobStatus =
+  | "QUEUED"
+  | "RUNNING"
+  | "COMPLETED"
+  | "FAILED"
+  | "CANCELLED";
+
+export type ImportJobMode = "CREATE_ONLY" | "UPDATE_ONLY" | "MERGE";
+
+/** ImportJob row as returned by GET /contacts/import/jobs/:id */
+export type ImportJob = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  filename: string;
+  mode: ImportJobMode;
+  defaultCountry: string;
+  dryRun: boolean;
+  status: ImportJobStatus;
+  totalRows: number | null;
+  processedRows: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  mergedDuplicates: number;
+  errors: Array<{ row: number; message: string }>;
+  newTags: string[];
+  newCustomFields: Array<{ name: string; label: string }>;
+  sample: ImportResult["sample"] | null;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+export type ImportJobStartResponse = {
+  jobId: string;
+  status: ImportJobStatus;
+};
+
+// ===== Background Tasks (cross-domain bar in the topbar) =====
+
+export type BackgroundTaskKind = "contact-import";
+
+export type BackgroundTask = {
+  id: string;
+  kind: BackgroundTaskKind;
+  label: string;
+  /** RUNNING | QUEUED | COMPLETED | FAILED | CANCELLED */
+  status: string;
+  processed: number;
+  total: number | null;
+  href?: string;
+  detail?: string;
+  createdAt: string;
+};
+
+export type PhoneCheckResult = {
+  exists: boolean;
+  contact?: { id: string; phone: string; name?: string | null; email?: string | null };
 };
 
 // Template module (aligned with backend API)
@@ -150,7 +276,8 @@ export type TemplateVersionStatus =
   | "PROVIDER_APPROVED"
   | "PROVIDER_REJECTED"
   | "PROVIDER_PAUSED"
-  | "PROVIDER_DISABLED";
+  | "PROVIDER_DISABLED"
+  | "PROVIDER_IN_APPEAL";
 
 export type TemplateVersionLayoutType = "STANDARD" | "CAROUSEL";
 
@@ -196,35 +323,182 @@ export type TemplateVersion = {
 export type Template = {
   id: string;
   workspaceId: string;
+  groupKey: string;
   name: string;
   description: string | null;
-  channel: TemplateChannel;
-  category: TemplateCategory;
-  providerTemplateId: string | null;
-  providerStatus?: string | null;
-  lastFetchedAt?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  versions?: TemplateVersion[];
+  channelTemplates?: ChannelTemplate[];
 };
 
-/** Payload for creating or updating a template version (DRAFT only for update) */
-export type TemplateVersionPayload = {
+/** Meta's template quality rating, surfaced once a template has been live and received feedback. */
+export type TemplateQualityRating = "GREEN" | "YELLOW" | "RED" | "UNKNOWN";
+
+export type ChannelTemplate = {
+  id: string;
+  workspaceId: string;
+  templateId: string;
+  channel: TemplateChannel;
+  category?: TemplateCategory;
+  providerTemplateId?: string | null;
+  providerStatus?: string | null;
+  /** Raw quality string from Meta. Use `normalizeQualityRating()` when reading. */
+  qualityScore?: string | null;
+  lastQualityCheckAt?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+};
+
+/** Coerce a free-form Meta quality string into one of our four rating values. */
+export function normalizeQualityRating(
+  raw: string | null | undefined
+): TemplateQualityRating {
+  const u = (raw ?? "").toString().trim().toUpperCase();
+  if (u === "GREEN" || u === "HIGH" || u === "HIGH_QUALITY") return "GREEN";
+  if (u === "YELLOW" || u === "MEDIUM" || u === "MEDIUM_QUALITY") return "YELLOW";
+  if (u === "RED" || u === "LOW" || u === "LOW_QUALITY") return "RED";
+  return "UNKNOWN";
+}
+
+export type ChannelTemplateVersion = {
+  id: string;
+  channelTemplateId: string;
+  /**
+   * Parent channel template, optionally included by `findById` so the UI can
+   * read category + provider state without a second round-trip. Absent on
+   * list endpoints to keep the wire payload lean.
+   */
+  channelTemplate?: ChannelTemplate;
+  version: number;
+  status: TemplateVersionStatus;
+  isActive: boolean;
+  isLocked: boolean;
+  providerVersionId?: string | null;
+  syncedAt?: string | null;
+  syncError?: string | null;
+  /** Rejection reason from Meta content review (async webhook). */
+  providerRejectionReason?: string | null;
+  archivedAt?: string | null;
+  submittedAt?: string | null;
+  approvedAt?: string | null;
+  /**
+   * Sent to Meta on first template create as `allow_category_change`.
+   * false = do not let Meta auto-reclassify to marketing from content.
+   */
+  allowCategoryChange?: boolean;
+  /** Present on GET `/channel-templates/:id/versions/:version` (not on `/state` summaries). */
+  body?: string;
+  headerType?: TemplateHeaderType | null;
+  headerContent?: string | null;
+  /** Signed API path to stream WhatsApp header media (when headerContent is a media id). */
+  headerPreviewUrl?: string | null;
+  footer?: string | null;
+  language?: string;
+  parameterFormat?: "POSITIONAL" | "NAMED";
+  ttlSeconds?: number | null;
+  layoutType?: TemplateVersionLayoutType;
+  buttons?: unknown;
+  variables?: unknown;
+  carouselCards?: unknown;
+  createdAt?: string;
+};
+
+/** `PUT /v2/channel-templates/:id/versions/:version` — all fields optional. */
+export type ChannelTemplateVersionUpdatePayload = {
+  headerType?: TemplateHeaderType;
+  headerContent?: string | null;
+  body?: string;
+  footer?: string | null;
+  language?: string;
+  parameterFormat?: "POSITIONAL" | "NAMED";
+  ttlSeconds?: number | null;
+  buttons?: unknown[] | null;
+  variables?: unknown[] | null;
+  layoutType?: TemplateVersionLayoutType;
+  carouselCards?: unknown[] | null;
+  allowCategoryChange?: boolean;
+};
+
+export type ChannelTemplateVersionPayload = {
   body: string;
   headerType?: TemplateHeaderType;
   headerContent?: string | null;
   footer?: string | null;
   language?: string;
-  buttons?: Array<{
-    type: string;
-    text: string;
-    url?: string;
-    phone_number?: string;
-  }>;
-  variables?: Array<{ key: string; example?: string }>;
-  layoutType?: TemplateVersionLayoutType;
-  carouselCards?: TemplateCarouselCard[] | null;
+  parameterFormat?: "POSITIONAL" | "NAMED";
+  ttlSeconds?: number | null;
+  buttons?: unknown[] | null;
+  variables?: unknown[] | null;
+  layoutType?: "STANDARD" | "CAROUSEL";
+  carouselCards?: unknown[] | null;
+  allowCategoryChange?: boolean;
+};
+
+/** `POST /v2/channel-templates/:id/versions/:version/sync` */
+export type ChannelTemplateSyncResult = {
+  success: boolean;
+  providerTemplateId?: string;
+  providerVersionId?: string;
+  error?: string;
+};
+
+export type ChannelTemplateStateRequirementAction = {
+  type: "CREATE_VERSION" | "VIEW_VERSIONS";
+  label: string;
+  method: "GET" | "POST" | "PATCH";
+  href: string;
+};
+
+export type ChannelTemplateStateRequirement = {
+  code: "NO_VERSION" | "NO_SENDABLE_VERSION";
+  message: string;
+  action?: ChannelTemplateStateRequirementAction;
+};
+
+export type ChannelTemplateState = {
+  channelTemplateId: string;
+  templateId: string;
+  channel: TemplateChannel;
+  category?: TemplateCategory | null;
+  providerTemplateId: string | null;
+  /** Exact name registered with Meta; what sends actually address (decoupled from display name). */
+  providerTemplateName?: string | null;
+  providerStatus: string | null;
+  /** Meta-reported quality (raw string). Pass through `normalizeQualityRating`. */
+  qualityScore?: string | null;
+  lastQualityCheckAt?: string | null;
+  lastSyncError: string | null;
+  latestVersion: ChannelTemplateVersion | null;
+  activeVersion: ChannelTemplateVersion | null;
+  latestSendableVersion: ChannelTemplateVersion | null;
+  /** Text placeholder keys ("1", "first_name", "header_1", "button_1_code"…) the send must bind. */
+  requiredVariableKeys?: string[];
+  isSendable: boolean;
+  missingRequirements: ChannelTemplateStateRequirement[];
+  /** Meta `correct_category` differs from current — automated recategorization pending */
+  categoryPendingChange: {
+    currentCategory: string;
+    correctCategory: string;
+    fetchedAt: string | null;
+  } | null;
+  /** From `account_update` webhook — utility misuse / restriction (workspace default number) */
+  whatsappUtilityRestriction: {
+    level: string | null;
+    detail: unknown;
+    updatedAt: string | null;
+  } | null;
+  /** From `phone_number_quality_update` webhook — phone-number-level quality. */
+  whatsappPhoneQuality: {
+    /** GREEN | YELLOW | RED | FLAGGED | other. */
+    rating: string | null;
+    displayPhoneNumber: string | null;
+    /** Set when the number first entered FLAGGED; used to compute the 7-day countdown. */
+    flaggedAt: string | null;
+    checkedAt: string | null;
+  } | null;
 };
 
 export type TemplatesListResponse = {
@@ -234,27 +508,55 @@ export type TemplatesListResponse = {
   limit: number;
 };
 
-export type TemplateSyncResponse = {
-  success: boolean;
-  providerTemplateId?: string;
-  providerVersionId?: string;
-  error?: string;
-};
-
-export type TemplateImportResponse = {
-  imported: number;
-  updated: number;
-  flagged: number;
-};
-
 export type TemplateLimitsResponse = {
   current: number;
   max: number;
   isVerified: boolean;
 };
 
+export type NotificationType =
+  | "CONVERSATION_ASSIGNED"
+  | "CONVERSATION_REASSIGNED"
+  | "CAMPAIGN_COMPLETED"
+  | "CAMPAIGN_FAILED"
+  | "CONTACT_IMPORT_DONE"
+  | "TEMPLATE_CATEGORY_CHANGE"
+  | "WHATSAPP_RESTRICTION"
+  | "PLAN_CHANGED"
+  | "TRIAL_EXPIRING"
+  | "SYSTEM";
+
+export type NotificationSeverity = "INFO" | "WARNING" | "ERROR";
+
+export type NotificationItem = {
+  id: string;
+  workspaceId: string;
+  userId: string | null;
+  type: NotificationType;
+  severity: NotificationSeverity;
+  title: string;
+  body: string;
+  data: Record<string, unknown> | null;
+  idempotencyKey: string;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type NotificationsListResponse = {
+  items: NotificationItem[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 // Auth and platform module (aligned with backend API)
-export type WorkspaceRole = "OWNER" | "ADMIN" | "AGENT";
+export type WorkspaceRole =
+  | "OWNER"
+  | "ADMIN"
+  | "SUPERVISOR"
+  | "AGENT"
+  | "AUDITOR"
+  | "VIEWER";
 export type PlatformRole = "SUPERADMIN" | "SUPPORT" | "NONE";
 
 export type OffsetPaginatedResponse<T> = {
@@ -278,6 +580,12 @@ export type PlatformWorkspaceListItem = {
   status: PlatformWorkspaceStatus;
   isSuspended: boolean;
   suspendedAt?: string | null;
+  plan?: string | null;
+  planExpiresAt?: string | null;
+  billingEmail?: string | null;
+  subscriptionId?: string | null;
+  billingCycleStart?: string | null;
+  billingCycleEnd?: string | null;
   _count: {
     workspaceMembers: number;
     contacts: number;
@@ -303,6 +611,13 @@ export type PlatformWorkspaceDetail = {
   status: PlatformWorkspaceStatus;
   isSuspended: boolean;
   suspendedAt?: string | null;
+  plan?: string | null;
+  planExpiresAt?: string | null;
+  billingEmail?: string | null;
+  subscriptionId?: string | null;
+  billingCycleStart?: string | null;
+  billingCycleEnd?: string | null;
+  trialEndsAt?: string | null;
   members?: PlatformWorkspaceMember[];
   settings?: Record<string, unknown> | null;
   messagingConfig?: Record<string, unknown> | null;
@@ -310,6 +625,19 @@ export type PlatformWorkspaceDetail = {
     hasAccessToken?: boolean;
     [key: string]: unknown;
   } | null;
+  cloudApiAccounts?: Array<{
+    id: string;
+    phoneNumberId?: string | null;
+    displayPhoneNumber?: string | null;
+    wabaId?: string | null;
+    businessId?: string | null;
+    status?: string | null;
+    isDefault?: boolean;
+    hasAccessToken?: boolean;
+    tokenExpiresAt?: string | null;
+    lastError?: string | null;
+    [key: string]: unknown;
+  }>;
   _count?: Partial<PlatformWorkspaceListItem["_count"]>;
   [key: string]: unknown;
 };
@@ -356,16 +684,20 @@ export type PlatformUsageEvent = {
   [key: string]: unknown;
 };
 
-export type PlatformBsp = "TWILIO" | "INTERAKT" | "AISENSY" | "OTHER";
-
-export type PlatformBspCredential = {
+export type PlatformAdminAuditLog = {
   id: string;
-  bsp: PlatformBsp;
-  webhookUrl?: string | null;
-  hasWebhookSecret: boolean;
-  isActive: boolean;
-  credentialKeys: string[];
+  actorUserId: string;
+  action: string;
+  targetType: string;
+  targetId: string;
+  before?: unknown;
+  after?: unknown;
+  ip?: string | null;
+  userAgent?: string | null;
+  requestId?: string | null;
+  createdAt: string;
 };
+
 
 export type PlatformChannelAccount = {
   id: string;
@@ -407,4 +739,48 @@ export type OnboardingWaba = {
 export type OnboardingWabaListResponse = {
   wabas: OnboardingWaba[];
   count: number;
+};
+
+export type FeedbackType = "BUG" | "FEATURE_REQUEST";
+export type FeedbackPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type FeedbackStatus =
+  | "OPEN"
+  | "IN_REVIEW"
+  | "PLANNED"
+  | "IN_PROGRESS"
+  | "DONE"
+  | "WONT_FIX";
+
+export type FeedbackAttachment = {
+  url: string;
+  name: string;
+  mimeType: string;
+  size: number;
+};
+
+export type FeedbackReport = {
+  id: string;
+  workspaceId: string;
+  userId: string;
+  type: FeedbackType;
+  title: string;
+  description: string;
+  priority: FeedbackPriority;
+  status: FeedbackStatus;
+  attachments?: FeedbackAttachment[];
+  metadata?: Record<string, unknown>;
+  voteCount: number;
+  adminNote?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  hasVoted: boolean;
+  submittedBy?: string | null;
+};
+
+export type PaginatedFeedbackResponse = {
+  items: FeedbackReport[];
+  total: number;
+  page: number;
+  limit: number;
 };
