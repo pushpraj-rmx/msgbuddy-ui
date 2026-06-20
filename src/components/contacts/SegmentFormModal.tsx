@@ -36,14 +36,20 @@ export function SegmentFormModal({
 }) {
   const [name, setName] = useState(segment?.name ?? "");
   const [description, setDescription] = useState(segment?.description ?? "");
+  // Seed from tagIds ONLY. Legacy segments that stored tag *names* in
+  // query.tags are resolved to IDs in the effect below — never treated as IDs
+  // directly (doing so would write names into tagIds and match zero contacts).
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(
-    segment?.query?.tagIds ?? segment?.query?.tags ?? []
+    segment?.query?.tagIds ?? []
+  );
+  const [unresolvedTags, setUnresolvedTags] = useState<string[]>([]);
+  const [tagsMatch, setTagsMatch] = useState<"all" | "any">(
+    // New segments default to "any" (the intuitive multi-tag behaviour);
+    // existing ones reflect their stored mode (absent = the old "all").
+    segment ? (segment.query?.tagsMatch === "any" ? "any" : "all") : "any"
   );
   const [hasEmail, setHasEmail] = useState<TriState>(
     boolToTri(segment?.query?.hasEmail)
-  );
-  const [hasPhone, setHasPhone] = useState<TriState>(
-    boolToTri(segment?.query?.hasPhone)
   );
   const [blocked, setBlocked] = useState<TriState>(
     boolToTri(segment?.query?.isBlocked)
@@ -66,6 +72,32 @@ export function SegmentFormModal({
     queryFn: () => tagsApi.list(),
   });
 
+  // One-shot migration of a legacy name-based segment to tag IDs, performed
+  // during render (the React-recommended way to derive state from freshly
+  // loaded data — no effect) once the tag list arrives. The `legacyResolved`
+  // state flag makes it run exactly once. Unresolvable names (renamed/deleted
+  // tags) are dropped and surfaced so the user knows the segment will widen.
+  const [legacyResolved, setLegacyResolved] = useState(false);
+  const legacyTags = segment?.query?.tags;
+  if (
+    !legacyResolved &&
+    legacyTags?.length &&
+    !segment?.query?.tagIds?.length &&
+    allTags.length > 0
+  ) {
+    setLegacyResolved(true);
+    const byName = new Map(allTags.map((t) => [t.name.trim().toLowerCase(), t.id]));
+    const resolved: string[] = [];
+    const missing: string[] = [];
+    for (const name of legacyTags) {
+      const id = byName.get(name.trim().toLowerCase());
+      if (id) resolved.push(id);
+      else missing.push(name);
+    }
+    setSelectedTagIds(resolved);
+    setUnresolvedTags(missing);
+  }
+
   const toggleTag = (tagId: string) => {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((t) => t !== tagId) : [...prev, tagId]
@@ -75,8 +107,9 @@ export function SegmentFormModal({
   const handleSubmit = () => {
     const query: SegmentQuery = {
       tagIds: selectedTagIds.length ? selectedTagIds : undefined,
+      // Only meaningful with >1 tag; harmless otherwise.
+      tagsMatch: selectedTagIds.length > 1 ? tagsMatch : undefined,
       hasEmail: triToBool(hasEmail),
-      hasPhone: triToBool(hasPhone),
       isBlocked: triToBool(blocked),
       isOptedOut: triToBool(optedOut),
       customFields: customFields
@@ -127,7 +160,7 @@ export function SegmentFormModal({
           <div>
             <span className="op-label mb-1.5 flex items-center gap-1.5">
               Tags
-              <InfoTip tip="Contact must have ALL selected tags (AND logic)" />
+              <InfoTip tip="With multiple tags, choose Any (has at least one) or All (has every one). 'All' often matches 0 contacts." />
             </span>
             {allTags.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
@@ -155,6 +188,32 @@ export function SegmentFormModal({
             ) : (
               <p className="text-[0.75rem] text-base-content/50">No tags created yet.</p>
             )}
+            {selectedTagIds.length > 1 ? (
+              <div className="mt-2 flex items-center gap-2">
+                <span className="text-[0.6875rem] text-base-content/50">Match</span>
+                <div className="join">
+                  {(["any", "all"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className={`btn btn-xs join-item ${
+                        tagsMatch === mode ? "btn-primary" : "btn-ghost"
+                      }`}
+                      onClick={() => setTagsMatch(mode)}
+                    >
+                      {mode === "any" ? "Any tag" : "All tags"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {unresolvedTags.length > 0 ? (
+              <p className="mt-2 text-[0.6875rem] text-warning">
+                {unresolvedTags.length} tag
+                {unresolvedTags.length > 1 ? "s" : ""} from this segment no longer
+                exist and will be removed on save: {unresolvedTags.join(", ")}.
+              </p>
+            ) : null}
           </div>
 
           {/* Contact properties */}
@@ -162,7 +221,6 @@ export function SegmentFormModal({
             <span className="op-label mb-2 block">Contact properties</span>
             <div className="grid grid-cols-2 gap-2">
               <TriSelect label="Has email" value={hasEmail} onChange={setHasEmail} />
-              <TriSelect label="Has phone" value={hasPhone} onChange={setHasPhone} />
               <TriSelect label="Blocked" value={blocked} onChange={setBlocked} />
               <TriSelect label="Opted out" value={optedOut} onChange={setOptedOut} />
             </div>

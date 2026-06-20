@@ -16,6 +16,8 @@ import {
   useSyncChannelTemplateVersion,
   useRefreshChannelTemplateProviderState,
   useUpdateChannelTemplate,
+  useTemplate,
+  useUpdateTemplate,
 } from "@/hooks/use-templates";
 import type {
   ChannelTemplateVersion,
@@ -441,6 +443,34 @@ export function ChannelTemplateDetailClient({
   const refreshProviderMutation = useRefreshChannelTemplateProviderState();
   const updateChannelTemplateMutation = useUpdateChannelTemplate();
 
+  // Inline template name + description (template-level), so the whole template can be built on
+  // this one screen — no separate create step.
+  const templateId = state?.templateId ?? null;
+  const templateQuery = useTemplate(templateId);
+  const updateTemplateMutation = useUpdateTemplate();
+  const loadedTpl = templateQuery.data;
+  const [tplName, setTplName] = useState("");
+  const [tplDescription, setTplDescription] = useState("");
+  useEffect(() => {
+    if (loadedTpl) {
+      setTplName(loadedTpl.name ?? "");
+      setTplDescription(loadedTpl.description ?? "");
+    }
+    // Depend on the values, not the object identity, so a background refetch doesn't clobber
+    // what the user is currently typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedTpl?.id, loadedTpl?.name, loadedTpl?.description]);
+  const saveTemplateName = useCallback(() => {
+    const next = tplName.trim();
+    if (!templateId || !next || next === (loadedTpl?.name ?? "")) return;
+    updateTemplateMutation.mutate({ id: templateId, data: { name: next } });
+  }, [templateId, tplName, loadedTpl?.name, updateTemplateMutation]);
+  const saveTemplateDescription = useCallback(() => {
+    const next = tplDescription.trim();
+    if (!templateId || next === (loadedTpl?.description ?? "")) return;
+    updateTemplateMutation.mutate({ id: templateId, data: { description: next } });
+  }, [templateId, tplDescription, loadedTpl?.description, updateTemplateMutation]);
+
   const editorRef = useRef<ChannelTemplateVersionEditorHandle | null>(null);
 
   // Clear any submit error when the visible version changes — stale message would
@@ -584,10 +614,12 @@ export function ChannelTemplateDetailClient({
 
   const onCreate = useCallback(() => {
     const payload: ChannelTemplateVersionPayload =
-      version?.body
+      version
         ? {
-            // Clone currently selected version as a starting point.
-            body: version.body,
+            // Clone the currently selected version as a starting point. (Auth templates have an
+            // empty body, so we key off `version` existing — not `version.body` — and carry
+            // authConfig, otherwise the OTP setup would be lost.)
+            body: version.body ?? "",
             headerType: version.headerType ?? "NONE",
             headerContent: version.headerContent ?? null,
             footer: version.footer ?? null,
@@ -598,6 +630,7 @@ export function ChannelTemplateDetailClient({
             variables: (version.variables as unknown[] | null) ?? null,
             carouselCards: (version.carouselCards as unknown[] | null) ?? null,
             allowCategoryChange: version.allowCategoryChange !== false,
+            authConfig: version.authConfig ?? null,
           }
         : {
             // First version default.
@@ -764,6 +797,35 @@ export function ChannelTemplateDetailClient({
 
   return (
     <div className="space-y-4">
+      {templateId && (
+        <div className="card bg-base-100 border border-base-300 p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="form-control w-full">
+              <span className="label-text text-xs">Template name</span>
+              <input
+                type="text"
+                className="input input-bordered input-sm w-full"
+                value={tplName}
+                onChange={(e) => setTplName(e.target.value)}
+                onBlur={saveTemplateName}
+                placeholder="Untitled template"
+              />
+            </label>
+            <label className="form-control w-full">
+              <span className="label-text text-xs">Description</span>
+              <input
+                type="text"
+                className="input input-bordered input-sm w-full"
+                value={tplDescription}
+                onChange={(e) => setTplDescription(e.target.value)}
+                onBlur={saveTemplateDescription}
+                placeholder="Optional — internal reference only"
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       {state.whatsappUtilityRestriction && (
         <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-4 py-3">
           <span>

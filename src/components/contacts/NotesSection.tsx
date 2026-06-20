@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { contactsApi } from "@/lib/api";
 import type { ContactNote } from "@/lib/types";
 
@@ -13,24 +13,37 @@ export function NotesSection({
   currentUserId?: string;
 }) {
   const [content, setContent] = useState("");
+  const queryClient = useQueryClient();
 
-  const { data: notes = [], refetch } = useQuery({
+  const { data: notes = [], refetch, isError } = useQuery({
     queryKey: ["contacts", contactId, "notes"],
     queryFn: () => contactsApi.listNotes(contactId),
   });
+
+  // Notes also appear in the Activity timeline (notes + messages merged), so
+  // refresh that query too — otherwise a note added/removed here won't show
+  // under the Activity tab until a remount.
+  const invalidateTimeline = () =>
+    queryClient.invalidateQueries({
+      queryKey: ["contacts", contactId, "timeline"],
+    });
 
   const createMutation = useMutation({
     mutationFn: (text: string) => contactsApi.createNote(contactId, text),
     onSuccess: () => {
       setContent("");
       refetch();
+      invalidateTimeline();
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (noteId: string) =>
       contactsApi.deleteNote(contactId, noteId),
-    onSuccess: () => refetch(),
+    onSuccess: () => {
+      refetch();
+      invalidateTimeline();
+    },
   });
 
   const canDelete = (note: ContactNote) =>
@@ -64,8 +77,29 @@ export function NotesSection({
             )}
           </button>
         </div>
+        {createMutation.isError ? (
+          <p className="text-[0.75rem] text-error">
+            Couldn&apos;t save the note. Try again.
+          </p>
+        ) : null}
+        {deleteMutation.isError ? (
+          <p className="text-[0.75rem] text-error">
+            Couldn&apos;t delete the note. Try again.
+          </p>
+        ) : null}
       </div>
-      {notes.length === 0 ? (
+      {isError ? (
+        <p className="text-[0.8125rem] text-error">
+          Couldn&apos;t load notes.{" "}
+          <button
+            type="button"
+            className="underline hover:no-underline"
+            onClick={() => refetch()}
+          >
+            Retry
+          </button>
+        </p>
+      ) : notes.length === 0 ? (
         <p className="text-[0.8125rem] text-base-content/55">No notes yet.</p>
       ) : (
         <ul className="space-y-2">

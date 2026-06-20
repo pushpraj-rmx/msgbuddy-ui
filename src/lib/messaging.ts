@@ -170,7 +170,18 @@ export function getMediaKind(message: InboxMessage): MediaKind {
   }
 }
 
-export function isFailedMessage(message: InboxMessage): boolean {
+/**
+ * Minimal structural shape for delivery-status helpers/icons. Both full
+ * {@link InboxMessage} and the lighter conversation-list `lastMessage` summary
+ * satisfy it, so the same status logic can be reused in the conversation list.
+ */
+export type MessageStatusLike = {
+  direction?: "INBOUND" | "OUTBOUND" | string;
+  status?: MessageStatus | string | null;
+  failedAt?: string | null;
+};
+
+export function isFailedMessage(message: MessageStatusLike): boolean {
   const s = message.status?.toUpperCase();
   if (s === "FAILED") return true;
   if (message.failedAt) return true;

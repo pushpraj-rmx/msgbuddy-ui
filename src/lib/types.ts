@@ -89,10 +89,11 @@ export type ContactNote = {
 export type SegmentQuery = {
   /** @deprecated Use tagIds. Legacy: tag names. */
   tags?: string[];
-  /** Preferred: tag IDs. Contacts must have ALL listed tags. */
+  /** Preferred: tag IDs. Combined per `tagsMatch` (default 'all' = AND). */
   tagIds?: string[];
+  /** 'all' = must have every tag (AND, default); 'any' = at least one (OR). */
+  tagsMatch?: "all" | "any";
   hasEmail?: boolean;
-  hasPhone?: boolean;
   isBlocked?: boolean;
   isOptedOut?: boolean;
   customFields?: Array<{ name: string; op: "eq" | "ne" | "contains"; value: string }>;
@@ -403,7 +404,22 @@ export type ChannelTemplateVersion = {
   buttons?: unknown;
   variables?: unknown;
   carouselCards?: unknown;
+  /** AUTHENTICATION templates only — fixed OTP shape (see TemplateAuthConfig). */
+  authConfig?: TemplateAuthConfig | null;
   createdAt?: string;
+};
+
+export type TemplateOtpType = "COPY_CODE" | "ONE_TAP" | "ZERO_TAP";
+
+export type TemplateAuthConfig = {
+  otpType: TemplateOtpType;
+  buttonText?: string;
+  addSecurityRecommendation?: boolean;
+  codeExpirationMinutes?: number;
+  autofillText?: string;
+  packageName?: string;
+  signatureHash?: string;
+  zeroTapTermsAccepted?: boolean;
 };
 
 /** `PUT /v2/channel-templates/:id/versions/:version` — all fields optional. */
@@ -420,6 +436,7 @@ export type ChannelTemplateVersionUpdatePayload = {
   layoutType?: TemplateVersionLayoutType;
   carouselCards?: unknown[] | null;
   allowCategoryChange?: boolean;
+  authConfig?: TemplateAuthConfig | null;
 };
 
 export type ChannelTemplateVersionPayload = {
@@ -435,6 +452,7 @@ export type ChannelTemplateVersionPayload = {
   layoutType?: "STANDARD" | "CAROUSEL";
   carouselCards?: unknown[] | null;
   allowCategoryChange?: boolean;
+  authConfig?: TemplateAuthConfig | null;
 };
 
 /** `POST /v2/channel-templates/:id/versions/:version/sync` */

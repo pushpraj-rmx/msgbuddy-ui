@@ -35,6 +35,7 @@ import {
 } from "@/lib/types";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { MessageBubble } from "@/components/inbox/MessageBubble";
+import { MessageStatusIcon } from "@/components/inbox/MessageStatusIcon";
 import { CreateTaskFromMessageModal } from "@/components/inbox/CreateTaskFromMessageModal";
 import { InternalNotesPanel } from "@/components/inbox/InternalNotesPanel";
 import { TasksPanel } from "@/components/inbox/TasksPanel";
@@ -44,7 +45,8 @@ import {
   classifyWhatsAppMediaKind,
   useInboxWhatsAppMediaUpload,
 } from "@/hooks/use-inbox-whatsapp-media-upload";
-import { type InboxMessage } from "@/lib/messaging";
+import { type InboxMessage, type MessageReactionWire, isFailedMessage } from "@/lib/messaging";
+import { lastMessagePreview, reactionPreview } from "@/lib/inboxPreview";
 import type { ChannelTemplateVersion, Contact, Template } from "@/lib/types";
 import {
   carouselCardFileAccept,
@@ -92,7 +94,13 @@ export type Conversation = {
     direction?: "INBOUND" | "OUTBOUND";
     errorMessage?: string;
     failedAt?: string;
+    createdAt?: string;
   };
+  /** Most recent reaction in the conversation (reactions aren't messages, so
+   *  they surface here). Shown in the preview when newer than lastMessage. */
+  lastReactionEmoji?: string | null;
+  lastReactionAt?: string | null;
+  lastReactionByContact?: boolean | null;
   contact?: {
     id?: string;
     name?: string;
@@ -118,17 +126,6 @@ export type Conversation = {
   } | null;
 };
 
-function lastMessagePreview(lastMessage?: Conversation["lastMessage"]): string {
-  if (!lastMessage) return "No messages";
-  const t = lastMessage.text?.trim();
-  if (t) return t;
-  const ty = lastMessage.type?.toUpperCase();
-  if (ty === "IMAGE") return "Image";
-  if (ty === "VIDEO") return "Video";
-  if (ty === "AUDIO") return "Audio";
-  if (ty === "DOCUMENT") return "Document";
-  return "No messages";
-}
 
 function pendingKindLabel(kind: WhatsAppOutboundMediaType | null): string {
   switch (kind) {
@@ -1774,12 +1771,12 @@ export function InboxClient({
         if (isMessageReactionChanged(ev.type)) {
           const convId =
             typeof ev.data.conversationId === "string" ? ev.data.conversationId : "";
+          const reactions: MessageReactionWire[] = Array.isArray(ev.data.reactions)
+            ? (ev.data.reactions as MessageReactionWire[])
+            : [];
           if (selectedId && convId === selectedId) {
             const messageId =
               typeof ev.data.messageId === "string" ? ev.data.messageId : "";
-            const reactions = Array.isArray(ev.data.reactions)
-              ? (ev.data.reactions as InboxMessage["reactions"])
-              : [];
             if (messageId) {
               setMessages((prev) => {
                 const idx = prev.findIndex((m) => m.id === messageId);
@@ -1789,6 +1786,37 @@ export function InboxClient({
                 return next;
               });
             }
+          }
+          // Patch the conversation-list preview for ANY conversation (not just
+          // the open one) so "Reacted 👍" appears/updates live. Uses this
+          // message's latest reaction as the conversation's latest — the next
+          // list fetch reconciles the rare cross-message case.
+          if (convId) {
+            const latest = reactions.reduce<MessageReactionWire | null>(
+              (acc, r) => {
+                if (!acc) return r;
+                const t = new Date(r.updatedAt ?? r.createdAt).getTime();
+                const accT = new Date(acc.updatedAt ?? acc.createdAt).getTime();
+                return t >= accT ? r : acc;
+              },
+              null,
+            );
+            setConversations((prev) =>
+              prev.map((c) =>
+                c.id === convId
+                  ? {
+                      ...c,
+                      lastReactionEmoji: latest ? latest.emoji : null,
+                      lastReactionAt: latest
+                        ? (latest.updatedAt ?? latest.createdAt)
+                        : null,
+                      lastReactionByContact: latest
+                        ? latest.actorContactId != null
+                        : null,
+                    }
+                  : c,
+              ),
+            );
           }
           return;
         }
@@ -3337,9 +3365,23 @@ export function InboxClient({
                       conversation.contact?.phone ||
                       conversation.contact?.email ||
                       "Unknown contact";
+                    const reactionLine = reactionPreview(conversation);
                     const subtitle = hasDraft
                       ? `Draft: ${draftsByConversation[conversation.id]}`
-                      : lastMessagePreview(conversation.lastMessage);
+                      : (reactionLine ?? lastMessagePreview(conversation.lastMessage));
+                    // When the latest activity is a reaction, don't also draw
+                    // the outbound delivery-status icon (it refers to the
+                    // message, not the reaction).
+                    const showReactionLine = !hasDraft && reactionLine !== null;
+                    // Outbound-only delivery indicator on the last message. Not
+                    // shown while a draft is pending (the draft isn't sent yet).
+                    const showStatusIcon =
+                      !hasDraft &&
+                      !showReactionLine &&
+                      conversation.lastMessage?.direction === "OUTBOUND";
+                    const lastMessageFailed =
+                      showStatusIcon &&
+                      isFailedMessage(conversation.lastMessage!);
                     return (
                       <li key={conversation.id}>
                         <button
@@ -3381,12 +3423,20 @@ export function InboxClient({
                               ) : null}
                             </div>
                             <span
-                              className={`truncate text-xs ${hasUnread || isAwaitingReply
-                                ? "font-medium text-base-content/80"
-                                : "text-base-content/55"
+                              className={`flex items-center gap-1 text-xs ${lastMessageFailed
+                                ? "font-medium text-error"
+                                : hasUnread || isAwaitingReply
+                                  ? "font-medium text-base-content/80"
+                                  : "text-base-content/55"
                                 }`}
                             >
-                              {subtitle}
+                              {showStatusIcon ? (
+                                <MessageStatusIcon
+                                  message={conversation.lastMessage!}
+                                  className="h-3 w-3 shrink-0"
+                                />
+                              ) : null}
+                              <span className="truncate">{subtitle}</span>
                             </span>
                           </div>
                         </button>

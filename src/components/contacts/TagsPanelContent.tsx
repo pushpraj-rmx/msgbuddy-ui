@@ -21,6 +21,16 @@ export function TagsPanelContent({ canManage }: { canManage: boolean }) {
     queryFn: () => tagsApi.list(),
   });
 
+  // A tag rename/delete is visible on contacts (tag chips/columns) and segments
+  // (tag-based membership/counts), so invalidate those too — not just the tag
+  // list. Create only changes the available-tags list.
+  const invalidateTagDependents = () => {
+    queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY });
+    queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    queryClient.invalidateQueries({ queryKey: ["segments"] });
+    queryClient.invalidateQueries({ queryKey: ["segmentPreview"] });
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: { name: string; color?: string }) => tagsApi.create(data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }); setCreating(false); },
@@ -28,12 +38,12 @@ export function TagsPanelContent({ canManage }: { canManage: boolean }) {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: { name?: string; color?: string } }) => tagsApi.update(id, data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }); setEditing(null); },
+    onSuccess: () => { invalidateTagDependents(); setEditing(null); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => tagsApi.delete(id),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: TAGS_QUERY_KEY }); },
+    onSuccess: () => { invalidateTagDependents(); },
   });
 
   return (
@@ -151,6 +161,11 @@ function TagInlineForm({
   const [name, setName] = useState(tag?.name ?? "");
   const [color, setColor] = useState(tag?.color ?? "");
 
+  // Mirror the backend's hex validation (create-tag DTO) so an invalid free-text
+  // hex doesn't silently 400. Empty is allowed (color is optional).
+  const trimmedColor = color.trim();
+  const colorValid = trimmedColor === "" || /^#[0-9a-fA-F]{3,8}$/.test(trimmedColor);
+
   return (
     <div className="border-b border-base-300 bg-base-200 px-4 py-3 space-y-2">
       <span className="op-label">{tag ? "Edit tag" : "New tag"}</span>
@@ -166,17 +181,24 @@ function TagInlineForm({
         <input
           type="color"
           className="h-8 w-10 cursor-pointer rounded border border-base-300"
-          value={color || "#6b7280"}
+          value={colorValid && trimmedColor ? trimmedColor : "#6b7280"}
           onChange={(e) => setColor(e.target.value)}
         />
         <input
           type="text"
-          className="input input-bordered input-sm flex-1 font-mono-op text-[0.6875rem]"
+          className={`input input-bordered input-sm flex-1 font-mono-op text-[0.6875rem] ${
+            colorValid ? "" : "input-error"
+          }`}
           value={color}
           onChange={(e) => setColor(e.target.value)}
           placeholder="#hex"
         />
       </div>
+      {!colorValid ? (
+        <p className="text-[0.6875rem] text-error">
+          Enter a valid hex colour, e.g. #16a34a.
+        </p>
+      ) : null}
       <div className="flex justify-end gap-1.5">
         <button type="button" className="btn btn-ghost btn-xs" onClick={onCancel} disabled={isPending}>
           Cancel
@@ -184,8 +206,8 @@ function TagInlineForm({
         <button
           type="button"
           className="btn btn-primary btn-xs"
-          onClick={() => onSubmit({ name: name.trim(), color: color.trim() || undefined })}
-          disabled={!name.trim() || isPending}
+          onClick={() => onSubmit({ name: name.trim(), color: trimmedColor || undefined })}
+          disabled={!name.trim() || !colorValid || isPending}
         >
           {isPending ? <span className="loading loading-spinner loading-xs" /> : tag ? "Save" : "Create"}
         </button>

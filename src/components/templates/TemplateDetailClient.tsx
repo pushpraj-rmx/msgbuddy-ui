@@ -9,6 +9,7 @@ import {
   useUpdateTemplate,
   useChannelTemplateState,
   channelTemplateKeys,
+  templateKeys,
 } from "@/hooks/use-templates";
 import type { ChannelTemplate, ChannelTemplateStateRequirement, TemplateCategory, WorkspaceRole } from "@/lib/types";
 import { templatesApi } from "@/lib/api";
@@ -177,7 +178,13 @@ export function TemplateDetailClient({ templateId, workspaceId }: Props) {
   const addWhatsAppMutation = useMutation({
     mutationFn: (category: TemplateCategory) =>
       templatesApi.addWhatsApp(templateId, { category }),
-    onSuccess: (ct) => router.push(`/channel-templates/${ct.id}`),
+    onSuccess: (ct) => {
+      // Refresh this template's detail (its channelTemplates list) + the templates list so the
+      // new channel is there when the user navigates back.
+      void queryClient.invalidateQueries({ queryKey: templateKeys.detail(templateId) });
+      void queryClient.invalidateQueries({ queryKey: templateKeys.lists() });
+      router.push(`/channel-templates/${ct.id}`);
+    },
   });
 
   const template = templateQuery.data;

@@ -140,6 +140,7 @@ export function useCreateChannelTemplateVersion() {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(ctId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(ctId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(ctId, data.version) });
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -175,6 +176,9 @@ export function useUpdateChannelTemplate() {
       channelTemplatesApi.update(id, { category }),
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(variables.id) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(variables.id) });
+      // Category shows in the templates list + detail.
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -188,6 +192,9 @@ export function useActivateChannelTemplateVersion() {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+      // Parent template summary (status / sendability badges in the list + detail) derives from
+      // version state, so refresh those too.
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -201,6 +208,9 @@ export function useSubmitChannelTemplateVersion() {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+      // Parent template summary (status / sendability badges in the list + detail) derives from
+      // version state, so refresh those too.
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -214,6 +224,9 @@ export function useApproveChannelTemplateVersion() {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+      // Parent template summary (status / sendability badges in the list + detail) derives from
+      // version state, so refresh those too.
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -227,6 +240,9 @@ export function useRejectChannelTemplateVersion() {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+      // Parent template summary (status / sendability badges in the list + detail) derives from
+      // version state, so refresh those too.
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -240,6 +256,9 @@ export function useArchiveChannelTemplateVersion() {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(data.channelTemplateId) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.version(data.channelTemplateId, data.version) });
+      // Parent template summary (status / sendability badges in the list + detail) derives from
+      // version state, so refresh those too.
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -255,6 +274,7 @@ export function useSyncChannelTemplateVersion() {
       qc.invalidateQueries({
         queryKey: channelTemplateKeys.version(variables.id, variables.version),
       });
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -266,6 +286,7 @@ export function useRefreshChannelTemplateProviderState() {
     onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: channelTemplateKeys.state(variables.id) });
       qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(variables.id) });
+      qc.invalidateQueries({ queryKey: templateKeys.all });
     },
   });
 }
@@ -295,7 +316,9 @@ export function useRemoveTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => templatesApi.remove(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      // Drop the deleted template's detail so navigating back doesn't show a ghost record.
+      qc.removeQueries({ queryKey: templateKeys.detail(id) });
       qc.invalidateQueries({ queryKey: templateKeys.lists() });
       qc.invalidateQueries({ queryKey: templateKeys.limits() });
     },
