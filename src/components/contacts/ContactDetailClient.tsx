@@ -65,6 +65,9 @@ export function ContactDetailClient({
 
   const invalidateContact = () => {
     queryClient.invalidateQueries({ queryKey: CONTACT_QUERY_KEY(contact.id) });
+    // Also refresh the contacts list so edits/tag changes made here are
+    // reflected in the list's name/tags columns (the drawer does the same).
+    queryClient.invalidateQueries({ queryKey: ["contacts", "list"] });
     refetch();
   };
 
@@ -74,6 +77,7 @@ export function ContactDetailClient({
       email?: string;
       phoneLabel?: string;
       emailLabel?: string;
+      designation?: string;
       isBlocked?: boolean;
       isOptedOut?: boolean;
     }) => contactsApi.update(contact.id, payload),
@@ -285,6 +289,7 @@ export function ContactDetailClient({
               email: payload.email,
               phoneLabel: payload.phoneLabel,
               emailLabel: payload.emailLabel,
+              designation: payload.designation,
               isBlocked: payload.isBlocked,
               isOptedOut: payload.isOptedOut,
             })

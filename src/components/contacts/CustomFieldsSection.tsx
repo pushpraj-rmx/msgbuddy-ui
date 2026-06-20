@@ -162,6 +162,17 @@ function ManageDefinitionsModal({
     },
   });
 
+  // Editing or deleting a definition changes every contact's custom-field
+  // values (the backend cascades a delete), so invalidate all per-contact
+  // value queries — keyed ["contacts", <id>, "custom-fields"] — not just the
+  // definitions list. A predicate targets exactly those without refetching the
+  // whole contacts cache.
+  const invalidateContactValues = () =>
+    queryClient.invalidateQueries({
+      predicate: (q) =>
+        q.queryKey[0] === "contacts" && q.queryKey[2] === "custom-fields",
+    });
+
   const updateMutation = useMutation({
     mutationFn: ({
       id,
@@ -173,6 +184,7 @@ function ManageDefinitionsModal({
     onSuccess: () => {
       onChanged();
       queryClient.invalidateQueries({ queryKey: DEFINITIONS_QUERY_KEY });
+      invalidateContactValues();
       setEditingDef(null);
     },
   });
@@ -182,6 +194,7 @@ function ManageDefinitionsModal({
     onSuccess: () => {
       onChanged();
       queryClient.invalidateQueries({ queryKey: DEFINITIONS_QUERY_KEY });
+      invalidateContactValues();
     },
   });
 
@@ -449,6 +462,35 @@ function EditDefinitionForm({
   );
 }
 
+/**
+ * Client-side mirror of the backend's per-type validation (custom-fields
+ * service). Returns an error string or null. Keeps the form from issuing a save
+ * the API would reject with a 400.
+ */
+function validateFieldValue(def: CustomFieldDef, raw: string): string | null {
+  const value = raw.trim();
+  if (value === "") return def.isRequired ? "Required" : null;
+  switch (def.type) {
+    case "NUMBER":
+      return /^-?\d+(\.\d+)?$/.test(value) ? null : "Must be a number";
+    case "DATE":
+      return isNaN(new Date(value).getTime()) ? "Must be a valid date" : null;
+    case "EMAIL":
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+        ? null
+        : "Must be a valid email";
+    case "URL":
+      try {
+        new URL(value);
+        return null;
+      } catch {
+        return "Must be a valid URL";
+      }
+    default:
+      return null;
+  }
+}
+
 function CustomFieldsEditForm({
   definitions,
   valueByFieldId,
@@ -467,9 +509,35 @@ function CustomFieldsEditForm({
       definitions.map((d) => [d.id, valueByFieldId.get(d.id) ?? ""])
     )
   );
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const setValue = (fieldId: string, value: string) => {
     setLocal((prev) => ({ ...prev, [fieldId]: value }));
+    setErrors((prev) => {
+      if (!prev[fieldId]) return prev;
+      const next = { ...prev };
+      delete next[fieldId];
+      return next;
+    });
+  };
+
+  const handleSave = () => {
+    const errs: Record<string, string> = {};
+    for (const def of definitions) {
+      const err = validateFieldValue(def, local[def.id] ?? "");
+      if (err) errs[def.id] = err;
+    }
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    // Send non-empty values, plus an explicit empty for fields that previously
+    // had a value (a clear → the backend deletes it). Untouched-empty optional
+    // fields are omitted so we don't issue redundant deletes.
+    const fields = definitions
+      .map((d) => ({ fieldId: d.id, value: (local[d.id] ?? "").trim() }))
+      .filter(
+        (f) => f.value !== "" || valueByFieldId.get(f.fieldId) != null
+      );
+    onSave(fields);
   };
 
   return (
@@ -505,11 +573,16 @@ function CustomFieldsEditForm({
                         ? "url"
                         : "text"
               }
-              className="input input-bordered input-sm w-full"
+              className={`input input-bordered input-sm w-full ${
+                errors[def.id] ? "input-error" : ""
+              }`}
               value={local[def.id] ?? ""}
               onChange={(e) => setValue(def.id, e.target.value)}
             />
           )}
+          {errors[def.id] ? (
+            <p className="text-[0.6875rem] text-error">{errors[def.id]}</p>
+          ) : null}
         </div>
       ))}
       <div className="flex justify-end gap-1.5">
@@ -524,14 +597,7 @@ function CustomFieldsEditForm({
         <button
           type="button"
           className="btn btn-primary btn-xs"
-          onClick={() =>
-            onSave(
-              definitions.map((d) => ({
-                fieldId: d.id,
-                value: local[d.id] ?? "",
-              }))
-            )
-          }
+          onClick={handleSave}
           disabled={isPending}
         >
           {isPending ? (

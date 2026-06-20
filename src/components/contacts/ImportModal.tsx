@@ -580,7 +580,7 @@ function UploadStep({
                     <span className="op-label block">File</span>
                     <input
                         type="file"
-                        accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                        accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         className="file-input file-input-bordered file-input-sm w-full text-[0.8125rem]"
                         onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                         disabled={disabled}
@@ -608,9 +608,10 @@ function UploadStep({
                             phone
                         </span>
                         . Optional: name, designation, email, phoneLabel,
-                        emailLabel, tags, plus any custom field columns. Maximum
-                        size: <strong>{MAX_LABEL}</strong> (~200K rows,
-                        processed in the background).
+                        emailLabel, tags, plus any custom field columns. Use
+                        .csv or .xlsx. Maximum size:{" "}
+                        <strong>{MAX_LABEL}</strong> (up to 200K rows, processed
+                        in the background).
                     </p>
                 </div>
             ) : (

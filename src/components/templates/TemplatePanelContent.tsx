@@ -11,6 +11,7 @@ import {
   useActivateChannelTemplateVersion,
   useRefreshChannelTemplateProviderState,
   channelTemplateKeys,
+  templateKeys,
 } from "@/hooks/use-templates";
 import { templatesApi } from "@/lib/api";
 import type { TemplateCategory } from "@/lib/types";
@@ -43,7 +44,10 @@ export function TemplatePanelContent({ templateId }: { templateId: string }) {
     mutationFn: (category: TemplateCategory) =>
       templatesApi.addWhatsApp(templateId, { category }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["templates", templateId] });
+      // Was `["templates", templateId]` — that prefix matches no real key, so it never
+      // invalidated the detail. Use the proper keys so the new WhatsApp channel shows up.
+      void queryClient.invalidateQueries({ queryKey: templateKeys.detail(templateId) });
+      void queryClient.invalidateQueries({ queryKey: templateKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: channelTemplateKeys.all });
       setAddWaOpen(false);
     },

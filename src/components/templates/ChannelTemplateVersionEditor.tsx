@@ -17,6 +17,7 @@ import type {
   TemplateCarouselCard,
   TemplateHeaderType,
   TemplateCategory,
+  TemplateOtpType,
   TemplateVersionLayoutType,
 } from "@/lib/types";
 import {
@@ -226,6 +227,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
   ref
 ) {
   const editable = !version.isLocked && !version.archivedAt;
+  const isAuth = channelCategory === "AUTHENTICATION";
   const updateMutation = useUpdateChannelTemplateVersion();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -249,6 +251,14 @@ export const ChannelTemplateVersionEditor = forwardRef<
     Record<number, CarouselButtonRow[]>
   >({});
   const [allowCategoryChange, setAllowCategoryChange] = useState(true);
+  // AUTHENTICATION-template config (Meta-fixed shape; no header/body/footer/buttons).
+  const [authOtpType, setAuthOtpType] = useState<TemplateOtpType>("COPY_CODE");
+  const [authButtonText, setAuthButtonText] = useState("Copy code");
+  const [authSecurityRec, setAuthSecurityRec] = useState(false);
+  const [authExpiryMinutes, setAuthExpiryMinutes] = useState("");
+  const [authAutofillText, setAuthAutofillText] = useState("Autofill");
+  const [authPackageName, setAuthPackageName] = useState("");
+  const [authSignatureHash, setAuthSignatureHash] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [saveOk, setSaveOk] = useState<string | null>(null);
   // After the first manual "Save draft" succeeds, keep auto-saving on edits.
@@ -320,6 +330,18 @@ export const ChannelTemplateVersionEditor = forwardRef<
       setCarouselUploadBusyByIndex({});
     }
     setAllowCategoryChange(version.allowCategoryChange !== false);
+    const ac = version.authConfig ?? null;
+    setAuthOtpType(
+      ac?.otpType === "ONE_TAP" || ac?.otpType === "ZERO_TAP" ? ac.otpType : "COPY_CODE"
+    );
+    setAuthButtonText(ac?.buttonText ?? "Copy code");
+    setAuthSecurityRec(ac?.addSecurityRecommendation === true);
+    setAuthExpiryMinutes(
+      typeof ac?.codeExpirationMinutes === "number" ? String(ac.codeExpirationMinutes) : ""
+    );
+    setAuthAutofillText(ac?.autofillText ?? "Autofill");
+    setAuthPackageName(ac?.packageName ?? "");
+    setAuthSignatureHash(ac?.signatureHash ?? "");
   }, [
     version.id,
     version.body,
@@ -333,6 +355,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
     version.variables,
     version.carouselCards,
     version.allowCategoryChange,
+    version.authConfig,
   ]);
 
   // Meta restriction: carousel templates cannot be UTILITY. Auto switch category to MARKETING.
@@ -521,6 +544,35 @@ export const ChannelTemplateVersionEditor = forwardRef<
       payload.carouselCards = null;
     }
 
+    // AUTHENTICATION templates carry no free content — overwrite with the fixed OTP shape.
+    if (isAuth) {
+      const expiry = authExpiryMinutes.trim() ? Number(authExpiryMinutes) : undefined;
+      payload.authConfig = {
+        otpType: authOtpType,
+        buttonText: authButtonText.trim() || undefined,
+        addSecurityRecommendation: authSecurityRec,
+        ...(expiry != null && !Number.isNaN(expiry)
+          ? { codeExpirationMinutes: expiry }
+          : {}),
+        ...(authOtpType !== "COPY_CODE"
+          ? {
+              autofillText: authAutofillText.trim() || undefined,
+              packageName: authPackageName.trim() || undefined,
+              signatureHash: authSignatureHash.trim() || undefined,
+              ...(authOtpType === "ZERO_TAP" ? { zeroTapTermsAccepted: true } : {}),
+            }
+          : {}),
+      };
+      payload.body = "";
+      payload.headerType = "NONE";
+      payload.headerContent = null;
+      payload.footer = null;
+      payload.buttons = [];
+      payload.variables = [];
+      payload.carouselCards = null;
+      payload.layoutType = "STANDARD";
+    }
+
     try {
       await updateMutation.mutateAsync({
         id: channelTemplateId,
@@ -560,6 +612,14 @@ export const ChannelTemplateVersionEditor = forwardRef<
     version.version,
     updateMutation,
     allowCategoryChange,
+    isAuth,
+    authOtpType,
+    authButtonText,
+    authSecurityRec,
+    authExpiryMinutes,
+    authAutofillText,
+    authPackageName,
+    authSignatureHash,
   ]);
 
   // Autosave: after manual "Save draft" succeeds, keep persisting edits with debounce.
@@ -904,19 +964,21 @@ export const ChannelTemplateVersionEditor = forwardRef<
       <div className="space-y-3">
         <div className="op-label">Structure</div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <label className="form-control w-full">
-            <span className="label-text text-xs">Layout</span>
-            <select
-              className="select select-bordered select-sm w-full"
-              value={layoutType}
-              onChange={(e) =>
-                setLayoutType(e.target.value as TemplateVersionLayoutType)
-              }
-            >
-              <option value="STANDARD">Standard</option>
-              <option value="CAROUSEL">Carousel</option>
-            </select>
-          </label>
+          {!isAuth && (
+            <label className="form-control w-full">
+              <span className="label-text text-xs">Layout</span>
+              <select
+                className="select select-bordered select-sm w-full"
+                value={layoutType}
+                onChange={(e) =>
+                  setLayoutType(e.target.value as TemplateVersionLayoutType)
+                }
+              >
+                <option value="STANDARD">Standard</option>
+                <option value="CAROUSEL">Carousel</option>
+              </select>
+            </label>
+          )}
           <label className="form-control w-full">
             <span className="label-text text-xs">Language</span>
             <select
@@ -936,8 +998,115 @@ export const ChannelTemplateVersionEditor = forwardRef<
 
       <div className="my-2 border-t border-base-300" />
 
+      {/* ── Authentication template (Meta-fixed shape) ── */}
+      {isAuth && (
+        <div className="space-y-3">
+          <div className="op-label">One-time passcode</div>
+          <p className="text-[0.75rem] text-base-content/55">
+            Meta auto-generates the message body (e.g. <span className="font-mono-op">123456 is your verification code.</span>).
+            You configure the OTP button and options only — no header, custom body, or extra buttons.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="form-control w-full">
+              <span className="label-text text-xs">Delivery</span>
+              <select
+                className="select select-bordered select-sm w-full"
+                value={authOtpType}
+                onChange={(e) => setAuthOtpType(e.target.value as TemplateOtpType)}
+              >
+                <option value="COPY_CODE">Copy code</option>
+                <option value="ONE_TAP">One-tap autofill</option>
+                <option value="ZERO_TAP">Zero-tap</option>
+              </select>
+            </label>
+            <label className="form-control w-full">
+              <span className="label-text text-xs">Button label</span>
+              <input
+                type="text"
+                className="input input-bordered input-sm w-full"
+                value={authButtonText}
+                maxLength={META_TEMPLATE_BUTTON_LABEL_MAX}
+                onChange={(e) => setAuthButtonText(e.target.value)}
+                placeholder="Copy code"
+              />
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="label cursor-pointer justify-start gap-2">
+              <input
+                type="checkbox"
+                className="checkbox checkbox-sm"
+                checked={authSecurityRec}
+                onChange={(e) => setAuthSecurityRec(e.target.checked)}
+              />
+              <span className="label-text text-xs">
+                Add security recommendation line
+              </span>
+            </label>
+            <label className="form-control w-full">
+              <span className="label-text text-xs">Code expires after (minutes)</span>
+              <input
+                type="number"
+                min={1}
+                max={90}
+                className="input input-bordered input-sm w-full"
+                value={authExpiryMinutes}
+                onChange={(e) => setAuthExpiryMinutes(e.target.value)}
+                placeholder="Optional · 1–90"
+              />
+            </label>
+          </div>
+          {authOtpType !== "COPY_CODE" && (
+            <div className="space-y-3 rounded-box border border-base-300 bg-base-200 p-3">
+              <p className="text-[0.75rem] text-base-content/60">
+                Autofill needs your Android app identity (from Meta &amp; your app signing key).
+              </p>
+              <label className="form-control w-full">
+                <span className="label-text text-xs">Autofill button text</span>
+                <input
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  value={authAutofillText}
+                  maxLength={META_TEMPLATE_BUTTON_LABEL_MAX}
+                  onChange={(e) => setAuthAutofillText(e.target.value)}
+                  placeholder="Autofill"
+                />
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label className="form-control w-full">
+                  <span className="label-text text-xs">Package name</span>
+                  <input
+                    type="text"
+                    className="input input-bordered input-sm w-full font-mono-op"
+                    value={authPackageName}
+                    onChange={(e) => setAuthPackageName(e.target.value)}
+                    placeholder="com.example.app"
+                  />
+                </label>
+                <label className="form-control w-full">
+                  <span className="label-text text-xs">Signature hash</span>
+                  <input
+                    type="text"
+                    className="input input-bordered input-sm w-full font-mono-op"
+                    value={authSignatureHash}
+                    onChange={(e) => setAuthSignatureHash(e.target.value)}
+                    placeholder="11 chars"
+                  />
+                </label>
+              </div>
+              {authOtpType === "ZERO_TAP" && (
+                <p className="text-[0.6875rem] text-warning">
+                  Zero-tap requires that you&apos;ve accepted Meta&apos;s zero-tap terms and that your
+                  app handles the delivered code automatically.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Section 2: Message (Standard layout) ── */}
-      {layoutType === "STANDARD" && (
+      {!isAuth && layoutType === "STANDARD" && (
         <div className="space-y-4">
           <div className="op-label">Message</div>
 
@@ -1726,7 +1895,8 @@ export const ChannelTemplateVersionEditor = forwardRef<
 
       <div className="my-2 border-t border-base-300" />
 
-      {/* ── Section 3: Advanced settings ── */}
+      {/* ── Section 3: Advanced settings (not applicable to authentication templates) ── */}
+      {!isAuth && (
       <details className="group">
         <summary className="cursor-pointer list-none">
           <div className="flex items-center gap-2 op-label hover:text-base-content/60 select-none">
@@ -1786,6 +1956,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
           </details>
         </div>
       </details>
+      )}
 
       {/* Bottom save */}
       <div className="flex justify-end pt-1">

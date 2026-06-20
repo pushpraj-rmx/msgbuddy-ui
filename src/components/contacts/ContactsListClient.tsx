@@ -672,16 +672,20 @@ export function ContactsListClient({
     [sorted, displayPageIndex, displayPageSize]
   );
 
-  const hasSearch = searchParam.length > 0;
   const start =
     totalFiltered > 0 ? displayPageIndex * displayPageSize + 1 : 0;
   const end = displayPageIndex * displayPageSize + displayed.length;
-  const totalForLabel = hasSearch ? totalFiltered : (totalCount ?? 0);
+  // `totalCount` is the server total for the *active* query (search, tags,
+  // segment, lifecycle all flow through includeTotal), so use it for both the
+  // "showing X of N" label and the page count. Falling back to loaded-row
+  // counts (totalFiltered) only before the first page resolves keeps the two
+  // labels consistent — previously search used loaded rows and undercounted.
+  const totalForLabel = totalCount ?? totalFiltered;
   const totalPages =
-    hasSearch && totalFiltered > 0
-      ? totalPagesFiltered
-      : totalCount != null && totalCount > 0
-        ? Math.ceil(totalCount / LIST_PAGE_SIZE)
+    totalCount != null && totalCount > 0
+      ? Math.ceil(totalCount / LIST_PAGE_SIZE)
+      : totalFiltered > 0
+        ? totalPagesFiltered
         : null;
   const showingText =
     totalForLabel > 0
@@ -763,6 +767,16 @@ export function ContactsListClient({
         const selected = allLoadedContacts.filter((contact) =>
           selectedContactIds.has(contact.id)
         );
+        // Selection persists across pages, but we can only serialize rows that
+        // are currently loaded in memory. Surface any selected-but-unloaded
+        // contacts instead of silently dropping them from the CSV.
+        const missing = selectedContactIds.size - selected.length;
+        if (selected.length === 0) {
+          setError(
+            "None of the selected contacts are loaded on this page. Load more rows (or clear filters) and try again."
+          );
+          return;
+        }
         const header = [
           "id",
           "name",
@@ -795,6 +809,11 @@ export function ContactsListClient({
         a.download = "contacts-selected.csv";
         a.click();
         URL.revokeObjectURL(url);
+        if (missing > 0) {
+          setError(
+            `Exported ${selected.length} loaded contact(s). ${missing} selected contact(s) weren't loaded and were skipped — load more rows and export again to include them.`
+          );
+        }
       } else {
         await contactsApi.exportCsv();
       }
@@ -850,11 +869,8 @@ export function ContactsListClient({
   );
   const headerIndeterminate =
     selectedOnPageCount > 0 && selectedOnPageCount < displayed.length;
-  useEffect(() => {
-    const el = headerCheckboxRef.current;
-    if (!el) return;
-    el.indeterminate = headerIndeterminate;
-  }, [headerIndeterminate]);
+  // `indeterminate` is applied via the header checkbox's callback ref (below)
+  // so it stays in sync on the same commit as `checked`.
 
   // ── TanStack Table ──
   // Column visibility — persisted to localStorage (swap to API when /user/preferences is built)
@@ -935,7 +951,13 @@ export function ContactsListClient({
         id: "select",
         header: () => (
           <input
-            ref={headerCheckboxRef}
+            // Callback ref keeps `indeterminate` in sync synchronously on every
+            // commit, so it can't lag the controlled `checked` when the page
+            // changes (a separate post-paint effect could be a frame behind).
+            ref={(el) => {
+              headerCheckboxRef.current = el;
+              if (el) el.indeterminate = headerIndeterminate;
+            }}
             type="checkbox"
             className="checkbox checkbox-sm"
             checked={displayed.length > 0 && selectedOnPageCount === displayed.length}

@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertCircle, CheckCheck, Clock, Eye, Send } from "lucide-react";
-import type { InboxMessage } from "@/lib/messaging";
+import type { MessageStatusLike } from "@/lib/messaging";
 import { isFailedMessage } from "@/lib/messaging";
 
 /**
@@ -16,7 +16,7 @@ export function MessageStatusIcon({
   message,
   className = "h-3 w-3",
 }: {
-  message: InboxMessage;
+  message: MessageStatusLike;
   className?: string;
 }) {
   if (message.direction !== "OUTBOUND") return null;

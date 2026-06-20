@@ -48,6 +48,9 @@ export function SegmentsPanelContent({
     onSuccess: async (updated) => {
       try { await segmentsApi.preview(updated.id); } catch { /* best effort */ }
       queryClient.invalidateQueries({ queryKey: SEGMENTS_QUERY_KEY });
+      // The query changed — drop the cached preview so reopening it doesn't
+      // show stale counts/contacts.
+      queryClient.invalidateQueries({ queryKey: ["segmentPreview", updated.id] });
       setModalOpen(false);
       setEditingSegment(null);
     },
@@ -55,7 +58,10 @@ export function SegmentsPanelContent({
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => segmentsApi.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: SEGMENTS_QUERY_KEY }),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: SEGMENTS_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: ["segmentPreview", id] });
+    },
   });
 
   return (
