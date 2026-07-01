@@ -91,16 +91,18 @@ function SubscribersTab() {
     }
   }
 
+  const activePlans = plans.filter((p) => p.active);
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-semibold">Subscribers</h2>
-        <button className="btn btn-sm btn-primary" onClick={() => setCreating(true)} disabled={plans.length === 0}>
+        <button className="btn btn-sm btn-primary" onClick={() => setCreating(true)} disabled={activePlans.length === 0}>
           New subscription
         </button>
       </div>
-      {plans.length === 0 && !loading && (
-        <p className="text-xs text-base-content/60">Create a plan first (Plans &amp; products tab).</p>
+      {activePlans.length === 0 && !loading && (
+        <p className="text-xs text-base-content/60">Create an active plan first (Plans &amp; products tab).</p>
       )}
       {error && <Alert msg={error} />}
 
@@ -169,7 +171,7 @@ function SubscribersTab() {
 
       {creating && (
         <CreateSubscriptionModal
-          plans={plans}
+          plans={activePlans}
           onClose={() => setCreating(false)}
           onCreated={async () => {
             setCreating(false);
@@ -512,10 +514,30 @@ function PlansTab() {
     }
   }
 
+  async function toggleProduct(id: string, active: boolean) {
+    setError(null);
+    try {
+      await recurringApi.updateProduct(id, { active });
+      await load();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
+
   async function removePlan(id: string) {
     setError(null);
     try {
       await recurringApi.deletePlan(id);
+      await load();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
+
+  async function togglePlan(id: string, active: boolean) {
+    setError(null);
+    try {
+      await recurringApi.updatePlan(id, { active });
       await load();
     } catch (e) {
       setError(errMsg(e));
@@ -551,12 +573,19 @@ function PlansTab() {
         </div>
         <ul className="rounded-box border border-base-300 divide-y divide-base-300">
           {products.map((p) => (
-            <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+            <li
+              key={p.id}
+              className={`flex items-center justify-between gap-2 px-3 py-2 text-sm ${p.active ? "" : "opacity-50"}`}
+            >
               <span>
                 {p.name} <span className="text-base-content/50">({p.sku})</span>
+                {!p.active && <span className="badge badge-ghost badge-xs ml-2">inactive</span>}
               </span>
-              <span className="flex items-center gap-3">
+              <span className="flex items-center gap-2">
                 <span>{p.price}</span>
+                <button className="btn btn-ghost btn-xs" onClick={() => toggleProduct(p.id, !p.active)}>
+                  {p.active ? "Deactivate" : "Activate"}
+                </button>
                 <button
                   className="btn btn-ghost btn-xs text-error"
                   title="Delete product"
@@ -579,7 +608,7 @@ function PlansTab() {
             <input className="input input-bordered input-sm w-full" value={planName} onChange={(e) => setPlanName(e.target.value)} />
           </Field>
           <div className="op-label">Quantities per product</div>
-          {products.map((p) => (
+          {products.filter((p) => p.active).map((p) => (
             <div key={p.id} className="flex items-center justify-between gap-2">
               <span className="text-sm">
                 {p.name} <span className="text-base-content/50">@ {p.price}</span>
@@ -599,20 +628,31 @@ function PlansTab() {
         </div>
         <ul className="rounded-box border border-base-300 divide-y divide-base-300">
           {plans.map((pl) => (
-            <li key={pl.id} className="flex items-start justify-between gap-2 px-3 py-2 text-sm">
+            <li
+              key={pl.id}
+              className={`flex items-start justify-between gap-2 px-3 py-2 text-sm ${pl.active ? "" : "opacity-50"}`}
+            >
               <div>
-                <div className="font-medium">{pl.name}</div>
+                <div className="font-medium">
+                  {pl.name}
+                  {!pl.active && <span className="badge badge-ghost badge-xs ml-2">inactive</span>}
+                </div>
                 <div className="text-xs text-base-content/60">
                   {pl.items.map((i) => `${i.quantity}× ${i.product.name}`).join(", ")}
                 </div>
               </div>
-              <button
-                className="btn btn-ghost btn-xs text-error"
-                title="Delete plan"
-                onClick={() => removePlan(pl.id)}
-              >
-                Delete
-              </button>
+              <span className="flex items-center gap-2">
+                <button className="btn btn-ghost btn-xs" onClick={() => togglePlan(pl.id, !pl.active)}>
+                  {pl.active ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  className="btn btn-ghost btn-xs text-error"
+                  title="Delete plan"
+                  onClick={() => removePlan(pl.id)}
+                >
+                  Delete
+                </button>
+              </span>
             </li>
           ))}
           {plans.length === 0 && <li className="px-3 py-2 text-sm text-base-content/50">No plans.</li>}

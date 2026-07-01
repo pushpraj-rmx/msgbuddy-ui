@@ -134,6 +134,8 @@ export const recurringApi = {
     description?: string;
     items: { productId: string; quantity: number }[];
   }) => (await api.post<RecurringPlan>(endpoints.recurring.plans, dto)).data,
+  updatePlan: async (id: string, dto: Partial<{ name: string; description: string; active: boolean }>) =>
+    (await api.patch<RecurringPlan>(endpoints.recurring.planById(id), dto)).data,
   deletePlan: async (id: string) =>
     (await api.delete<{ deleted: boolean }>(endpoints.recurring.planById(id))).data,
 
