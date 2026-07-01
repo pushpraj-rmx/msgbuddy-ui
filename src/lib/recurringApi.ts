@@ -109,6 +109,7 @@ export interface RecurringSettings {
   reminderTemplateVersionId: string | null;
   lowBalanceTemplateVersionId: string | null;
   skipConfirmedTemplateVersionId: string | null;
+  deliveredTemplateVersionId: string | null;
 }
 
 export const recurringApi = {

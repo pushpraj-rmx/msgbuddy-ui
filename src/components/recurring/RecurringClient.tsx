@@ -843,6 +843,9 @@ function SettingsTab() {
       <Field label="Skip-confirmed template">
         <input className="input input-bordered input-sm w-full" value={s.skipConfirmedTemplateVersionId ?? ""} onChange={(e) => set("skipConfirmedTemplateVersionId", e.target.value || null)} />
       </Field>
+      <Field label="Delivered-confirmation template">
+        <input className="input input-bordered input-sm w-full" value={s.deliveredTemplateVersionId ?? ""} onChange={(e) => set("deliveredTemplateVersionId", e.target.value || null)} />
+      </Field>
       <div className="flex items-center gap-3 pt-2">
         <button className="btn btn-sm btn-primary" onClick={save} disabled={busy}>
           {busy && <span className="loading loading-spinner loading-xs" />}
