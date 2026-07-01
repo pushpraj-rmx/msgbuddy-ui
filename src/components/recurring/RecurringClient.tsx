@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { contactsApi } from "@/lib/api";
+import type { Contact } from "@/lib/types";
 import {
   recurringApi,
   type Cadence,
@@ -193,7 +195,7 @@ function CreateSubscriptionModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [contactId, setContactId] = useState("");
+  const [contact, setContact] = useState<Pick<Contact, "id" | "name" | "phone"> | null>(null);
   const [planId, setPlanId] = useState(plans[0]?.id ?? "");
   const [cadence, setCadence] = useState<Cadence>("DAILY");
   const [days, setDays] = useState<number[]>([]);
@@ -207,11 +209,12 @@ function CreateSubscriptionModal({
   }
 
   async function save() {
+    if (!contact) return;
     setSaving(true);
     setError(null);
     try {
       await recurringApi.createSubscription({
-        contactId: contactId.trim(),
+        contactId: contact.id,
         planId,
         cadence,
         daysOfWeek: cadence === "CUSTOM" ? days : undefined,
@@ -232,13 +235,8 @@ function CreateSubscriptionModal({
         <h3 className="text-lg font-bold">New subscription</h3>
         <div className="space-y-3 py-4">
           {error && <Alert msg={error} />}
-          <Field label="Contact ID">
-            <input
-              className="input input-bordered input-sm w-full"
-              placeholder="contact cuid (from Contacts)"
-              value={contactId}
-              onChange={(e) => setContactId(e.target.value)}
-            />
+          <Field label="Contact">
+            <ContactPicker value={contact} onPick={setContact} />
           </Field>
           <Field label="Plan">
             <select className="select select-bordered select-sm w-full" value={planId} onChange={(e) => setPlanId(e.target.value)}>
@@ -284,7 +282,7 @@ function CreateSubscriptionModal({
           <button
             className="btn btn-primary btn-sm"
             onClick={save}
-            disabled={saving || !contactId.trim() || !planId || !startDate || (cadence === "CUSTOM" && days.length === 0)}
+            disabled={saving || !contact || !planId || !startDate || (cadence === "CUSTOM" && days.length === 0)}
           >
             {saving && <span className="loading loading-spinner loading-xs" />}
             Create
@@ -857,6 +855,95 @@ function SettingsTab() {
 }
 
 /* ─────────────────────────────── shared bits ─────────────────────────────── */
+
+type PickedContact = Pick<Contact, "id" | "name" | "phone">;
+
+function ContactPicker({
+  value,
+  onPick,
+}: {
+  value: PickedContact | null;
+  onPick: (c: PickedContact | null) => void;
+}) {
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<Contact[]>([]);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await contactsApi.list({ search: q.trim() || undefined, limit: 10 });
+        setResults(res.contacts);
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q, open]);
+
+  if (value) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 px-3 py-2">
+        <span className="text-sm">
+          <span className="font-medium">{value.name ?? value.phone}</span>{" "}
+          <span className="text-base-content/60">{value.phone}</span>
+        </span>
+        <button
+          type="button"
+          className="btn btn-ghost btn-xs"
+          onClick={() => {
+            onPick(null);
+            setOpen(true);
+          }}
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        className="input input-bordered input-sm w-full"
+        placeholder="Search contacts by name or phone…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        onFocus={() => setOpen(true)}
+      />
+      {open && (
+        <ul className="menu absolute z-10 mt-1 max-h-56 w-full flex-nowrap overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow">
+          {loading && <li className="px-3 py-2 text-xs text-base-content/50">Searching…</li>}
+          {!loading &&
+            results.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  className="flex flex-col items-start gap-0 py-1"
+                  onClick={() => {
+                    onPick({ id: c.id, name: c.name, phone: c.phone });
+                    setOpen(false);
+                    setQ("");
+                  }}
+                >
+                  <span className="text-sm font-medium">{c.name ?? c.phone}</span>
+                  <span className="text-xs text-base-content/60">{c.phone}</span>
+                </button>
+              </li>
+            ))}
+          {!loading && results.length === 0 && (
+            <li className="px-3 py-2 text-xs text-base-content/50">No contacts found.</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
