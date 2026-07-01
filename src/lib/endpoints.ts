@@ -27,6 +27,7 @@ export const endpoints = {
     wallet: (contactId: string) => `${P}/subscriptions/contacts/${contactId}/wallet`,
     walletTopUp: (contactId: string) => `${P}/subscriptions/contacts/${contactId}/wallet/topup`,
     manifest: `${P}/subscriptions/manifest`,
+    cycleStatus: (id: string) => `${P}/subscriptions/cycles/${id}/status`,
     triggerGenerate: `${P}/subscriptions/triggers/generate`,
     triggerLock: `${P}/subscriptions/triggers/lock`,
     settings: `${P}/subscriptions/settings`,

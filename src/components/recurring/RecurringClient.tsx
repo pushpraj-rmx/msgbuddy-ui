@@ -617,6 +617,16 @@ function FulfilmentTab() {
     }
   }
 
+  async function advance(cycleId: string, status: "OUT_FOR_DELIVERY" | "DELIVERED") {
+    setError(null);
+    try {
+      await recurringApi.setCycleStatus(cycleId, status);
+      await loadManifest();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-2">
@@ -644,6 +654,8 @@ function FulfilmentTab() {
               <th>Phone</th>
               <th>Slot</th>
               <th>Amount</th>
+              <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -653,12 +665,27 @@ function FulfilmentTab() {
                 <td>{r.phone}</td>
                 <td>{r.slot ?? "—"}</td>
                 <td>{r.amount}</td>
+                <td>
+                  <StatusBadge status={r.status} />
+                </td>
+                <td className="text-right whitespace-nowrap">
+                  {r.status === "LOCKED" && (
+                    <button className="btn btn-ghost btn-xs" onClick={() => advance(r.cycleId, "OUT_FOR_DELIVERY")}>
+                      Mark dispatched
+                    </button>
+                  )}
+                  {(r.status === "LOCKED" || r.status === "OUT_FOR_DELIVERY") && (
+                    <button className="btn btn-ghost btn-xs text-success" onClick={() => advance(r.cycleId, "DELIVERED")}>
+                      Mark delivered
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="text-center text-base-content/50">
-                  No locked cycles for this date.
+                <td colSpan={6} className="text-center text-base-content/50">
+                  No committed cycles for this date.
                 </td>
               </tr>
             )}

@@ -24,9 +24,11 @@ export default async function PrivacyPolicyPage() {
             <div className="rounded-box border border-base-300 bg-base-200 p-5 sm:p-8">
               <div className="space-y-4 text-base-content/80">
                 <p className="leading-relaxed">
-                  This Privacy Policy describes how [Your Company Name]
-                  (&ldquo;Company&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;, &ldquo;us&rdquo;) collects, uses, and protects
-                  your information when you use our services (the &ldquo;Service&rdquo;).
+                  This Privacy Policy describes how MSGBuddy
+                  (&ldquo;Company&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;,
+                  &ldquo;us&rdquo;) collects, uses, and protects your
+                  information when you use our services (the
+                  &ldquo;Service&rdquo;).
                 </p>
                 <p className="leading-relaxed">
                   By using the Service, you agree to the collection and use of
@@ -41,11 +43,15 @@ export default async function PrivacyPolicyPage() {
 
               <article className="space-y-7">
                 <section id="information-we-collect" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">1. Information We Collect</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    1. Information We Collect
+                  </h2>
 
                   <div className="space-y-4">
                     <div className="card bg-base-100 border border-base-300 p-4">
-                      <h3 className="font-semibold">1.1 Information You Provide</h3>
+                      <h3 className="font-semibold">
+                        1.1 Information You Provide
+                      </h3>
                       <p className="mt-2 text-sm text-base-content/80">
                         We collect information you provide directly, including:
                       </p>
@@ -89,7 +95,9 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="how-we-use" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">2. How We Use Information</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    2. How We Use Information
+                  </h2>
                   <p className="text-base-content/80">
                     We use your information to:
                   </p>
@@ -127,7 +135,9 @@ export default async function PrivacyPolicyPage() {
                   <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
                     4. User Responsibility for Data
                   </h2>
-                  <p className="text-base-content/80">You are responsible for:</p>
+                  <p className="text-base-content/80">
+                    You are responsible for:
+                  </p>
                   <ul className="list-disc space-y-1 pl-5 text-base-content/80">
                     <li>
                       Ensuring you have lawful grounds to collect and use
@@ -137,12 +147,15 @@ export default async function PrivacyPolicyPage() {
                     <li>Complying with applicable data protection laws</li>
                   </ul>
                   <p className="text-base-content/80">
-                    We act as a service provider (processor) for data you upload.
+                    We act as a service provider (processor) for data you
+                    upload.
                   </p>
                 </section>
 
                 <section id="sharing" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">5. Sharing of Information</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    5. Sharing of Information
+                  </h2>
                   <p className="text-base-content/80">
                     We may share information with:
                   </p>
@@ -157,7 +170,9 @@ export default async function PrivacyPolicyPage() {
                     </div>
 
                     <div className="card bg-base-100 border border-base-300 p-4">
-                      <h3 className="font-semibold">5.2 Platform Integrations</h3>
+                      <h3 className="font-semibold">
+                        5.2 Platform Integrations
+                      </h3>
                       <p className="mt-2 text-sm text-base-content/80">
                         When you use integrations (e.g., WhatsApp), data is
                         shared with relevant platforms, including Meta
@@ -176,7 +191,9 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="retention" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">6. Data Retention</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    6. Data Retention
+                  </h2>
                   <p className="text-base-content/80">
                     We retain information only as long as necessary to:
                   </p>
@@ -192,10 +209,12 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="security" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">7. Data Security</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    7. Data Security
+                  </h2>
                   <p className="text-base-content/80">
-                    We implement reasonable technical and organizational measures
-                    to protect your data.
+                    We implement reasonable technical and organizational
+                    measures to protect your data.
                   </p>
                   <p className="text-base-content/80">
                     However, no system is completely secure, and we cannot
@@ -204,7 +223,9 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="your-rights" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">8. Your Rights</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    8. Your Rights
+                  </h2>
                   <p className="text-base-content/80">
                     Depending on your jurisdiction, you may have rights to:
                   </p>
@@ -221,7 +242,9 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="cookies" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">9. Cookies &amp; Tracking</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    9. Cookies &amp; Tracking
+                  </h2>
                   <p className="text-base-content/80">
                     We may use cookies and similar technologies to:
                   </p>
@@ -250,7 +273,9 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="third-party-links" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">11. Third-Party Links</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    11. Third-Party Links
+                  </h2>
                   <p className="text-base-content/80">
                     Our Service may contain links to third-party websites.
                   </p>
@@ -261,7 +286,9 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="children" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">12. Children’s Privacy</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    12. Children’s Privacy
+                  </h2>
                   <p className="text-base-content/80">
                     The Service is not intended for individuals under 18.
                   </p>
@@ -271,7 +298,9 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="changes" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">13. Changes to This Policy</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    13. Changes to This Policy
+                  </h2>
                   <p className="text-base-content/80">
                     We may update this Privacy Policy from time to time.
                   </p>
@@ -282,18 +311,18 @@ export default async function PrivacyPolicyPage() {
                 </section>
 
                 <section id="contact" className="space-y-3">
-                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">14. Contact Information</h2>
+                  <h2 className="text-[1.0625rem] font-semibold tracking-[-0.015em]">
+                    14. Contact Information
+                  </h2>
                   <div className="card bg-base-100 border border-base-300 p-4">
                     <p className="text-sm text-base-content/80">
                       <span className="font-medium">Email:</span>{" "}
                       support@msgbuddy.com
                     </p>
                     <p className="mt-1 text-sm text-base-content/80">
-                      <span className="font-medium">Address:</span> Basement , Street No 3,
-           Plot No 14, Opposite
-           Saraswati ITI, MBR Enclave,
-           Pochanpur, Dwarka Sec 23,
-           Delhi, 110077, India 
+                      <span className="font-medium">Address:</span> Basement ,
+                      Street No 3, Plot No 14, Opposite Saraswati ITI, MBR
+                      Enclave, Pochanpur, Dwarka Sec 23, Delhi, 110077, India
                     </p>
                   </div>
                   <p className="text-sm text-base-content/70">
@@ -320,16 +349,22 @@ export default async function PrivacyPolicyPage() {
                 <p className="op-label mb-3">On this page</p>
                 <ul className="menu w-full p-0 text-[0.78125rem]">
                   <li>
-                    <a href="#information-we-collect">1. Information We Collect</a>
+                    <a href="#information-we-collect">
+                      1. Information We Collect
+                    </a>
                   </li>
                   <li>
                     <a href="#how-we-use">2. How We Use Information</a>
                   </li>
                   <li>
-                    <a href="#messaging-data">3. Messaging &amp; Communication Data</a>
+                    <a href="#messaging-data">
+                      3. Messaging &amp; Communication Data
+                    </a>
                   </li>
                   <li>
-                    <a href="#user-responsibility">4. User Responsibility for Data</a>
+                    <a href="#user-responsibility">
+                      4. User Responsibility for Data
+                    </a>
                   </li>
                   <li>
                     <a href="#sharing">5. Sharing of Information</a>

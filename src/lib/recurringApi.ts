@@ -90,6 +90,7 @@ export interface RecurringSubscriptionDetail extends RecurringSubscription {
 
 export interface ManifestRow {
   cycleId: string;
+  status: CycleStatus;
   contact: string | null;
   phone: string;
   slot: string | null;
@@ -158,9 +159,11 @@ export const recurringApi = {
   topUp: async (contactId: string, amount: string, reason?: string) =>
     (await api.post<Wallet>(endpoints.recurring.walletTopUp(contactId), { amount, reason })).data,
 
-  // Manifest + triggers
+  // Manifest + fulfilment
   manifest: async (date: string) =>
     (await api.get<ManifestRow[]>(endpoints.recurring.manifest, { params: { date } })).data,
+  setCycleStatus: async (cycleId: string, status: "OUT_FOR_DELIVERY" | "DELIVERED") =>
+    (await api.post<RecurringCycle>(endpoints.recurring.cycleStatus(cycleId), { status })).data,
   triggerGenerate: async (date?: string) =>
     (await api.post<{ enqueued: boolean; date: string }>(endpoints.recurring.triggerGenerate, { date })).data,
   triggerLock: async (date?: string) =>
