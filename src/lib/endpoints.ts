@@ -13,6 +13,24 @@ export const API_BASE_URL =
 const P = "/v2";
 
 export const endpoints = {
+  /** Recurring prepaid commerce (merchant's end-customer subscriptions). */
+  recurring: {
+    products: `${P}/subscriptions/products`,
+    productById: (id: string) => `${P}/subscriptions/products/${id}`,
+    plans: `${P}/subscriptions/plans`,
+    planById: (id: string) => `${P}/subscriptions/plans/${id}`,
+    subscriptions: `${P}/subscriptions/subscriptions`,
+    subscriptionById: (id: string) => `${P}/subscriptions/subscriptions/${id}`,
+    subscriptionPause: (id: string) => `${P}/subscriptions/subscriptions/${id}/pause`,
+    subscriptionResume: (id: string) => `${P}/subscriptions/subscriptions/${id}/resume`,
+    subscriptionCancel: (id: string) => `${P}/subscriptions/subscriptions/${id}/cancel`,
+    wallet: (contactId: string) => `${P}/subscriptions/contacts/${contactId}/wallet`,
+    walletTopUp: (contactId: string) => `${P}/subscriptions/contacts/${contactId}/wallet/topup`,
+    manifest: `${P}/subscriptions/manifest`,
+    triggerGenerate: `${P}/subscriptions/triggers/generate`,
+    triggerLock: `${P}/subscriptions/triggers/lock`,
+    settings: `${P}/subscriptions/settings`,
+  },
   auth: {
     login: `${P}/auth/login`,
     register: `${P}/auth/register`,

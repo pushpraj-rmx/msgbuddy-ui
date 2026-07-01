@@ -8,6 +8,7 @@ import {
   Layers,
   ListChecks,
   MessageSquare,
+  RefreshCw,
   Rocket,
   Settings,
   Terminal,
@@ -18,6 +19,7 @@ import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
 import {
   canAccessCampaigns,
   canAccessFlows,
+  canAccessRecurring,
   canAccessUsagePage,
   canViewTemplates,
 } from "@/lib/workspace-access";
@@ -46,6 +48,7 @@ export function getAppNav(
       showInDock: true,
     },
     { href: "/campaigns", label: "Campaigns", Icon: Rocket, showInDock: true },
+    { href: "/subscriptions", label: "Subscriptions", Icon: RefreshCw },
     { href: "/flows", label: "Flows", Icon: Workflow },
     { href: "/templates", label: "Templates", Icon: FileText, showInDock: true },
     { href: "/tasks", label: "Tasks", Icon: ListChecks },
@@ -76,6 +79,7 @@ export function getAppNav(
   if (wr != null && wr !== "") {
     return items.filter((item) => {
       if (item.href === "/campaigns" && !canAccessCampaigns(wr)) return false;
+      if (item.href === "/subscriptions" && !canAccessRecurring(wr)) return false;
       if (item.href === "/flows" && !canAccessFlows(wr)) return false;
       if (item.href === "/templates" && !canViewTemplates(wr)) return false;
       if (item.href === "/usage" && !canAccessUsagePage(wr)) return false;
@@ -97,6 +101,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/people/contacts")) return "Contacts";
   if (pathname.startsWith("/campaigns/new")) return "New campaign";
   if (pathname.startsWith("/campaigns")) return "Campaigns";
+  if (pathname.startsWith("/subscriptions")) return "Subscriptions";
   if (pathname.startsWith("/flows")) return "Flows";
   if (pathname.startsWith("/templates")) return "Templates";
   if (pathname.startsWith("/tasks")) return "Tasks";

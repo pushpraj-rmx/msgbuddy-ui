@@ -46,6 +46,16 @@ export function canAccessBillingPage(workspaceRole: string): boolean {
   return R(workspaceRole) === "OWNER";
 }
 
+/**
+ * Recurring subscriptions (customer-facing prepaid recurring commerce). Gated by
+ * `settings.manage` on the API → OWNER, ADMIN. NOT the SaaS billing page — this
+ * is the merchant's own subscription plans for their end customers.
+ */
+export function canAccessRecurring(workspaceRole: string): boolean {
+  const r = R(workspaceRole);
+  return r === "OWNER" || r === "ADMIN";
+}
+
 /** Workspace hard-delete — OWNER only (product rule; ADMIN is excluded intentionally). */
 export function canDeleteWorkspace(workspaceRole: string): boolean {
   return R(workspaceRole) === "OWNER";
