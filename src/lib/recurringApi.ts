@@ -124,6 +124,8 @@ export const recurringApi = {
   }) => (await api.post<RecurringProduct>(endpoints.recurring.products, dto)).data,
   updateProduct: async (id: string, dto: Partial<{ name: string; variant: string; price: string; active: boolean }>) =>
     (await api.patch<RecurringProduct>(endpoints.recurring.productById(id), dto)).data,
+  deleteProduct: async (id: string) =>
+    (await api.delete<{ deleted: boolean }>(endpoints.recurring.productById(id))).data,
 
   // Plans
   listPlans: async () => (await api.get<RecurringPlan[]>(endpoints.recurring.plans)).data,
@@ -132,6 +134,8 @@ export const recurringApi = {
     description?: string;
     items: { productId: string; quantity: number }[];
   }) => (await api.post<RecurringPlan>(endpoints.recurring.plans, dto)).data,
+  deletePlan: async (id: string) =>
+    (await api.delete<{ deleted: boolean }>(endpoints.recurring.planById(id))).data,
 
   // Subscriptions
   listSubscriptions: async () =>

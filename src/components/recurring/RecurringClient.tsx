@@ -502,6 +502,26 @@ function PlansTab() {
     }
   }
 
+  async function removeProduct(id: string) {
+    setError(null);
+    try {
+      await recurringApi.deleteProduct(id);
+      await load();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
+
+  async function removePlan(id: string) {
+    setError(null);
+    try {
+      await recurringApi.deletePlan(id);
+      await load();
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }
+
   if (loading) return <Spinner />;
 
   return (
@@ -531,11 +551,20 @@ function PlansTab() {
         </div>
         <ul className="rounded-box border border-base-300 divide-y divide-base-300">
           {products.map((p) => (
-            <li key={p.id} className="flex justify-between px-3 py-2 text-sm">
+            <li key={p.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
               <span>
                 {p.name} <span className="text-base-content/50">({p.sku})</span>
               </span>
-              <span>{p.price}</span>
+              <span className="flex items-center gap-3">
+                <span>{p.price}</span>
+                <button
+                  className="btn btn-ghost btn-xs text-error"
+                  title="Delete product"
+                  onClick={() => removeProduct(p.id)}
+                >
+                  Delete
+                </button>
+              </span>
             </li>
           ))}
           {products.length === 0 && <li className="px-3 py-2 text-sm text-base-content/50">No products.</li>}
@@ -570,11 +599,20 @@ function PlansTab() {
         </div>
         <ul className="rounded-box border border-base-300 divide-y divide-base-300">
           {plans.map((pl) => (
-            <li key={pl.id} className="px-3 py-2 text-sm">
-              <div className="font-medium">{pl.name}</div>
-              <div className="text-xs text-base-content/60">
-                {pl.items.map((i) => `${i.quantity}× ${i.product.name}`).join(", ")}
+            <li key={pl.id} className="flex items-start justify-between gap-2 px-3 py-2 text-sm">
+              <div>
+                <div className="font-medium">{pl.name}</div>
+                <div className="text-xs text-base-content/60">
+                  {pl.items.map((i) => `${i.quantity}× ${i.product.name}`).join(", ")}
+                </div>
               </div>
+              <button
+                className="btn btn-ghost btn-xs text-error"
+                title="Delete plan"
+                onClick={() => removePlan(pl.id)}
+              >
+                Delete
+              </button>
             </li>
           ))}
           {plans.length === 0 && <li className="px-3 py-2 text-sm text-base-content/50">No plans.</li>}
