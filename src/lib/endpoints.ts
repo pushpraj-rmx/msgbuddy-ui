@@ -396,6 +396,16 @@ export const endpoints = {
     channelAccounts: `${P}/platform/channel-accounts`,
     assignChannelAccount: (id: string) =>
       `${P}/platform/channel-accounts/${id}/assign`,
+    userResetLink: (id: string) => `${P}/platform/users/${id}/reset-link`,
+    accessRequests: `${P}/platform/access-requests`,
+    accessRequestsOpenCount: `${P}/platform/access-requests/open-count`,
+    accessRequestById: (id: string) => `${P}/platform/access-requests/${id}`,
+    accessRequestResetLink: (id: string) =>
+      `${P}/platform/access-requests/${id}/reset-link`,
+  },
+  /** Public, unauthenticated account-recovery help requests. */
+  accountAccess: {
+    request: `${P}/account-access/request`,
   },
   onboarding: {
     wabaOwned: `${P}/onboarding/waba/owned`,

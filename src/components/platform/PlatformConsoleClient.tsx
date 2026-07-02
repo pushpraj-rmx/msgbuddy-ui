@@ -17,14 +17,25 @@ import {
   useReactivateWorkspace,
   useSuspendWorkspace,
   useUpdatePlatformRole,
+  usePlatformAccessRequests,
+  usePlatformAccessRequestsOpenCount,
+  useGenerateAccessResetLink,
+  useUpdateAccessRequest,
+  useGenerateUserResetLink,
 } from "@/hooks/use-platform";
 import { isSuperAdmin } from "@/lib/platform-access";
-import type { PlatformRole, PlatformWorkspaceStatus } from "@/lib/types";
+import type {
+  PlatformRole,
+  PlatformWorkspaceStatus,
+  AccountAccessRequestStatus,
+  PlatformAccessRequest,
+} from "@/lib/types";
 import { getApiError } from "@/lib/api-error";
 
 type TabKey =
   | "workspaces"
   | "users"
+  | "accessRequests"
   | "webhookLogs"
   | "usageEvents"
   | "auditLogs"
@@ -60,6 +71,7 @@ export function PlatformConsoleClient({
         ? ([
             { key: "workspaces", label: "Workspaces" },
             { key: "users", label: "Users" },
+            { key: "accessRequests", label: "Access Requests" },
             { key: "webhookLogs", label: "Webhook Logs" },
             { key: "usageEvents", label: "Usage Events" },
             { key: "channelAccounts", label: "Channel Accounts" },
@@ -71,12 +83,14 @@ export function PlatformConsoleClient({
         : ([
             { key: "workspaces", label: "Workspaces" },
             { key: "users", label: "Users" },
+            { key: "accessRequests", label: "Access Requests" },
             { key: "webhookLogs", label: "Webhook Logs" },
             { key: "usageEvents", label: "Usage Events" },
             { key: "auditLogs", label: "Audit Logs" },
           ] as Array<{ key: TabKey; label: string }>),
     [superAdmin]
   );
+  const openCount = usePlatformAccessRequestsOpenCount();
   const [tab, setTab] = useState<TabKey>("workspaces");
 
   return (
@@ -94,12 +108,19 @@ export function PlatformConsoleClient({
             onClick={() => setTab(entry.key)}
           >
             {entry.label}
+            {entry.key === "accessRequests" &&
+            (openCount.data?.count ?? 0) > 0 ? (
+              <span className="badge badge-primary badge-sm ml-1.5 align-middle">
+                {openCount.data?.count}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
 
       {tab === "workspaces" && <WorkspacesTab />}
       {tab === "users" && <UsersTab superAdmin={superAdmin} />}
+      {tab === "accessRequests" && <AccessRequestsTab />}
       {tab === "webhookLogs" && <WebhookLogsTab />}
       {tab === "usageEvents" && <UsageEventsTab />}
       {tab === "auditLogs" && <AuditLogsTab />}
@@ -426,9 +447,14 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
   const detail = usePlatformUser(selectedUserId);
   const loginHistory = usePlatformUserLoginHistory(selectedUserId);
   const updatePlatformRole = useUpdatePlatformRole();
+  const generateResetLink = useGenerateUserResetLink();
+  const [resetLink, setResetLink] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
+      {resetLink && (
+        <ResetLinkModal link={resetLink} onClose={() => setResetLink(null)} />
+      )}
       <div className="card bg-base-100 border border-base-300">
         <div className="gap-3 p-4 sm:p-5">
           <h2 className="text-base font-semibold">User Filters</h2>
@@ -652,11 +678,231 @@ function UsersTab({ superAdmin }: { superAdmin: boolean }) {
                     <span>Role updates require SUPERADMIN.</span>
                   </div>
                 )}
+                <div className="border-t border-base-300 pt-3">
+                  <div className="mb-1.5 text-sm font-medium">
+                    Password recovery
+                  </div>
+                  <p className="mb-2 text-[0.75rem] text-base-content/60">
+                    Generate a one-hour reset link to hand to this user
+                    out-of-band (e.g. if their email is unreachable).
+                  </p>
+                  <button
+                    className="btn btn-outline btn-sm"
+                    disabled={generateResetLink.isPending}
+                    onClick={() => {
+                      setMutationError(null);
+                      generateResetLink.mutate(detail.data.id, {
+                        onSuccess: (res) => setResetLink(res.url),
+                        onError: (error) =>
+                          setMutationError(getApiError(error)),
+                      });
+                    }}
+                  >
+                    {generateResetLink.isPending
+                      ? "Generating…"
+                      : "Generate reset link"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ResetLinkModal({
+  link,
+  onClose,
+}: {
+  link: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="modal modal-open">
+      <div className="modal-box max-w-lg">
+        <h3 className="text-base font-semibold">Password reset link</h3>
+        <p className="mt-1 text-[0.8125rem] text-base-content/65">
+          Share this link with the user through a channel you trust. It expires
+          in one hour and can be used once.
+        </p>
+        <div className="mt-3 flex items-center gap-2">
+          <input
+            readOnly
+            className="input input-bordered input-sm w-full font-mono text-xs"
+            value={link}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <button className="btn btn-primary btn-sm" onClick={copy}>
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+        <div className="modal-action">
+          <button className="btn btn-sm" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+      <div className="modal-backdrop" onClick={onClose} />
+    </div>
+  );
+}
+
+const ACCESS_REQUEST_STATUSES: AccountAccessRequestStatus[] = [
+  "OPEN",
+  "IN_PROGRESS",
+  "RESOLVED",
+  "DISMISSED",
+];
+
+function AccessRequestsTab() {
+  const [status, setStatus] = useState<AccountAccessRequestStatus | "">("");
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [resetLink, setResetLink] = useState<string | null>(null);
+
+  const list = usePlatformAccessRequests(status || undefined);
+  const generateResetLink = useGenerateAccessResetLink();
+  const updateRequest = useUpdateAccessRequest();
+
+  const busy = generateResetLink.isPending || updateRequest.isPending;
+
+  const runUpdate = (
+    request: PlatformAccessRequest,
+    next: AccountAccessRequestStatus
+  ) => {
+    setMutationError(null);
+    updateRequest.mutate(
+      { id: request.id, status: next },
+      { onError: (error) => setMutationError(getApiError(error)) }
+    );
+  };
+
+  return (
+    <div className="space-y-4">
+      {resetLink && (
+        <ResetLinkModal link={resetLink} onClose={() => setResetLink(null)} />
+      )}
+      <div className="card bg-base-100 border border-base-300">
+        <div className="gap-3 p-4 sm:p-5">
+          <h2 className="text-base font-semibold">Account Access Requests</h2>
+          <p className="mb-2 text-[0.75rem] text-base-content/60">
+            Users who can&apos;t reach their email can request help here. Generate
+            a reset link and deliver it via the alternate contact they provided.
+          </p>
+          <select
+            className="select select-bordered sm:max-w-xs"
+            value={status}
+            onChange={(e) =>
+              setStatus(e.target.value as AccountAccessRequestStatus | "")
+            }
+          >
+            <option value="">All statuses</option>
+            {ACCESS_REQUEST_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {list.error && (
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(list.error)}</p></div>
+      )}
+      {mutationError && (
+        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
+          <span className="op-label mb-1 block text-error">error</span>
+          <p className="text-[0.8125rem] text-base-content">{mutationError}</p>
+        </div>
+      )}
+
+      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-200">
+        <table className="w-full text-[0.78125rem]">
+          <thead>
+            <tr className="border-b border-base-300 bg-base-100">
+              <th className="op-label px-3 py-2.5 text-left font-medium">Account email</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Alternate contact</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Message</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Status</th>
+              <th className="op-label px-3 py-2.5 text-left font-medium">Received</th>
+              <th className="op-label px-3 py-2.5 text-right font-medium"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.data?.items.map((request) => (
+              <tr key={request.id} className="border-b border-base-300 align-top transition hover:bg-base-300/40 last:border-b-0">
+                <td className="px-3 py-3 font-medium">{request.email}</td>
+                <td className="px-3 py-3">{request.alternateContact}</td>
+                <td className="max-w-xs px-3 py-3 text-base-content/80">
+                  <span className="line-clamp-3 whitespace-pre-wrap">
+                    {request.message || "—"}
+                  </span>
+                </td>
+                <td className="px-3 py-3">
+                  <span className="op-tag">{request.status}</span>
+                </td>
+                <td className="px-3 py-3 whitespace-nowrap text-base-content/70">
+                  {formatDate(request.createdAt)}
+                </td>
+                <td className="px-3 py-3">
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    <button
+                      className="btn btn-outline btn-xs"
+                      disabled={busy}
+                      onClick={() => {
+                        setMutationError(null);
+                        generateResetLink.mutate(request.id, {
+                          onSuccess: (res) => setResetLink(res.url),
+                          onError: (error) =>
+                            setMutationError(getApiError(error)),
+                        });
+                      }}
+                    >
+                      Generate reset link
+                    </button>
+                    {request.status !== "RESOLVED" && (
+                      <button
+                        className="btn btn-ghost btn-xs"
+                        disabled={busy}
+                        onClick={() => runUpdate(request, "RESOLVED")}
+                      >
+                        Resolve
+                      </button>
+                    )}
+                    {request.status !== "DISMISSED" &&
+                      request.status !== "RESOLVED" && (
+                        <button
+                          className="btn btn-ghost btn-xs"
+                          disabled={busy}
+                          onClick={() => runUpdate(request, "DISMISSED")}
+                        >
+                          Dismiss
+                        </button>
+                      )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {!list.isLoading && !list.data?.items.length && (
+              <tr>
+                <td colSpan={6} className="px-3 py-6 text-center text-[0.8125rem] text-base-content/55">
+                  No access requests.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

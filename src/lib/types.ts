@@ -717,6 +717,34 @@ export type PlatformAdminAuditLog = {
 };
 
 
+export type AccountAccessRequestStatus =
+  | "OPEN"
+  | "IN_PROGRESS"
+  | "RESOLVED"
+  | "DISMISSED";
+
+export type PlatformAccessRequest = {
+  id: string;
+  email: string;
+  alternateContact: string;
+  message?: string | null;
+  status: AccountAccessRequestStatus;
+  userId?: string | null;
+  handledByAdminId?: string | null;
+  resetLinkGeneratedAt?: string | null;
+  notes?: string | null;
+  ip?: string | null;
+  userAgent?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ResetLinkResponse = {
+  url: string;
+  expiresInSeconds: number;
+};
+
 export type PlatformChannelAccount = {
   id: string;
   channel?: string;

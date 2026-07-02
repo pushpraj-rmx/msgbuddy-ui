@@ -138,6 +138,12 @@ export default function ResetPasswordPage() {
             Back to sign in
           </Link>
         </p>
+        <p className="text-center text-[0.8125rem] text-base-content/65">
+          Can&apos;t access your account?{" "}
+          <Link href="/account-access" className="link link-primary">
+            Request help
+          </Link>
+        </p>
       </div>
     </div>
   );

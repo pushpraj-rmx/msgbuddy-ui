@@ -9,7 +9,10 @@ import {
   type PlatformWorkspacesListParams,
   type PlatformAuditLogsParams,
 } from "@/lib/api";
-import type { PlatformRole } from "@/lib/types";
+import type {
+  PlatformRole,
+  AccountAccessRequestStatus,
+} from "@/lib/types";
 
 export const platformKeys = {
   all: ["platform"] as const,
@@ -30,6 +33,10 @@ export const platformKeys = {
   channelAccounts: () => [...platformKeys.all, "channelAccounts"] as const,
   connectedClientBusinesses: () =>
     [...platformKeys.all, "connectedClientBusinesses"] as const,
+  accessRequests: (status?: AccountAccessRequestStatus) =>
+    [...platformKeys.all, "accessRequests", status ?? "ALL"] as const,
+  accessRequestsOpenCount: () =>
+    [...platformKeys.all, "accessRequestsOpenCount"] as const,
 };
 
 export function usePlatformWorkspaces(params: PlatformWorkspacesListParams) {
@@ -154,5 +161,55 @@ export function useAssignChannelAccount() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: platformKeys.channelAccounts() });
     },
+  });
+}
+
+export function usePlatformAccessRequests(
+  status?: AccountAccessRequestStatus
+) {
+  return useQuery({
+    queryKey: platformKeys.accessRequests(status),
+    queryFn: () => platformApi.listAccessRequests({ status }),
+  });
+}
+
+export function usePlatformAccessRequestsOpenCount() {
+  return useQuery({
+    queryKey: platformKeys.accessRequestsOpenCount(),
+    queryFn: () => platformApi.accessRequestsOpenCount(),
+  });
+}
+
+export function useGenerateAccessResetLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => platformApi.generateAccessResetLink(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: platformKeys.all });
+    },
+  });
+}
+
+export function useUpdateAccessRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      status,
+      notes,
+    }: {
+      id: string;
+      status?: AccountAccessRequestStatus;
+      notes?: string;
+    }) => platformApi.updateAccessRequest(id, { status, notes }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: platformKeys.all });
+    },
+  });
+}
+
+export function useGenerateUserResetLink() {
+  return useMutation({
+    mutationFn: (id: string) => platformApi.generateUserResetLink(id),
   });
 }

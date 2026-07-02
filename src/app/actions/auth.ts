@@ -206,6 +206,41 @@ export async function resetPasswordAction(token: string, password: string) {
   }
 }
 
+export async function requestAccountAccessHelpAction(payload: {
+  email: string;
+  alternateContact: string;
+  message?: string;
+}) {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}${endpoints.accountAccess.request}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: payload.email.trim().toLowerCase(),
+          alternateContact: payload.alternateContact.trim(),
+          message: payload.message?.trim() || undefined,
+        }),
+        credentials: "include",
+      }
+    );
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      return {
+        success: false as const,
+        error: (data as { message?: string }).message || "Request failed",
+      };
+    }
+    return { success: true as const };
+  } catch (error: unknown) {
+    return {
+      success: false as const,
+      error: error instanceof Error ? error.message : "Request failed",
+    };
+  }
+}
+
 export async function changePasswordAction(
   currentPassword: string,
   newPassword: string

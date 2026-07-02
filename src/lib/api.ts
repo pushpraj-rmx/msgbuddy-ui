@@ -40,6 +40,9 @@ import type {
   PlatformUsageEvent,
   PlatformAdminAuditLog,
   PlatformChannelAccount,
+  PlatformAccessRequest,
+  AccountAccessRequestStatus,
+  ResetLinkResponse,
   OnboardingWabaListResponse,
   NotificationItem,
   NotificationsListResponse,
@@ -3117,6 +3120,46 @@ export const platformApi = {
       workspaceId === undefined ? {} : { workspaceId: workspaceId ?? null };
     const response = await api.put<PlatformChannelAccount>(
       endpoints.platform.assignChannelAccount(id),
+      body
+    );
+    return response.data;
+  },
+  generateUserResetLink: async (id: string): Promise<ResetLinkResponse> => {
+    const response = await api.post<ResetLinkResponse>(
+      endpoints.platform.userResetLink(id)
+    );
+    return response.data;
+  },
+  listAccessRequests: async (params?: {
+    status?: AccountAccessRequestStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<OffsetPaginatedResponse<PlatformAccessRequest>> => {
+    const response = await api.get<
+      OffsetPaginatedResponse<PlatformAccessRequest>
+    >(endpoints.platform.accessRequests, { params });
+    return response.data;
+  },
+  accessRequestsOpenCount: async (): Promise<{ count: number }> => {
+    const response = await api.get<{ count: number }>(
+      endpoints.platform.accessRequestsOpenCount
+    );
+    return response.data;
+  },
+  generateAccessResetLink: async (
+    id: string
+  ): Promise<ResetLinkResponse> => {
+    const response = await api.post<ResetLinkResponse>(
+      endpoints.platform.accessRequestResetLink(id)
+    );
+    return response.data;
+  },
+  updateAccessRequest: async (
+    id: string,
+    body: { status?: AccountAccessRequestStatus; notes?: string }
+  ): Promise<PlatformAccessRequest> => {
+    const response = await api.patch<PlatformAccessRequest>(
+      endpoints.platform.accessRequestById(id),
       body
     );
     return response.data;
