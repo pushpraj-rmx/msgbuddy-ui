@@ -25,7 +25,7 @@
 }
 
 @plugin "../../node_modules/daisyui" {
-  themes: dark --default, light;
+  themes: dark --default, light, midnight, emerald, sand;
 }
 
 /* ─── DARK (default): deep slate, Bootstrap-blue accent ───────────── */
@@ -113,6 +113,123 @@
   --noise: 0;
 }
 
+/* ─── MIDNIGHT: deep indigo canvas, violet accent (dark) ─────────── */
+@plugin "../../node_modules/daisyui/theme" {
+  name: "midnight";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #0A0A12;
+  --color-base-200: #10111D;
+  --color-base-300: #262842;
+  --color-base-content: #E6E7F0;
+
+  --color-primary: #A78BFA;
+  --color-primary-content: #1E1B4B;
+  --color-secondary: #A5B4C8;
+  --color-secondary-content: #1E1B4B;
+  --color-accent: #A78BFA;
+  --color-accent-content: #1E1B4B;
+
+  --color-neutral: #1B1C2E;
+  --color-neutral-content: #E6E7F0;
+
+  --color-info: #7DD3FC;
+  --color-info-content: #082F49;
+  --color-success: #86EFAC;
+  --color-success-content: #052E16;
+  --color-warning: #FCD34D;
+  --color-warning-content: #422006;
+  --color-error: #FDA4AF;
+  --color-error-content: #4C0519;
+
+  --radius-selector: 0.375rem;
+  --radius-field:    0.375rem;
+  --radius-box:      0.5rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* ─── EMERALD: slate canvas, signal-green accent (dark) ──────────── */
+@plugin "../../node_modules/daisyui/theme" {
+  name: "emerald";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #08100C;
+  --color-base-200: #0D1712;
+  --color-base-300: #1E2E24;
+  --color-base-content: #E6EFE9;
+
+  --color-primary: #4ADE80;
+  --color-primary-content: #052E16;
+  --color-secondary: #A7B8AD;
+  --color-secondary-content: #052E16;
+  --color-accent: #4ADE80;
+  --color-accent-content: #052E16;
+
+  --color-neutral: #16211B;
+  --color-neutral-content: #E6EFE9;
+
+  --color-info: #6EDFF6;
+  --color-info-content: #055160;
+  --color-success: #4ADE80;
+  --color-success-content: #052E16;
+  --color-warning: #FFDA6A;
+  --color-warning-content: #332701;
+  --color-error: #EA868F;
+  --color-error-content: #58151C;
+
+  --radius-selector: 0.375rem;
+  --radius-field:    0.375rem;
+  --radius-box:      0.5rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* ─── SAND: warm bone canvas, terracotta accent (light) ──────────── */
+@plugin "../../node_modules/daisyui/theme" {
+  name: "sand";
+  default: false;
+  prefersdark: false;
+  color-scheme: light;
+
+  --color-base-100: #FBF8F3;
+  --color-base-200: #F3EDE3;
+  --color-base-300: #E3D9C8;
+  --color-base-content: #2B2620;
+
+  --color-primary: #C2410C;
+  --color-primary-content: #FFFFFF;
+  --color-secondary: #8A7C68;
+  --color-secondary-content: #FFFFFF;
+  --color-accent: #C2410C;
+  --color-accent-content: #FFFFFF;
+
+  --color-neutral: #EDE5D8;
+  --color-neutral-content: #2B2620;
+
+  --color-info: #0E7490;
+  --color-info-content: #FFFFFF;
+  --color-success: #15803D;
+  --color-success-content: #FFFFFF;
+  --color-warning: #B45309;
+  --color-warning-content: #FFFFFF;
+  --color-error: #B91C1C;
+  --color-error-content: #FFFFFF;
+
+  --radius-selector: 0.375rem;
+  --radius-field:    0.375rem;
+  --radius-box:      0.5rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
 /* ─── Re-skin the "op-*" utility vars to the Bootstrap-blue accent.
        Dark stays default (matches the daisyUI theme order above); op-*
        still uses the Operator's slate surfaces — only the accent and
@@ -137,6 +254,10 @@
   --op-danger:       #EA868F;
   --op-ok:           #75B798;
   --op-grain-color:  rgba(255, 255, 255, 0.014);
+  /* canvas = the page backdrop; a whisper of accent glow over the base. */
+  --op-canvas:
+    radial-gradient(1100px 520px at 50% -8%, color-mix(in oklab, var(--op-accent) 7%, transparent), transparent 70%),
+    var(--op-bg-0);
 }
 :root[data-theme="light"] {
   --op-bg-0:         #FFFFFF;
@@ -157,12 +278,95 @@
   --op-danger:       #DC3545;
   --op-ok:           #198754;
   --op-grain-color:  rgba(0, 0, 0, 0.015);
+  --op-canvas:
+    radial-gradient(1100px 520px at 50% -8%, color-mix(in oklab, var(--op-accent) 5%, transparent), transparent 70%),
+    var(--op-bg-0);
+}
+
+/* ─── MIDNIGHT op-* vars ─────────────────────────────────────────── */
+:root[data-theme="midnight"] {
+  --op-bg-0:         #0A0A12;
+  --op-bg-1:         #10111D;
+  --op-bg-2:         #171827;
+  --op-bg-3:         #1F2036;
+  --op-bg-hover:     #212243;
+  --op-ink:          #E6E7F0;
+  --op-ink-muted:    #9A9CB8;
+  --op-ink-dim:      #6E7098;
+  --op-line:         #262842;
+  --op-line-strong:  #33355A;
+  --op-accent:       #A78BFA;
+  --op-accent-ink:   #1E1B4B;
+  --op-accent-soft:  rgba(167, 139, 250, 0.12);
+  --op-info:         #7DD3FC;
+  --op-warn:         #FCD34D;
+  --op-danger:       #FDA4AF;
+  --op-ok:           #86EFAC;
+  --op-grain-color:  rgba(255, 255, 255, 0.018);
+  --op-canvas:
+    radial-gradient(1000px 560px at 100% -10%, color-mix(in oklab, var(--op-accent) 12%, transparent), transparent 65%),
+    radial-gradient(800px 480px at 0% 8%, color-mix(in oklab, #38bdf8 8%, transparent), transparent 60%),
+    var(--op-bg-0);
+}
+
+/* ─── EMERALD op-* vars ──────────────────────────────────────────── */
+:root[data-theme="emerald"] {
+  --op-bg-0:         #08100C;
+  --op-bg-1:         #0D1712;
+  --op-bg-2:         #12201A;
+  --op-bg-3:         #1A2A21;
+  --op-bg-hover:     #1D2F24;
+  --op-ink:          #E6EFE9;
+  --op-ink-muted:    #93A89B;
+  --op-ink-dim:      #66806F;
+  --op-line:         #1E2E24;
+  --op-line-strong:  #2A3E32;
+  --op-accent:       #4ADE80;
+  --op-accent-ink:   #052E16;
+  --op-accent-soft:  rgba(74, 222, 128, 0.10);
+  --op-info:         #6EDFF6;
+  --op-warn:         #FFDA6A;
+  --op-danger:       #EA868F;
+  --op-ok:           #4ADE80;
+  --op-grain-color:  rgba(255, 255, 255, 0.016);
+  --op-canvas:
+    radial-gradient(1100px 520px at 50% -8%, color-mix(in oklab, var(--op-accent) 9%, transparent), transparent 68%),
+    var(--op-bg-0);
+}
+
+/* ─── SAND op-* vars ─────────────────────────────────────────────── */
+:root[data-theme="sand"] {
+  --op-bg-0:         #FBF8F3;
+  --op-bg-1:         #F3EDE3;
+  --op-bg-2:         #EDE5D8;
+  --op-bg-3:         #E3D9C8;
+  --op-bg-hover:     #E8DFD0;
+  --op-ink:          #2B2620;
+  --op-ink-muted:    #6B5F4E;
+  --op-ink-dim:      #8A7C68;
+  --op-line:         #E3D9C8;
+  --op-line-strong:  #D2C4AC;
+  --op-accent:       #C2410C;
+  --op-accent-ink:   #FFFFFF;
+  --op-accent-soft:  rgba(194, 65, 12, 0.08);
+  --op-info:         #0E7490;
+  --op-warn:         #B45309;
+  --op-danger:       #B91C1C;
+  --op-ok:           #15803D;
+  --op-grain-color:  rgba(43, 38, 32, 0.02);
+  --op-canvas:
+    radial-gradient(1100px 560px at 50% -10%, color-mix(in oklab, var(--op-accent) 8%, transparent), transparent 62%),
+    var(--op-bg-0);
 }
 
 html, body {
   height: 100%;
   min-height: 100%;
   overflow: hidden;
+  /* Per-theme canvas backdrop. Content surfaces (base-200/base-300 cards,
+     the sidebar) sit on top; the canvas shows through transparent regions
+     (main content area, topbar, storefront). Falls back to the flat base. */
+  background: var(--op-canvas, var(--color-base-100));
 }
 
 body {
@@ -221,6 +425,10 @@ body {
 
 /* ─── Operator utility classes ────────────────────────────────────── */
 @layer utilities {
+  /* Per-theme canvas backdrop — for surfaces that should show the themed
+     background wash instead of a flat base (storefront, auth, marketing). */
+  .op-canvas { background: var(--op-canvas, var(--color-base-100)); }
+
   /* Monospace stack — for numerics, IDs, timestamps, micro-labels */
   .font-mono-op { font-family: var(--font-geist-mono), ui-monospace, monospace; font-feature-settings: "zero", "ss01"; }
 

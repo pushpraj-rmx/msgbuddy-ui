@@ -49,7 +49,9 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=localStorage.getItem("theme-preference");var pref=p==="dark"||p==="light"?p:"dark";document.documentElement.setAttribute("data-theme",pref);var d=localStorage.getItem("display-density");if(d==="small"||d==="medium"||d==="large"){document.documentElement.setAttribute("data-density",d);}}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`,
+            // Keep the theme id list in sync with src/lib/themes.ts (THEME_IDS).
+            // Inlined here (not imported) so it runs before hydration with zero JS deps.
+            __html: `(function(){try{var T=["dark","light","midnight","emerald","sand"];var p=localStorage.getItem("theme-preference");var pref=T.indexOf(p)>-1?p:"dark";document.documentElement.setAttribute("data-theme",pref);var d=localStorage.getItem("display-density");if(d==="small"||d==="medium"||d==="large"){document.documentElement.setAttribute("data-density",d);}}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`,
           }}
         />
       </head>
