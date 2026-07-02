@@ -1,12 +1,83 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import QRCode from "qrcode";
+import { channelTemplatesApi, templatesApi } from "@/lib/api";
+import type { ChannelTemplate } from "@/lib/types";
 import {
   recurringApi,
   type DeliveryWindow,
   type RecurringSettings,
 } from "@/lib/recurringApi";
+
+export interface AuthTemplateOption {
+  versionId: string;
+  label: string;
+}
+
+/**
+ * Load approved WhatsApp AUTHENTICATION templates as selectable OTP options.
+ * Mirrors the template→WA-channel→sendable-version resolution used elsewhere
+ * (CreateCampaignForm): list sendable templates, then read each WA channel
+ * template's state for its category + active/sendable version id.
+ */
+function useAuthTemplateOptions() {
+  const [options, setOptions] = useState<AuthTemplateOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await templatesApi.list({
+          hasWhatsAppSendableVersion: true,
+          isActive: true,
+          limit: 100,
+        });
+        const candidates = res.items
+          .map((t) => {
+            const wa = (t.channelTemplates ?? []).find(
+              (ct: ChannelTemplate) => ct.channel === "WHATSAPP" && !ct.deletedAt,
+            );
+            return wa ? { name: t.name, wa } : null;
+          })
+          .filter((x): x is { name: string; wa: ChannelTemplate } => !!x)
+          // Keep AUTHENTICATION (or unknown category — confirmed via state below).
+          .filter(({ wa }) => wa.category == null || wa.category === "AUTHENTICATION");
+
+        const states = await Promise.all(
+          candidates.map((c) =>
+            channelTemplatesApi
+              .state(c.wa.id)
+              .then((s) => ({ c, s }))
+              .catch(() => null),
+          ),
+        );
+
+        const opts = states
+          .flatMap((x) => (x ? [x] : []))
+          .filter(({ s }) => s.category === "AUTHENTICATION")
+          .flatMap(({ c, s }) => {
+            const v = s.activeVersion ?? s.latestSendableVersion;
+            return v ? [{ versionId: v.id, label: c.name }] : [];
+          });
+
+        if (!cancelled) setOptions(opts);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load templates");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { options, loading, error };
+}
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -27,6 +98,11 @@ export function StorefrontFields({
   onPatch: (patch: Partial<RecurringSettings>) => void;
 }) {
   const [qr, setQr] = useState<string | null>(null);
+  const { options: otpOptions, loading: otpLoading, error: otpError } = useAuthTemplateOptions();
+  const currentOtpMissing =
+    !!value.otpTemplateVersionId &&
+    !otpLoading &&
+    !otpOptions.some((o) => o.versionId === value.otpTemplateVersionId);
   const link =
     value.storefrontHandle && typeof window !== "undefined"
       ? `${window.location.origin}/s/${value.storefrontHandle}`
@@ -62,12 +138,37 @@ export function StorefrontFields({
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-base-content/60">
-          OTP template id (WhatsApp AUTHENTICATION)
-          <input
-            className="input input-bordered input-sm w-full"
+          OTP template (WhatsApp AUTHENTICATION)
+          <select
+            className="select select-bordered select-sm w-full"
             value={value.otpTemplateVersionId ?? ""}
             onChange={(e) => onPatch({ otpTemplateVersionId: e.target.value || null })}
-          />
+          >
+            <option value="">
+              {otpLoading ? "Loading templates…" : "— Select a template —"}
+            </option>
+            {otpOptions.map((o) => (
+              <option key={o.versionId} value={o.versionId}>
+                {o.label}
+              </option>
+            ))}
+            {/* Keep an already-saved value selectable even if it's since been archived. */}
+            {currentOtpMissing && (
+              <option value={value.otpTemplateVersionId ?? ""}>
+                Current (unavailable — {value.otpTemplateVersionId?.slice(0, 8)}…)
+              </option>
+            )}
+          </select>
+          {!otpLoading && otpOptions.length === 0 && !otpError && (
+            <span className="text-[11px] text-warning">
+              No approved AUTHENTICATION templates.{" "}
+              <Link href="/templates" className="link">
+                Create one
+              </Link>
+              .
+            </span>
+          )}
+          {otpError && <span className="text-[11px] text-error">{otpError}</span>}
         </label>
       </div>
       <label className="flex items-center gap-2 text-sm">
