@@ -1,10 +1,10 @@
 name: Deploy
 
-# Auto-deploy the Next.js UI to the VPS on every push to `production`.
-# The build runs on the server (matching the existing manual flow). Because
-# `pm2 reload` is the LAST step and the script runs under `set -e`, any failure
-# in install / build aborts BEFORE the reload — so a broken commit is a failed
-# deploy, never a downed site (PM2 keeps serving the previous version).
+# Auto-deploy the Next.js UI on every push to `production`.
+# Runs on a SELF-HOSTED runner on the VPS itself (no inbound SSH needed) and
+# executes the deploy locally in the existing checkout. Because `pm2 reload` is
+# the LAST step under `set -e`, any failure in install/build aborts BEFORE the
+# reload — a broken commit is a failed deploy, never a downed site.
 
 on:
   push:
@@ -12,47 +12,39 @@ on:
   workflow_dispatch: {}
 
 concurrency:
-  # Never let two deploys of this repo overlap.
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, vps]
     steps:
-      - name: Deploy over SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_SSH_PORT }}
-          script: |
-            set -euo pipefail
+      - name: Deploy (build + reload) on the VPS
+        run: |
+          set -euo pipefail
 
-            # The non-interactive shell has Node 18 and no pnpm. Load nvm so we
-            # get the default Node (v20) + corepack pnpm that builds actually use.
-            export NVM_DIR="$HOME/.nvm"
-            . "$NVM_DIR/nvm.sh"
+          # Non-interactive shell has Node 18 + no pnpm — load nvm (Node 20 + corepack pnpm).
+          export NVM_DIR="$HOME/.nvm"
+          . "$NVM_DIR/nvm.sh"
 
-            # Use the passphrase-less read-only deploy key for GitHub (leaves the
-            # interactive, passphrase-protected id_ed25519 untouched).
-            export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/msgbuddy_ui_github -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          # Use the passphrase-less read-only deploy key for git (leaves the
+          # interactive, passphrase-protected id_ed25519 untouched).
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/msgbuddy_ui_github -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
 
-            cd ${{ vars.DEPLOY_PATH }}
+          cd ${{ vars.DEPLOY_PATH }}
 
-            git fetch origin
-            git checkout production
-            git reset --hard origin/production
+          git fetch origin
+          git checkout production
+          git reset --hard origin/production
 
-            pnpm install --no-frozen-lockfile
+          pnpm install --no-frozen-lockfile
 
-            # Lint is advisory — report but never block the deploy.
-            pnpm lint || echo "::warning::lint reported issues (non-blocking)"
+          # Lint is advisory — report but never block the deploy.
+          pnpm lint || echo "::warning::lint reported issues (non-blocking)"
 
-            # Build is mandatory — set -e aborts the deploy here on failure.
-            pnpm build
+          # Build is mandatory — set -e aborts the deploy here on failure.
+          pnpm build
 
-            # Restart only after everything above succeeded.
-            pm2 reload ${{ vars.PM2_NAME }} --update-env
-            pm2 save
+          # Restart only after everything above succeeded.
+          pm2 reload ${{ vars.PM2_NAME }} --update-env
+          pm2 save
