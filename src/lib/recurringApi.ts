@@ -110,6 +110,18 @@ export interface RecurringSettings {
   lowBalanceTemplateVersionId: string | null;
   skipConfirmedTemplateVersionId: string | null;
   deliveredTemplateVersionId: string | null;
+  otpTemplateVersionId: string | null;
+  storefrontHandle: string | null;
+  storefrontEnabled: boolean;
+}
+
+export interface DeliveryWindow {
+  id: string;
+  weekday: number; // 0=Sun..6=Sat
+  startTime: string; // HH:mm
+  endTime: string; // HH:mm
+  label: string | null;
+  active: boolean;
 }
 
 export const recurringApi = {
@@ -148,11 +160,24 @@ export const recurringApi = {
   createSubscription: async (dto: {
     contactId: string;
     planId: string;
+    productId?: string;
     cadence: Cadence;
     daysOfWeek?: number[];
     slot?: string;
+    deliveryWindowId?: string;
     startDate: string;
   }) => (await api.post<RecurringSubscription>(endpoints.recurring.subscriptions, dto)).data,
+  updateSubscription: async (
+    id: string,
+    dto: Partial<{
+      planId: string;
+      productId: string;
+      cadence: Cadence;
+      daysOfWeek: number[];
+      slot: string;
+      deliveryWindowId: string;
+    }>,
+  ) => (await api.patch<RecurringSubscription>(endpoints.recurring.subscriptionById(id), dto)).data,
   pause: async (id: string) =>
     (await api.post<RecurringSubscription>(endpoints.recurring.subscriptionPause(id))).data,
   resume: async (id: string) =>
@@ -175,6 +200,21 @@ export const recurringApi = {
     (await api.post<{ enqueued: boolean; date: string }>(endpoints.recurring.triggerGenerate, { date })).data,
   triggerLock: async (date?: string) =>
     (await api.post<{ enqueued: boolean; date: string }>(endpoints.recurring.triggerLock, { date })).data,
+
+  // Delivery windows (4A)
+  listDeliveryWindows: async () =>
+    (await api.get<DeliveryWindow[]>(endpoints.recurring.deliveryWindows)).data,
+  createDeliveryWindow: async (dto: {
+    weekday: number;
+    startTime: string;
+    endTime: string;
+    label?: string;
+    active?: boolean;
+  }) => (await api.post<DeliveryWindow>(endpoints.recurring.deliveryWindows, dto)).data,
+  updateDeliveryWindow: async (id: string, dto: Partial<Omit<DeliveryWindow, "id">>) =>
+    (await api.patch<DeliveryWindow>(endpoints.recurring.deliveryWindowById(id), dto)).data,
+  deleteDeliveryWindow: async (id: string) =>
+    (await api.delete<{ deleted: boolean }>(endpoints.recurring.deliveryWindowById(id))).data,
 
   // Settings
   getSettings: async () => (await api.get<RecurringSettings>(endpoints.recurring.settings)).data,

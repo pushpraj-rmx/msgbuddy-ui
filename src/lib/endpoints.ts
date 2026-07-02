@@ -31,6 +31,23 @@ export const endpoints = {
     triggerGenerate: `${P}/subscriptions/triggers/generate`,
     triggerLock: `${P}/subscriptions/triggers/lock`,
     settings: `${P}/subscriptions/settings`,
+    deliveryWindows: `${P}/subscriptions/delivery-windows`,
+    deliveryWindowById: (id: string) => `${P}/subscriptions/delivery-windows/${id}`,
+    /** Public, unauthenticated storefront (QR/link). `h` = storefront handle. */
+    public: {
+      catalog: (h: string) => `${P}/subscriptions/public/${h}/catalog`,
+      otpRequest: (h: string) => `${P}/subscriptions/public/${h}/otp/request`,
+      otpVerify: (h: string) => `${P}/subscriptions/public/${h}/otp/verify`,
+      me: (h: string) => `${P}/subscriptions/public/${h}/me`,
+      subscribe: (h: string) => `${P}/subscriptions/public/${h}/subscribe`,
+      subscriptionById: (h: string, id: string) =>
+        `${P}/subscriptions/public/${h}/subscriptions/${id}`,
+      skip: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/skip`,
+      pause: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/pause`,
+      resume: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/resume`,
+      cancel: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/cancel`,
+      pay: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/pay`,
+    },
   },
   auth: {
     login: `${P}/auth/login`,

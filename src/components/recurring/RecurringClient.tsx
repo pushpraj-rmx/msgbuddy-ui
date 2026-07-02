@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { contactsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
+import { DeliveryWindowsPanel, StorefrontFields } from "./StorefrontSettings";
 import {
   recurringApi,
   type Cadence,
@@ -789,6 +790,11 @@ function SettingsTab() {
     setSaved(false);
   }
 
+  function patch(p: Partial<RecurringSettings>) {
+    setS((prev) => (prev ? { ...prev, ...p } : prev));
+    setSaved(false);
+  }
+
   async function save() {
     if (!s) return;
     setBusy(true);
@@ -846,6 +852,9 @@ function SettingsTab() {
       <Field label="Delivered-confirmation template">
         <input className="input input-bordered input-sm w-full" value={s.deliveredTemplateVersionId ?? ""} onChange={(e) => set("deliveredTemplateVersionId", e.target.value || null)} />
       </Field>
+
+      <StorefrontFields value={s} onPatch={patch} />
+
       <div className="flex items-center gap-3 pt-2">
         <button className="btn btn-sm btn-primary" onClick={save} disabled={busy}>
           {busy && <span className="loading loading-spinner loading-xs" />}
@@ -853,6 +862,8 @@ function SettingsTab() {
         </button>
         {saved && <span className="text-sm text-success">Saved.</span>}
       </div>
+
+      <DeliveryWindowsPanel />
     </div>
   );
 }
