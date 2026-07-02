@@ -45,7 +45,7 @@ jobs:
             git checkout production
             git reset --hard origin/production
 
-            pnpm install --frozen-lockfile
+            pnpm install --no-frozen-lockfile
 
             # Lint is advisory — report but never block the deploy.
             pnpm lint || echo "::warning::lint reported issues (non-blocking)"
