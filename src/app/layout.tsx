@@ -4,6 +4,7 @@ import "./globals.css";
 
 import { QueryProvider } from "@/providers/QueryProvider";
 import { getAppOrigin } from "@/lib/site";
+import { DEFAULT_THEME, THEME_IDS } from "@/lib/themes";
 
 /** Operator design system: Geist body/UI, Geist Mono for numerics/IDs/micro-labels,
  *  Instrument Serif for sparing display moments (hero/empty-states). */
@@ -49,9 +50,10 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            // Keep the theme id list in sync with src/lib/themes.ts (THEME_IDS).
-            // Inlined here (not imported) so it runs before hydration with zero JS deps.
-            __html: `(function(){try{var T=["dark","light","midnight","emerald","sand"];var p=localStorage.getItem("theme-preference");var pref=T.indexOf(p)>-1?p:"dark";document.documentElement.setAttribute("data-theme",pref);var d=localStorage.getItem("display-density");if(d==="small"||d==="medium"||d==="large"){document.documentElement.setAttribute("data-density",d);}}catch(e){document.documentElement.setAttribute("data-theme","dark");}})();`,
+            // Runs before hydration to set data-theme/-density with no FOUC. The
+            // theme allow-list is generated from the registry (THEME_IDS) so it
+            // can never drift from src/lib/themes.ts.
+            __html: `(function(){try{var T=${JSON.stringify(THEME_IDS)};var p=localStorage.getItem("theme-preference");var pref=T.indexOf(p)>-1?p:"${DEFAULT_THEME}";document.documentElement.setAttribute("data-theme",pref);var d=localStorage.getItem("display-density");if(d==="small"||d==="medium"||d==="large"){document.documentElement.setAttribute("data-density",d);}}catch(e){document.documentElement.setAttribute("data-theme","${DEFAULT_THEME}");}})();`,
           }}
         />
       </head>

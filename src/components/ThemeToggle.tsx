@@ -1,8 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Palette } from "lucide-react";
-import { DEFAULT_THEME, THEMES, getTheme, isValidTheme } from "@/lib/themes";
+import { Check, Moon, Palette, Sun } from "lucide-react";
+import {
+  DEFAULT_THEME,
+  getTheme,
+  isValidTheme,
+  themesByScheme,
+  type ThemeColorScheme,
+  type ThemeDef,
+} from "@/lib/themes";
 
 const STORAGE_KEY = "theme-preference";
 
@@ -76,33 +83,80 @@ export function ThemeToggle() {
       {open && (
         <div
           role="menu"
-          className="absolute right-0 z-50 mt-2 w-44 rounded-box border border-base-300 bg-base-200 p-1.5 shadow-lg"
+          className="absolute right-0 z-50 mt-2 flex max-h-[70vh] w-52 flex-col overflow-y-auto rounded-box border border-base-300 bg-base-200 p-1.5 shadow-lg"
           style={{ animation: "op-panel-fade-in 0.12s ease-out" }}
         >
-          <div className="op-label px-2 py-1">Theme</div>
-          {THEMES.map((t) => {
-            const active = t.id === current.id;
-            return (
-              <button
-                key={t.id}
-                role="menuitemradio"
-                aria-checked={active}
-                onClick={() => pick(t.id)}
-                className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors ${
-                  active ? "bg-base-300 font-medium" : "hover:bg-base-300/60"
-                }`}
-              >
-                <span
-                  className="h-4 w-4 shrink-0 rounded-full border border-base-content/15"
-                  style={{ background: t.swatch }}
-                />
-                <span className="flex-1 text-left">{t.label}</span>
-                {active && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-            );
-          })}
+          <ThemeGroup
+            scheme="dark"
+            label="Dark"
+            icon={<Moon className="h-3 w-3" />}
+            currentId={current.id}
+            onPick={pick}
+          />
+          <ThemeGroup
+            scheme="light"
+            label="Light"
+            icon={<Sun className="h-3 w-3" />}
+            currentId={current.id}
+            onPick={pick}
+          />
         </div>
       )}
     </div>
+  );
+}
+
+function ThemeGroup({
+  scheme,
+  label,
+  icon,
+  currentId,
+  onPick,
+}: {
+  scheme: ThemeColorScheme;
+  label: string;
+  icon: React.ReactNode;
+  currentId: string;
+  onPick: (id: string) => void;
+}) {
+  const items = themesByScheme(scheme);
+  return (
+    <>
+      <div className="op-label flex items-center gap-1.5 px-2 pb-1 pt-2">
+        {icon}
+        {label}
+      </div>
+      {items.map((t) => (
+        <ThemeRow key={t.id} theme={t} active={t.id === currentId} onPick={onPick} />
+      ))}
+    </>
+  );
+}
+
+function ThemeRow({
+  theme,
+  active,
+  onPick,
+}: {
+  theme: ThemeDef;
+  active: boolean;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <button
+      role="menuitemradio"
+      aria-checked={active}
+      onClick={() => onPick(theme.id)}
+      className={`flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors ${
+        active ? "bg-base-300 font-medium" : "hover:bg-base-300/60"
+      }`}
+    >
+      <span
+        className="h-4 w-4 shrink-0 rounded-full border border-base-content/15"
+        style={{ background: theme.swatch }}
+      />
+      <span className="flex-1 text-left">{theme.label}</span>
+      {active && <Check className="h-3.5 w-3.5 text-primary" />}
+    </button>
   );
 }
