@@ -124,6 +124,13 @@ export interface DeliveryWindow {
   active: boolean;
 }
 
+export interface RazorpayStatus {
+  workspaceId: string;
+  connected: boolean;
+  keyId: string | null;
+  webhookConfigured: boolean;
+}
+
 export const recurringApi = {
   // Products
   listProducts: async () =>
@@ -215,6 +222,14 @@ export const recurringApi = {
     (await api.patch<DeliveryWindow>(endpoints.recurring.deliveryWindowById(id), dto)).data,
   deleteDeliveryWindow: async (id: string) =>
     (await api.delete<{ deleted: boolean }>(endpoints.recurring.deliveryWindowById(id))).data,
+
+  // Per-merchant Razorpay (3B)
+  razorpayStatus: async () =>
+    (await api.get<RazorpayStatus>(endpoints.recurring.razorpayStatus)).data,
+  connectRazorpay: async (dto: { keyId: string; keySecret: string; webhookSecret: string }) =>
+    (await api.post<RazorpayStatus>(endpoints.recurring.razorpayConnect, dto)).data,
+  disconnectRazorpay: async () =>
+    (await api.delete<RazorpayStatus>(endpoints.recurring.razorpayDisconnect)).data,
 
   // Settings
   getSettings: async () => (await api.get<RecurringSettings>(endpoints.recurring.settings)).data,

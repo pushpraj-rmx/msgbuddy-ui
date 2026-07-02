@@ -33,6 +33,12 @@ export const endpoints = {
     settings: `${P}/subscriptions/settings`,
     deliveryWindows: `${P}/subscriptions/delivery-windows`,
     deliveryWindowById: (id: string) => `${P}/subscriptions/delivery-windows/${id}`,
+    /** Per-merchant Razorpay connect (3B). */
+    razorpayStatus: `${P}/subscriptions/razorpay/status`,
+    razorpayConnect: `${P}/subscriptions/razorpay/connect`,
+    razorpayDisconnect: `${P}/subscriptions/razorpay`,
+    /** The webhook URL a merchant registers in their Razorpay dashboard. */
+    razorpayWebhook: (workspaceId: string) => `${P}/subscriptions/webhooks/razorpay/${workspaceId}`,
     /** Public, unauthenticated storefront (QR/link). `h` = storefront handle. */
     public: {
       catalog: (h: string) => `${P}/subscriptions/public/${h}/catalog`,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { contactsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
-import { DeliveryWindowsPanel, StorefrontFields } from "./StorefrontSettings";
+import { DeliveryWindowsPanel, RazorpayConnectPanel, StorefrontFields } from "./StorefrontSettings";
 import {
   recurringApi,
   type Cadence,
@@ -864,6 +864,8 @@ function SettingsTab() {
       </div>
 
       <DeliveryWindowsPanel />
+
+      <RazorpayConnectPanel />
     </div>
   );
 }

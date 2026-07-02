@@ -5,9 +5,11 @@ import Link from "next/link";
 import QRCode from "qrcode";
 import { channelTemplatesApi, templatesApi } from "@/lib/api";
 import type { ChannelTemplate } from "@/lib/types";
+import { API_BASE_URL, endpoints } from "@/lib/endpoints";
 import {
   recurringApi,
   type DeliveryWindow,
+  type RazorpayStatus,
   type RecurringSettings,
 } from "@/lib/recurringApi";
 
@@ -362,6 +364,135 @@ export function DeliveryWindowsPanel() {
           Add window
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Per-merchant Razorpay connect (3B). Each merchant pastes their OWN Razorpay
+ * keys so customer payments settle to their account. Secrets are write-only
+ * (never returned). Shows the exact webhook URL to register in Razorpay.
+ */
+export function RazorpayConnectPanel() {
+  const [status, setStatus] = useState<RazorpayStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState({ keyId: "", keySecret: "", webhookSecret: "" });
+
+  const load = useCallback(async () => {
+    try {
+      setStatus(await recurringApi.razorpayStatus());
+      setError(null);
+    } catch (e) {
+      setError(errMsg(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const webhookUrl =
+    status?.workspaceId ? `${API_BASE_URL}${endpoints.recurring.razorpayWebhook(status.workspaceId)}` : "";
+
+  async function connect() {
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await recurringApi.connectRazorpay(form));
+      setForm({ keyId: "", keySecret: "", webhookSecret: "" });
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disconnect() {
+    if (!confirm("Disconnect this Razorpay account? The storefront can't take payments until reconnected.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      setStatus(await recurringApi.disconnectRazorpay());
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-box border border-base-300 p-4">
+      <div className="flex items-center justify-between">
+        <div className="op-label">Payments · Razorpay</div>
+        {status && (
+          <span className={`badge badge-sm ${status.connected ? "badge-success" : "badge-ghost"}`}>
+            {status.connected ? "Connected" : "Not connected"}
+          </span>
+        )}
+      </div>
+      <p className="text-xs text-base-content/50">
+        Connect the merchant&apos;s own Razorpay account — customer payments settle directly to them.
+      </p>
+      {error && (
+        <div role="alert" className="rounded-box border border-error/30 bg-base-200 px-3 py-2 text-sm text-error">
+          {error}
+        </div>
+      )}
+
+      {status?.connected ? (
+        <div className="space-y-2 text-sm">
+          <div>
+            Key ID: <span className="font-mono-op">{status.keyId}</span>
+          </div>
+          <div className="space-y-1">
+            <div className="text-xs text-base-content/60">
+              Register this webhook in Razorpay (events: <code>payment.captured</code>, <code>order.paid</code>):
+            </div>
+            <div className="break-all rounded bg-base-200 px-2 py-1 font-mono-op text-xs">{webhookUrl}</div>
+            <button className="btn btn-xs" onClick={() => void navigator.clipboard?.writeText(webhookUrl)}>
+              Copy webhook URL
+            </button>
+            {!status.webhookConfigured && (
+              <span className="ml-2 text-[11px] text-warning">Webhook secret not set — reconnect to add it.</span>
+            )}
+          </div>
+          <button className="btn btn-xs btn-ghost text-error" onClick={disconnect} disabled={busy}>
+            Disconnect
+          </button>
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-3">
+          <input
+            className="input input-bordered input-sm"
+            placeholder="Key ID (rzp_...)"
+            value={form.keyId}
+            onChange={(e) => setForm({ ...form, keyId: e.target.value })}
+          />
+          <input
+            type="password"
+            className="input input-bordered input-sm"
+            placeholder="Key Secret"
+            value={form.keySecret}
+            onChange={(e) => setForm({ ...form, keySecret: e.target.value })}
+          />
+          <input
+            type="password"
+            className="input input-bordered input-sm"
+            placeholder="Webhook Secret"
+            value={form.webhookSecret}
+            onChange={(e) => setForm({ ...form, webhookSecret: e.target.value })}
+          />
+          <button
+            className="btn btn-sm btn-primary sm:col-span-3"
+            disabled={busy || !form.keyId || !form.keySecret || !form.webhookSecret}
+            onClick={connect}
+          >
+            {busy && <span className="loading loading-spinner loading-xs" />}
+            Connect Razorpay
+          </button>
+        </div>
+      )}
     </div>
   );
 }
