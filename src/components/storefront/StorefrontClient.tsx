@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AlertCircle,
+  Check,
+  CheckCircle2,
+  ChevronLeft,
+  Clock,
+  Plus,
+  Wallet,
+} from "lucide-react";
+import {
   storefrontApi,
   StorefrontError,
   WEEKDAY_LABELS,
@@ -38,6 +47,25 @@ function todayYmd(tz?: string) {
   } catch {
     return new Date().toISOString().slice(0, 10);
   }
+}
+
+/* ── Merchant brand (derived from handle until real branding lands, Part D) ──
+   Gives each storefront a distinct, deterministic accent + monogram without any
+   backend fields. The hue is exposed as `--brand` on the storefront root and
+   consumed by the hero + monogram via color-mix, so it stays legible in every
+   theme. */
+function brandFromHandle(handle: string) {
+  const name = handle.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const initials = name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .toUpperCase();
+  let h = 0;
+  for (let i = 0; i < handle.length; i++) h = (h * 31 + handle.charCodeAt(i)) >>> 0;
+  const hue = h % 360;
+  return { name, initials, hue };
 }
 
 async function openRazorpay(
@@ -78,6 +106,8 @@ export default function StorefrontClient({ handle }: { handle: string }) {
   const [mode, setMode] = useState<Mode>("subscribe");
   const [token, setToken] = useState<string | null>(null);
 
+  const brand = useMemo(() => brandFromHandle(handle), [handle]);
+
   useEffect(() => {
     setToken(localStorage.getItem(`mb_sf_token:${handle}`));
   }, [handle]);
@@ -107,12 +137,22 @@ export default function StorefrontClient({ handle }: { handle: string }) {
     [handle],
   );
 
-  if (loading) return <CatalogSkeleton />;
+  // Expose the merchant hue as `--brand` for the whole subtree.
+  const brandStyle = { ["--brand" as any]: `hsl(${brand.hue} 72% 55%)` } as React.CSSProperties;
+
+  if (loading)
+    return (
+      <div style={brandStyle}>
+        <CatalogSkeleton />
+      </div>
+    );
 
   if (error || !catalog) {
     return (
-      <div className="space-y-4 pt-10 text-center">
-        <div className="text-3xl">🥐</div>
+      <div style={brandStyle} className="space-y-4 pt-16 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-base-300 bg-base-200">
+          <AlertCircle className="h-6 w-6 text-error" />
+        </div>
         <p className="text-sm text-error">{error ?? "Storefront not found."}</p>
         <button className="btn btn-sm btn-primary" onClick={() => void loadCatalog()}>
           Try again
@@ -122,23 +162,28 @@ export default function StorefrontClient({ handle }: { handle: string }) {
   }
 
   return (
-    <div className="space-y-5">
-      <Header handle={handle} />
-      <div role="tablist" className="tabs tabs-boxed bg-base-200/60 p-1">
-        <button
-          role="tab"
-          className={`tab flex-1 ${mode === "subscribe" ? "tab-active" : ""}`}
-          onClick={() => setMode("subscribe")}
-        >
-          Subscribe
-        </button>
-        <button
-          role="tab"
-          className={`tab flex-1 ${mode === "manage" ? "tab-active" : ""}`}
-          onClick={() => setMode("manage")}
-        >
-          My deliveries
-        </button>
+    <div style={brandStyle} className="space-y-6">
+      <Header brand={brand} />
+
+      <div
+        role="tablist"
+        className="grid grid-cols-2 gap-1 rounded-box border border-base-300 bg-base-200/60 p-1"
+      >
+        {(["subscribe", "manage"] as Mode[]).map((m) => (
+          <button
+            key={m}
+            role="tab"
+            aria-selected={mode === m}
+            className={`rounded-[calc(var(--radius-box)-0.25rem)] px-3 py-1.5 text-sm font-medium transition-colors ${
+              mode === m
+                ? "bg-base-100 text-base-content shadow-sm"
+                : "text-base-content/55 hover:text-base-content"
+            }`}
+            onClick={() => setMode(m)}
+          >
+            {m === "subscribe" ? "Subscribe" : "My deliveries"}
+          </button>
+        ))}
       </div>
 
       {mode === "subscribe" ? (
@@ -162,24 +207,48 @@ export default function StorefrontClient({ handle }: { handle: string }) {
   );
 }
 
-function Header({ handle }: { handle: string }) {
-  const name = handle.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+function Header({ brand }: { brand: ReturnType<typeof brandFromHandle> }) {
   return (
-    <div className="rounded-2xl bg-gradient-to-br from-primary/20 to-base-200 p-5">
-      <div className="text-3xl">🥐</div>
-      <h1 className="mt-2 text-xl font-semibold">{name}</h1>
-      <p className="text-sm text-base-content/60">Fresh, delivered on your schedule.</p>
+    <div className="op-grain relative overflow-hidden rounded-2xl border border-base-300 bg-base-200 p-6">
+      {/* brand-tinted wash — theme-safe via color-mix over the base surface */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 120% at 0% 0%, color-mix(in oklab, var(--brand) 22%, transparent), transparent 60%)",
+        }}
+      />
+      <div className="relative flex items-center gap-4">
+        <div
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-lg font-semibold text-white shadow-sm"
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in oklab, var(--brand) 90%, black 6%), color-mix(in oklab, var(--brand) 60%, black 22%))",
+          }}
+        >
+          {brand.initials || "🛍"}
+        </div>
+        <div className="min-w-0">
+          <span className="op-label">Subscriptions</span>
+          <h1 className="truncate font-serif text-3xl leading-tight tracking-tight">
+            {brand.name}
+          </h1>
+        </div>
+      </div>
+      <p className="relative mt-3 text-sm text-base-content/65">
+        Fresh, delivered on your schedule — pause, skip or change anytime.
+      </p>
     </div>
   );
 }
 
 function CatalogSkeleton() {
   return (
-    <div className="space-y-4">
-      <div className="skeleton h-28 w-full rounded-2xl" />
-      <div className="skeleton h-10 w-full rounded-box" />
-      <div className="skeleton h-40 w-full rounded-2xl" />
-      <div className="skeleton h-40 w-full rounded-2xl" />
+    <div className="space-y-6">
+      <div className="skeleton h-32 w-full rounded-2xl" />
+      <div className="skeleton h-11 w-full rounded-box" />
+      <div className="skeleton h-36 w-full rounded-2xl" />
+      <div className="skeleton h-36 w-full rounded-2xl" />
     </div>
   );
 }
@@ -254,10 +323,12 @@ function SubscribeFlow({
 
   if (step === "success") {
     return (
-      <div className="space-y-4 rounded-2xl border border-success/30 bg-base-200 p-6 text-center">
-        <div className="text-4xl">✅</div>
+      <div className="space-y-4 rounded-2xl border border-success/30 bg-base-200 p-8 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+          <CheckCircle2 className="h-8 w-8 text-success" />
+        </div>
         <h2 className="text-lg font-semibold">You&apos;re subscribed!</h2>
-        <p className="text-sm text-base-content/70">
+        <p className="mx-auto max-w-xs text-sm text-base-content/70">
           We&apos;ll send delivery reminders on WhatsApp. You can skip, pause or change your plan
           anytime.
         </p>
@@ -269,7 +340,7 @@ function SubscribeFlow({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <StepDots step={step} />
       {error && <Alert msg={error} />}
 
@@ -296,52 +367,53 @@ function SubscribeFlow({
       )}
 
       {step === "configure" && plan && (
-        <div className="space-y-5">
-          <button className="text-sm text-primary" onClick={() => setStep("plan")}>
-            ← Change plan
-          </button>
+        <div className="space-y-6">
+          <BackLink onClick={() => setStep("plan")}>Change plan</BackLink>
 
           <div>
             <SectionLabel>Pick your item</SectionLabel>
-            <div className="mt-2 space-y-2">
-              {plan.products.map((pr) => (
-                <label
-                  key={pr.productId}
-                  className={`flex cursor-pointer items-center justify-between rounded-box border p-3 ${
-                    pr.productId === productId
-                      ? "border-primary bg-primary/5"
-                      : "border-base-300"
-                  }`}
-                >
-                  <span className="flex items-center gap-3">
-                    <input
-                      type="radio"
-                      name="product"
-                      className="radio radio-sm radio-primary"
-                      checked={pr.productId === productId}
-                      onChange={() => setProductId(pr.productId)}
-                    />
-                    <span>
-                      <span className="font-medium">{pr.name}</span>
-                      {pr.variant && (
-                        <span className="text-base-content/50"> · {pr.variant}</span>
-                      )}
-                      {pr.quantity > 1 && (
-                        <span className="text-base-content/50"> ×{pr.quantity}</span>
-                      )}
+            <div className="mt-2.5 space-y-2">
+              {plan.products.map((pr) => {
+                const active = pr.productId === productId;
+                return (
+                  <label
+                    key={pr.productId}
+                    className={`flex cursor-pointer items-center justify-between rounded-box border p-3.5 transition-colors ${
+                      active
+                        ? "border-primary bg-primary/5"
+                        : "border-base-300 hover:border-base-content/25"
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="product"
+                        className="radio radio-sm radio-primary"
+                        checked={active}
+                        onChange={() => setProductId(pr.productId)}
+                      />
+                      <span>
+                        <span className="font-medium">{pr.name}</span>
+                        {pr.variant && (
+                          <span className="text-base-content/50"> · {pr.variant}</span>
+                        )}
+                        {pr.quantity > 1 && (
+                          <span className="text-base-content/50"> ×{pr.quantity}</span>
+                        )}
+                      </span>
                     </span>
-                  </span>
-                  <span className="font-mono-op text-sm tabular-nums">
-                    {money(catalog.currency, pr.price)}
-                  </span>
-                </label>
-              ))}
+                    <span className="text-[0.9375rem] font-semibold tabular-nums">
+                      {money(catalog.currency, pr.price)}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </div>
 
           <div>
             <SectionLabel>Delivery days</SectionLabel>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               {WEEKDAY_LABELS.map((label, d) => {
                 const open = openWeekdays.length === 0 || openWeekdays.includes(d);
                 const on = days.includes(d);
@@ -349,13 +421,14 @@ function SubscribeFlow({
                   <button
                     key={d}
                     disabled={!open}
+                    title={open ? undefined : "Not available for delivery"}
                     onClick={() => toggleDay(d)}
-                    className={`h-10 w-11 rounded-box border text-sm ${
+                    className={`h-11 w-12 rounded-box border text-sm font-medium transition-colors ${
                       on
                         ? "border-primary bg-primary text-primary-content"
                         : open
-                          ? "border-base-300"
-                          : "cursor-not-allowed border-base-300 opacity-30"
+                          ? "border-base-300 hover:border-base-content/25"
+                          : "cursor-not-allowed border-dashed border-base-300 text-base-content/30"
                     }`}
                   >
                     {label}
@@ -363,9 +436,9 @@ function SubscribeFlow({
                 );
               })}
             </div>
-            {openWeekdays.length > 0 && (
-              <p className="mt-1 text-xs text-base-content/50">
-                Greyed-out days aren&apos;t available for delivery.
+            {openWeekdays.length > 0 && openWeekdays.length < 7 && (
+              <p className="mt-1.5 text-xs text-base-content/50">
+                Dashed days aren&apos;t available for delivery.
               </p>
             )}
           </div>
@@ -373,27 +446,33 @@ function SubscribeFlow({
           {catalog.windows.length > 0 && (
             <div>
               <SectionLabel>Delivery time</SectionLabel>
-              <div className="mt-2 space-y-2">
-                {dedupeWindows(catalog.windows).map((w) => (
-                  <label
-                    key={w.id}
-                    className={`flex cursor-pointer items-center gap-3 rounded-box border p-3 ${
-                      w.id === windowId ? "border-primary bg-primary/5" : "border-base-300"
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="window"
-                      className="radio radio-sm radio-primary"
-                      checked={w.id === windowId}
-                      onChange={() => setWindowId(w.id)}
-                    />
-                    <span className="text-sm">
-                      {w.label ? `${w.label} · ` : ""}
-                      {w.startTime}–{w.endTime}
-                    </span>
-                  </label>
-                ))}
+              <div className="mt-2.5 space-y-2">
+                {dedupeWindows(catalog.windows).map((w) => {
+                  const active = w.id === windowId;
+                  return (
+                    <label
+                      key={w.id}
+                      className={`flex cursor-pointer items-center gap-3 rounded-box border p-3.5 transition-colors ${
+                        active
+                          ? "border-primary bg-primary/5"
+                          : "border-base-300 hover:border-base-content/25"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="window"
+                        className="radio radio-sm radio-primary"
+                        checked={active}
+                        onChange={() => setWindowId(w.id)}
+                      />
+                      <Clock className="h-4 w-4 text-base-content/45" />
+                      <span className="text-sm">
+                        {w.label ? `${w.label} · ` : ""}
+                        {w.startTime}–{w.endTime}
+                      </span>
+                    </label>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -402,7 +481,7 @@ function SubscribeFlow({
             <SectionLabel>Start date</SectionLabel>
             <input
               type="date"
-              className="input input-bordered mt-2 w-full"
+              className="input input-bordered mt-2.5 w-full"
               value={startDate}
               min={todayYmd(catalog.timezone)}
               onChange={(e) => setStartDate(e.target.value)}
@@ -411,13 +490,17 @@ function SubscribeFlow({
 
           <OrderSummary currency={catalog.currency} perDelivery={perDelivery} days={days} />
 
-          <button
-            className="btn btn-primary btn-block"
-            disabled={!productId || days.length === 0 || (catalog.windows.length > 0 && !windowId)}
-            onClick={() => setStep("auth")}
-          >
-            Continue
-          </button>
+          <div className="sticky bottom-0 -mx-4 bg-gradient-to-t from-base-100 via-base-100 to-transparent px-4 pb-2 pt-3">
+            <button
+              className="btn btn-primary btn-block"
+              disabled={
+                !productId || days.length === 0 || (catalog.windows.length > 0 && !windowId)
+              }
+              onClick={() => setStep("auth")}
+            >
+              Continue
+            </button>
+          </div>
         </div>
       )}
 
@@ -458,15 +541,17 @@ function OrderSummary({
   if (!perDelivery) return null;
   const perWeek = perDelivery * days.length;
   return (
-    <div className="rounded-box bg-base-200 p-4 text-sm">
-      <div className="flex justify-between">
-        <span className="text-base-content/60">Per delivery</span>
-        <span className="font-mono-op tabular-nums">{money(currency, perDelivery)}</span>
+    <div className="rounded-box border border-primary/25 bg-primary/5 p-4 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-base-content/65">Per delivery</span>
+        <span className="font-semibold tabular-nums">{money(currency, perDelivery)}</span>
       </div>
       {days.length > 0 && (
-        <div className="mt-1 flex justify-between">
-          <span className="text-base-content/60">Per week ({days.length}×)</span>
-          <span className="font-mono-op tabular-nums">{money(currency, perWeek)}</span>
+        <div className="mt-2 flex items-center justify-between border-t border-primary/15 pt-2">
+          <span className="text-base-content/65">Per week ({days.length}×)</span>
+          <span className="text-base font-semibold tabular-nums text-primary">
+            {money(currency, perWeek)}
+          </span>
         </div>
       )}
     </div>
@@ -528,9 +613,7 @@ function AuthStep({
 
   return (
     <div className="space-y-4">
-      <button className="text-sm text-primary" onClick={onBack}>
-        ← Back
-      </button>
+      <BackLink onClick={onBack}>Back</BackLink>
       <SectionLabel>{phase === "phone" ? "Your WhatsApp number" : "Enter the code"}</SectionLabel>
       {error && <Alert msg={error} />}
 
@@ -539,7 +622,7 @@ function AuthStep({
           <input
             type="tel"
             inputMode="tel"
-            placeholder="+91 98765 43210"
+            placeholder="Phone number with country code"
             className="input input-bordered w-full"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
@@ -661,16 +744,21 @@ function ManageView({
     <div className="space-y-4">
       {error && <Alert msg={error} />}
       {me && (
-        <div className="rounded-box bg-base-200 p-4">
-          <div className="op-label">Wallet balance</div>
-          <div className="font-mono-op text-2xl tabular-nums">
-            {money(catalog.currency, me.wallet.balance)}
+        <div className="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 p-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+            <Wallet className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <div className="op-label">Wallet balance</div>
+            <div className="text-2xl font-semibold tabular-nums">
+              {money(catalog.currency, me.wallet.balance)}
+            </div>
           </div>
         </div>
       )}
 
       {me?.subscriptions.length === 0 && (
-        <div className="space-y-3 rounded-2xl border border-base-300 p-6 text-center">
+        <div className="space-y-3 rounded-2xl border border-dashed border-base-300 bg-base-200 p-8 text-center">
           <p className="text-sm text-base-content/60">You have no subscriptions yet.</p>
           <button className="btn btn-primary btn-sm" onClick={onGoSubscribe}>
             Start a subscription
@@ -679,7 +767,7 @@ function ManageView({
       )}
 
       {me?.subscriptions.map((s) => (
-        <div key={s.id} className="space-y-3 rounded-2xl border border-base-300 p-4">
+        <div key={s.id} className="space-y-3 rounded-2xl border border-base-300 bg-base-200 p-4">
           <div className="flex items-start justify-between">
             <div>
               <div className="font-medium">{s.product?.name ?? s.plan.name}</div>
@@ -697,39 +785,43 @@ function ManageView({
               {s.status}
             </span>
           </div>
-          <div className="flex flex-wrap gap-1 text-xs">
+          <div className="flex flex-wrap items-center gap-1 text-xs">
             {(s.cadence === "DAILY" ? [0, 1, 2, 3, 4, 5, 6] : s.daysOfWeek).map((d) => (
-              <span key={d} className="rounded bg-base-300 px-1.5 py-0.5">
+              <span
+                key={d}
+                className="rounded border border-base-300 bg-base-100 px-1.5 py-0.5 font-medium"
+              >
                 {WEEKDAY_LABELS[d]}
               </span>
             ))}
             {s.deliveryWindow && (
-              <span className="text-base-content/50">
-                · {s.deliveryWindow.startTime}–{s.deliveryWindow.endTime}
+              <span className="ml-1 inline-flex items-center gap-1 text-base-content/50">
+                <Clock className="h-3 w-3" />
+                {s.deliveryWindow.startTime}–{s.deliveryWindow.endTime}
               </span>
             )}
           </div>
 
           {s.status !== "CANCELLED" && (
-            <div className="flex flex-wrap gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 border-t border-base-300 pt-3">
               <SkipControl handle={handle} token={token} id={s.id} onDone={() => load(token)} />
               {s.status === "ACTIVE" ? (
                 <button
-                  className="btn btn-xs"
+                  className="btn btn-sm"
                   onClick={() => act(() => storefrontApi.pause(handle, token, s.id))}
                 >
                   Pause
                 </button>
               ) : (
                 <button
-                  className="btn btn-xs btn-primary"
+                  className="btn btn-sm btn-primary"
                   onClick={() => act(() => storefrontApi.resume(handle, token, s.id))}
                 >
                   Resume
                 </button>
               )}
               <button
-                className="btn btn-xs btn-ghost text-error"
+                className="btn btn-sm btn-ghost text-error"
                 onClick={() => {
                   if (confirm("Cancel this subscription?"))
                     void act(() => storefrontApi.cancel(handle, token, s.id));
@@ -743,7 +835,8 @@ function ManageView({
       ))}
 
       <button className="btn btn-ghost btn-block btn-sm" onClick={onGoSubscribe}>
-        + New subscription
+        <Plus className="h-4 w-4" />
+        New subscription
       </button>
     </div>
   );
@@ -766,7 +859,7 @@ function SkipControl({
 
   if (!open)
     return (
-      <button className="btn btn-xs" onClick={() => setOpen(true)}>
+      <button className="btn btn-sm" onClick={() => setOpen(true)}>
         Skip a day
       </button>
     );
@@ -774,12 +867,12 @@ function SkipControl({
     <span className="flex items-center gap-1">
       <input
         type="date"
-        className="input input-xs input-bordered"
+        className="input input-sm input-bordered"
         value={date}
         onChange={(e) => setDate(e.target.value)}
       />
       <button
-        className="btn btn-xs btn-primary"
+        className="btn btn-sm btn-primary"
         disabled={!date || busy}
         onClick={async () => {
           setBusy(true);
@@ -793,9 +886,10 @@ function SkipControl({
           }
         }}
       >
+        <Check className="h-4 w-4" />
         Skip
       </button>
-      <button className="btn btn-xs btn-ghost" onClick={() => setOpen(false)}>
+      <button className="btn btn-sm btn-ghost" onClick={() => setOpen(false)}>
         ✕
       </button>
     </span>
@@ -821,27 +915,42 @@ function PlanCard({
   return (
     <button
       onClick={onSelect}
-      className={`w-full rounded-2xl border p-4 text-left transition ${
-        selected ? "border-primary" : "border-base-300 hover:border-base-content/30"
+      className={`op-grain relative w-full overflow-hidden rounded-2xl border p-5 text-left transition-colors ${
+        selected
+          ? "border-primary bg-primary/5"
+          : "border-base-300 bg-base-200 hover:border-base-content/25"
       }`}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-semibold">{plan.name}</span>
+      <div className="flex items-start justify-between gap-3">
+        <span className="text-base font-semibold">{plan.name}</span>
         {from > 0 && (
-          <span className="text-sm text-base-content/60">
-            from {money(currency, from)}
+          <span className="shrink-0 text-right">
+            <span className="block text-[0.625rem] uppercase tracking-wide text-base-content/45">
+              from
+            </span>
+            <span className="text-base font-semibold tabular-nums text-primary">
+              {money(currency, from)}
+            </span>
           </span>
         )}
       </div>
       {plan.description && (
-        <p className="mt-1 text-sm text-base-content/60">{plan.description}</p>
+        <p className="mt-1.5 text-sm text-base-content/60">{plan.description}</p>
       )}
-      <div className="mt-2 flex flex-wrap gap-1">
+      <div className="mt-3 flex flex-wrap gap-1.5">
         {plan.products.slice(0, 4).map((p) => (
-          <span key={p.productId} className="rounded bg-base-300 px-2 py-0.5 text-xs">
+          <span
+            key={p.productId}
+            className="rounded-full border border-base-300 bg-base-100 px-2.5 py-0.5 text-xs"
+          >
             {p.name}
           </span>
         ))}
+        {plan.products.length > 4 && (
+          <span className="rounded-full border border-base-300 bg-base-100 px-2.5 py-0.5 text-xs text-base-content/50">
+            +{plan.products.length - 4} more
+          </span>
+        )}
       </div>
     </button>
   );
@@ -849,16 +958,39 @@ function PlanCard({
 
 function StepDots({ step }: { step: Step }) {
   const order: Step[] = ["plan", "configure", "auth"];
+  const labels: Record<string, string> = { plan: "Plan", configure: "Details", auth: "Confirm" };
   const idx = order.indexOf(step);
   return (
-    <div className="flex gap-1.5">
-      {order.map((_, i) => (
-        <div
-          key={i}
-          className={`h-1.5 flex-1 rounded-full ${i <= idx ? "bg-primary" : "bg-base-300"}`}
-        />
+    <div className="flex items-center gap-2">
+      {order.map((s, i) => (
+        <div key={s} className="flex flex-1 flex-col gap-1.5">
+          <div
+            className={`h-1.5 rounded-full transition-colors ${
+              i <= idx ? "bg-primary" : "bg-base-300"
+            }`}
+          />
+          <span
+            className={`text-[0.625rem] font-medium uppercase tracking-wide ${
+              i <= idx ? "text-primary" : "text-base-content/40"
+            }`}
+          >
+            {labels[s]}
+          </span>
+        </div>
       ))}
     </div>
+  );
+}
+
+function BackLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      className="inline-flex items-center gap-1 text-sm text-base-content/60 transition-colors hover:text-base-content"
+      onClick={onClick}
+    >
+      <ChevronLeft className="h-4 w-4" />
+      {children}
+    </button>
   );
 }
 
@@ -870,9 +1002,10 @@ function Alert({ msg }: { msg: string }) {
   return (
     <div
       role="alert"
-      className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm text-error"
+      className="flex items-start gap-2 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2.5 text-sm text-error"
     >
-      {msg}
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{msg}</span>
     </div>
   );
 }
