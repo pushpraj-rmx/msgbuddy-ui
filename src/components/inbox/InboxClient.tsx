@@ -372,6 +372,9 @@ export function InboxClient({
   const [templateVariables, setTemplateVariables] = useState<
     TemplateVariableRow[]
   >([]);
+  // Text placeholder keys the selected template requires (from GET .../state).
+  // Drives auto-populated variable inputs so the agent isn't left guessing.
+  const [requiredVariableKeys, setRequiredVariableKeys] = useState<string[]>([]);
   const [inboxTemplateVersionDetail, setInboxTemplateVersionDetail] =
     useState<ChannelTemplateVersion | null>(null);
   const [inboxTemplateVersionDetailLoading, setInboxTemplateVersionDetailLoading] =
@@ -1073,6 +1076,7 @@ export function InboxClient({
     const wa = (tpl?.channelTemplates ?? []).find((ct) => ct.channel === "WHATSAPP");
     if (!wa?.id) {
       setSelectedTemplateVersion(null);
+      setRequiredVariableKeys([]);
       setTemplateVersionLoading(false);
       return;
     }
@@ -1081,6 +1085,7 @@ export function InboxClient({
       .state(wa.id)
       .then((state) => {
         if (cancelled) return;
+        setRequiredVariableKeys(state.requiredVariableKeys ?? []);
         const v = state.latestSendableVersion;
         if (!v) {
           setSelectedTemplateVersion(null);
@@ -1091,6 +1096,7 @@ export function InboxClient({
       .catch(() => {
         if (cancelled) return;
         setSelectedTemplateVersion(null);
+        setRequiredVariableKeys([]);
       })
       .finally(() => {
         if (cancelled) return;
@@ -1107,6 +1113,21 @@ export function InboxClient({
     setTemplateBindingError(null);
     setInboxTemplateVersionDetail(null);
   }, [selectedTemplateId, selectedTemplateVersion?.id]);
+
+  // Auto-populate the variable inputs from the template's required text keys, so
+  // the agent sees exactly which values to fill instead of guessing. Preserves
+  // anything already typed (by key). Media slots have their own uploaders.
+  useEffect(() => {
+    if (!useTemplateSend) return;
+    setTemplateVariables((prev) => {
+      const byKey = new Map(prev.map((r) => [r.key, r.value]));
+      return requiredVariableKeys.map((k) => ({
+        id: `req-${k}`,
+        key: k,
+        value: byKey.get(k) ?? "",
+      }));
+    });
+  }, [requiredVariableKeys, useTemplateSend]);
 
   useEffect(() => {
     if (
@@ -4236,6 +4257,11 @@ export function InboxClient({
                               <div className="flex items-center justify-between">
                                 <p className="text-xs text-base-content/65">
                                   Template variables
+                                  {requiredVariableKeys.length > 0 ? (
+                                    <span className="ml-1 text-base-content/45">
+                                      · {requiredVariableKeys.length} required
+                                    </span>
+                                  ) : null}
                                 </p>
                                 <button
                                   type="button"
@@ -4245,39 +4271,70 @@ export function InboxClient({
                                   Add variable
                                 </button>
                               </div>
-                              {templateVariables.map((row) => (
-                                <div key={row.id} className="flex items-center gap-2">
-                                  <input
-                                    type="text"
-                                    className="input input-bordered input-sm w-1/2"
-                                    placeholder="key"
-                                    value={row.key}
-                                    onChange={(event) =>
-                                      updateTemplateVariableRow(row.id, {
-                                        key: event.target.value,
-                                      })
-                                    }
-                                  />
-                                  <input
-                                    type="text"
-                                    className="input input-bordered input-sm w-1/2"
-                                    placeholder="value"
-                                    value={row.value}
-                                    onChange={(event) =>
-                                      updateTemplateVariableRow(row.id, {
-                                        value: event.target.value,
-                                      })
-                                    }
-                                  />
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-xs"
-                                    onClick={() => removeTemplateVariableRow(row.id)}
-                                  >
-                                    Remove
-                                  </button>
-                                </div>
-                              ))}
+                              {templateVariables.length === 0 ? (
+                                <p className="text-xs text-base-content/45">
+                                  This template has no variables to fill.
+                                </p>
+                              ) : (
+                                templateVariables.map((row) => {
+                                  const isRequired = requiredVariableKeys.includes(
+                                    row.key
+                                  );
+                                  return (
+                                    <div
+                                      key={row.id}
+                                      className="flex items-center gap-2"
+                                    >
+                                      {isRequired ? (
+                                        <span
+                                          className="w-1/3 truncate font-mono-op text-xs text-base-content/70"
+                                          title={row.key}
+                                        >
+                                          {row.key}
+                                        </span>
+                                      ) : (
+                                        <input
+                                          type="text"
+                                          className="input input-bordered input-sm w-1/3"
+                                          placeholder="key"
+                                          value={row.key}
+                                          onChange={(event) =>
+                                            updateTemplateVariableRow(row.id, {
+                                              key: event.target.value,
+                                            })
+                                          }
+                                        />
+                                      )}
+                                      <input
+                                        type="text"
+                                        className="input input-bordered input-sm flex-1"
+                                        placeholder={
+                                          isRequired
+                                            ? `value for ${row.key}`
+                                            : "value"
+                                        }
+                                        value={row.value}
+                                        onChange={(event) =>
+                                          updateTemplateVariableRow(row.id, {
+                                            value: event.target.value,
+                                          })
+                                        }
+                                      />
+                                      {!isRequired ? (
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost btn-xs"
+                                          onClick={() =>
+                                            removeTemplateVariableRow(row.id)
+                                          }
+                                        >
+                                          Remove
+                                        </button>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })
+                              )}
                             </div>
                           </div>
                         </div>

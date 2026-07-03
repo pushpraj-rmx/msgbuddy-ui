@@ -463,6 +463,8 @@ export type ChannelTemplateSyncResult = {
   providerTemplateId?: string;
   providerVersionId?: string;
   error?: string;
+  /** Non-fatal notice on a successful sync (e.g. Meta enforced a different category). */
+  warning?: string;
 };
 
 export type ChannelTemplateStateRequirementAction = {

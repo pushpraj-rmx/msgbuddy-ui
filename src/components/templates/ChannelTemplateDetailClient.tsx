@@ -401,7 +401,7 @@ export function ChannelTemplateDetailClient({
   const [createOpen, setCreateOpen] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
-  const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error" | "warning"; message: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
@@ -730,6 +730,9 @@ export function ChannelTemplateDetailClient({
         onSuccess: (data) => {
           if (!data.success) {
             setSyncFeedback({ type: "error", message: data.error ?? "Send failed." });
+          } else if (data.warning) {
+            // Sent, but Meta enforced something (e.g. a different category). Tell the user.
+            setSyncFeedback({ type: "warning", message: data.warning });
           } else {
             setSyncFeedback({
               type: "success",
@@ -1032,7 +1035,9 @@ export function ChannelTemplateDetailClient({
             className={
               syncFeedback.type === "success"
                 ? "mt-3 rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-3 py-2 text-sm"
-                : "mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm"
+                : syncFeedback.type === "warning"
+                  ? "mt-3 rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm"
+                  : "mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-sm"
             }
           >
             <span>{syncFeedback.message}</span>
