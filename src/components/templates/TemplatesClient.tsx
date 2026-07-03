@@ -17,7 +17,7 @@ import {
   useRemoveTemplate,
   type TemplatesListParams,
 } from "@/hooks/use-templates";
-import type { Template } from "@/lib/types";
+import { normalizeQualityRating, type Template } from "@/lib/types";
 
 import { TemplatePanelContent } from "./TemplatePanelContent";
 import { getApiError } from "@/lib/api-error";
@@ -28,10 +28,61 @@ import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
+/** Raw Meta provider status → list badge. Keys match ChannelTemplate.providerStatus strings. */
+const WA_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
+  APPROVED: { label: "Approved", cls: "op-tag-ok" },
+  PENDING: { label: "Pending", cls: "op-tag-warn" },
+  PROVIDER_PENDING: { label: "Pending", cls: "op-tag-warn" },
+  REJECTED: { label: "Rejected", cls: "op-tag-danger" },
+  PAUSED: { label: "Paused", cls: "op-tag-warn" },
+  DISABLED: { label: "Disabled", cls: "op-tag-danger" },
+  IN_APPEAL: { label: "In appeal", cls: "op-tag-warn" },
+  APPEAL_REQUESTED: { label: "In appeal", cls: "op-tag-warn" },
+  ARCHIVED_BY_META: { label: "Archived", cls: "op-tag-danger" },
+};
+
+/**
+ * WhatsApp approval + quality badge for a list row, derived from the WhatsApp
+ * channel template's raw Meta status (the only status carried in the list
+ * payload). Lets users see approved / pending / rejected without opening each row.
+ */
+function WhatsAppStatusCell({ template }: { template: Template }) {
+  const ct = (template.channelTemplates ?? []).find(
+    (c) => c.channel === "WHATSAPP" && !c.deletedAt
+  );
+  if (!ct) return <span className="op-tag">No WhatsApp</span>;
+  const raw = (ct.providerStatus ?? "").toUpperCase();
+  const badge = raw
+    ? WA_STATUS_BADGE[raw] ?? { label: ct.providerStatus as string, cls: "" }
+    : { label: "Draft", cls: "" };
+  const rating = normalizeQualityRating(ct.qualityScore);
+  const showQuality = ct.qualityScore != null && rating !== "UNKNOWN";
+  return (
+    <div className="flex flex-col gap-1">
+      <span className={`op-tag ${badge.cls}`}>{badge.label}</span>
+      {showQuality && (
+        <span
+          className={`op-tag ${
+            rating === "GREEN"
+              ? "op-tag-ok"
+              : rating === "YELLOW"
+                ? "op-tag-warn"
+                : "op-tag-danger"
+          }`}
+        >
+          {rating === "GREEN" ? "High" : rating === "YELLOW" ? "Medium" : "Low"}{" "}
+          quality
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function TemplatesClient({ meRole }: { meRole: string }) {
   const canCreateTemplate = roleHasWorkspacePermission(meRole, "templates.create");
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState<string>("");
+  const [sendable, setSendable] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("updatedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -51,6 +102,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
           : isActive === "false"
             ? false
             : undefined,
+      hasWhatsAppSendableVersion: sendable === "true" ? true : undefined,
       sortBy: sortBy || undefined,
       sortOrder,
       page,
@@ -59,6 +111,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
     [
       debouncedSearch,
       isActive,
+      sendable,
       sortBy,
       sortOrder,
       page,
@@ -75,24 +128,44 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
 
   // Clear selection when filters/search/pagination change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [debouncedSearch, isActive, sortBy, sortOrder, page, limit]);
+  }, [debouncedSearch, isActive, sendable, sortBy, sortOrder, page, limit]);
 
   const bulkDeleteMutation = useMutation({
+    // allSettled, not all — one failure (e.g. a template in use by a campaign)
+    // must not abort the whole batch or leave a partially-deleted, stale
+    // selection. Succeeded rows are cleared; failed rows stay selected and are
+    // surfaced to the user.
     mutationFn: async (ids: string[]) => {
-      await Promise.all(ids.map((id) => removeMutation.mutateAsync(id)));
+      const results = await Promise.allSettled(
+        ids.map((id) => removeMutation.mutateAsync(id))
+      );
+      const failedIds = ids.filter((_, i) => results[i].status === "rejected");
+      return { failedIds };
     },
-    onSuccess: (_, ids) => {
+    onSuccess: ({ failedIds }, ids) => {
+      const failed = new Set(failedIds);
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        ids.forEach((id) => next.delete(id));
+        ids.forEach((id) => {
+          if (!failed.has(id)) next.delete(id);
+        });
         return next;
       });
-      setBulkDeleteOpen(false);
+      if (failedIds.length > 0) {
+        setBulkDeleteError(
+          `${failedIds.length} of ${ids.length} template(s) could not be deleted (they may be in use by an active campaign). The others were removed.`
+        );
+      } else {
+        setBulkDeleteError(null);
+        setBulkDeleteOpen(false);
+      }
     },
+    onError: (err) => setBulkDeleteError(getApiError(err)),
   });
 
   const toggleSelection = (id: string) => {
@@ -213,6 +286,11 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
           ) : (
             <span className="op-tag">No</span>
           ),
+      },
+      {
+        id: "waStatus",
+        header: "WhatsApp",
+        cell: ({ row }) => <WhatsAppStatusCell template={row.original} />,
       },
       {
         accessorKey: "updatedAt",
@@ -342,6 +420,15 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
             <option value="false">Inactive</option>
           </select>
           <select
+            className="select select-bordered select-sm w-36"
+            value={sendable}
+            onChange={(e) => { setSendable(e.target.value); setPage(1); }}
+            aria-label="Filter by WhatsApp sendability"
+          >
+            <option value="">WhatsApp: All</option>
+            <option value="true">Sendable only</option>
+          </select>
+          <select
             className="select select-bordered select-sm w-20"
             value={limit}
             onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
@@ -392,7 +479,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm gap-1 text-error/70 hover:text-error"
-                  onClick={() => setBulkDeleteOpen(true)}
+                  onClick={() => { setBulkDeleteError(null); setBulkDeleteOpen(true); }}
                   disabled={bulkDeleteMutation.isPending}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -565,6 +652,14 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
               {selectedIds.size !== 1 ? "s" : ""}? They will be marked as
               deleted and will no longer appear in this list.
             </p>
+            {bulkDeleteError && (
+              <div
+                role="alert"
+                className="mt-3 rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-3 py-2 text-[0.8125rem] text-base-content"
+              >
+                {bulkDeleteError}
+              </div>
+            )}
             <div className="modal-action">
               <button
                 type="button"

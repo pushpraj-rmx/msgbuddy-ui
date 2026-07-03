@@ -1143,15 +1143,6 @@ export const channelTemplatesApi = {
     );
     return response.data;
   },
-  submitAndSync: async (
-    id: string,
-    version: number
-  ): Promise<ChannelTemplateSyncResult> => {
-    const response = await api.post<ChannelTemplateSyncResult>(
-      endpoints.channelTemplates.submitAndSync(id, version)
-    );
-    return response.data;
-  },
   sync: async (
     id: string,
     version: number
@@ -1166,6 +1157,14 @@ export const channelTemplatesApi = {
   ): Promise<{ success: boolean; error?: string }> => {
     const response = await api.post<{ success: boolean; error?: string }>(
       endpoints.channelTemplates.refreshProvider(id)
+    );
+    return response.data;
+  },
+  refreshContent: async (
+    id: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    const response = await api.post<{ success: boolean; error?: string }>(
+      endpoints.channelTemplates.refreshContent(id)
     );
     return response.data;
   },

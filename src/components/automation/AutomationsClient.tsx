@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { getApiError } from "@/lib/api-error";
@@ -10,7 +10,79 @@ import {
   type AutomationRule,
   type AutomationTriggerType,
 } from "@/lib/api";
+import {
+  useTemplatesList,
+  useChannelTemplateState,
+} from "@/hooks/use-templates";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+
+/**
+ * Picker for SEND_TEMPLATE: choose an approved WhatsApp template and bind its
+ * sendable version id (activeVersion ?? latestSendableVersion), mirroring how
+ * campaigns/inbox resolve a version. Replaces the old raw-id paste box so users
+ * can't bind a non-existent / unapproved id. The currently-bound id is shown so
+ * editing an existing rule stays transparent.
+ */
+function SendTemplatePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (channelTemplateVersionId: string) => void;
+}) {
+  const { data, isLoading } = useTemplatesList({
+    hasWhatsAppSendableVersion: true,
+    limit: 100,
+  });
+  const [templateId, setTemplateId] = useState<string>("");
+  const templates = data?.items ?? [];
+  const selected = templates.find((t) => t.id === templateId) ?? null;
+  const waCt = selected
+    ? (selected.channelTemplates ?? []).find(
+        (c) => c.channel === "WHATSAPP" && !c.deletedAt
+      )
+    : null;
+  const { data: state } = useChannelTemplateState(waCt?.id ?? null, {
+    enabled: !!waCt,
+  });
+
+  useEffect(() => {
+    const vid =
+      state?.activeVersion?.id ?? state?.latestSendableVersion?.id ?? null;
+    if (vid && vid !== value) onChange(vid);
+  }, [state, value, onChange]);
+
+  return (
+    <label className="block">
+      <span className="op-label mb-1 block">WhatsApp template</span>
+      <select
+        className="select select-bordered w-full"
+        value={templateId}
+        onChange={(e) => setTemplateId(e.target.value)}
+      >
+        <option value="">
+          {isLoading ? "Loading approved templates…" : "Select a template…"}
+        </option>
+        {templates.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}
+          </option>
+        ))}
+      </select>
+      {value ? (
+        <p className="mt-1 text-xs text-base-content/55">
+          Bound version:{" "}
+          <span className="font-mono-op">{value}</span> — required for
+          SEND_TEMPLATE (freeform sends are blocked outside the 24h window).
+        </p>
+      ) : (
+        <p className="mt-1 text-xs text-warning">
+          Pick an approved WhatsApp template to bind its sendable version.
+        </p>
+      )}
+    </label>
+  );
+}
 
 /**
  * List + create/edit drawer for automation rules. The create/edit form is
@@ -362,25 +434,12 @@ export function AutomationsClient({ initial }: { initial: AutomationRule[] }) {
               </label>
 
               {draft.action === "SEND_TEMPLATE" ? (
-                <label className="block">
-                  <span className="op-label mb-1 block">
-                    Channel template version id
-                  </span>
-                  <input
-                    className="input input-bordered w-full font-mono-op"
-                    value={draft.channelTemplateVersionId}
-                    onChange={(e) =>
-                      setDraft({
-                        ...draft,
-                        channelTemplateVersionId: e.target.value,
-                      })
-                    }
-                    placeholder="ctv_…"
-                  />
-                  <p className="mt-1 text-xs text-base-content/55">
-                    Find this on the template detail page. Required for SEND_TEMPLATE — out-of-hours and welcome to never-seen contacts both need a template (freeform sends are blocked outside the 24h window).
-                  </p>
-                </label>
+                <SendTemplatePicker
+                  value={draft.channelTemplateVersionId}
+                  onChange={(id) =>
+                    setDraft({ ...draft, channelTemplateVersionId: id })
+                  }
+                />
               ) : null}
 
               {draft.action === "SEND_TEXT" ? (

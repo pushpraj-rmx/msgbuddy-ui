@@ -15,6 +15,7 @@ import {
   useArchiveChannelTemplateVersion,
   useSyncChannelTemplateVersion,
   useRefreshChannelTemplateProviderState,
+  useRefreshChannelTemplateContent,
   useUpdateChannelTemplate,
   useTemplate,
   useUpdateTemplate,
@@ -441,6 +442,7 @@ export function ChannelTemplateDetailClient({
   const archiveMutation = useArchiveChannelTemplateVersion();
   const syncMutation = useSyncChannelTemplateVersion();
   const refreshProviderMutation = useRefreshChannelTemplateProviderState();
+  const refreshContentMutation = useRefreshChannelTemplateContent();
   const updateChannelTemplateMutation = useUpdateChannelTemplate();
 
   // Inline template name + description (template-level), so the whole template can be built on
@@ -757,6 +759,26 @@ export function ChannelTemplateDetailClient({
     );
   }, [channelTemplateId, refreshProviderMutation]);
 
+  const onRefreshContentFromMeta = useCallback(() => {
+    setSyncFeedback(null);
+    refreshContentMutation.mutate(
+      { id: channelTemplateId },
+      {
+        onSuccess: (data) => {
+          if (!data.success) {
+            setSyncFeedback({ type: "error", message: data.error ?? "Content refresh failed." });
+          } else {
+            setSyncFeedback({
+              type: "success",
+              message: "Pulled the latest content from Meta. Any upstream edit was saved as a new version.",
+            });
+          }
+        },
+        onError: (err) => setSyncFeedback({ type: "error", message: getApiError(err) }),
+      }
+    );
+  }, [channelTemplateId, refreshContentMutation]);
+
   const toggleComparePick = useCallback((v: number) => {
     setPickedForCompare((prev) => {
       if (prev.includes(v)) return prev.filter((x) => x !== v);
@@ -967,6 +989,28 @@ export function ChannelTemplateDetailClient({
                   </>
                 ) : (
                   "Get current state from Meta"
+                )}
+              </button>
+            )}
+            {state.channel === "WHATSAPP" && (
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={onRefreshContentFromMeta}
+                disabled={!canRefreshFromMeta || refreshContentMutation.isPending}
+                title={
+                  canRefreshFromMeta
+                    ? "Re-pull header/body/footer/buttons from Meta. If it was edited in WhatsApp Manager, the change is saved as a new local version."
+                    : "Not linked to Meta yet (missing providerTemplateId)."
+                }
+              >
+                {refreshContentMutation.isPending ? (
+                  <>
+                    <span className="loading loading-spinner loading-sm" />
+                    Pulling…
+                  </>
+                ) : (
+                  "Refresh content"
                 )}
               </button>
             )}

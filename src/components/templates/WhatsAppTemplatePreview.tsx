@@ -49,11 +49,17 @@ export type WhatsAppTemplatePreviewProps = {
 
 /* ─── Helpers ─── */
 
-/** Replace {{N}} / {{name}} placeholders with highlighted spans. */
+/**
+ * Replace {{N}} / {{name}} placeholders with highlighted spans.
+ * Grammar is kept in lock-step with the backend send/mapper regex
+ * (`NAMED_VAR_REGEX = /\{\{(\w+)\}\}/g`): only `{{word}}` is a real variable.
+ * Something like `{{ full name }}` (spaces/punctuation) is literal text the
+ * backend will NOT substitute, so it must NOT be highlighted here either.
+ */
 export function renderVariableText(text: string) {
-  const parts = text.split(/(\{\{[^}]+\}\})/g);
+  const parts = text.split(/(\{\{\w+\}\})/g);
   return parts.map((part, i) =>
-    /^\{\{[^}]+\}\}$/.test(part) ? (
+    /^\{\{\w+\}\}$/.test(part) ? (
       <span
         key={i}
         className="rounded bg-primary/15 px-0.5 font-mono text-[0.6875rem] text-primary"

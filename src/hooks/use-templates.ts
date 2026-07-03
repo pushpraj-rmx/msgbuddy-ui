@@ -291,6 +291,18 @@ export function useRefreshChannelTemplateProviderState() {
   });
 }
 
+export function useRefreshChannelTemplateContent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }) => channelTemplatesApi.refreshContent(id),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.state(variables.id) });
+      qc.invalidateQueries({ queryKey: channelTemplateKeys.versions(variables.id) });
+      qc.invalidateQueries({ queryKey: templateKeys.all });
+    },
+  });
+}
+
 export function useUpdateTemplate() {
   const qc = useQueryClient();
   return useMutation({
