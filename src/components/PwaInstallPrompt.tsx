@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download, X, Share } from "lucide-react";
+import { X, Share } from "lucide-react";
+import { BrandIcon } from "@/components/BrandIcon";
 
 /**
  * PWA install prompt:
@@ -110,8 +111,8 @@ export function PwaInstallPrompt() {
       <div className="rounded-box border border-base-300 bg-base-200 shadow-lg">
         <div className="flex flex-col gap-3 p-4">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100 text-primary">
-              <Download className="h-5 w-5" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100">
+              <BrandIcon expression="happy" className="h-6 w-6" title="MsgBuddy" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="text-sm font-semibold">Install MsgBuddy</h3>

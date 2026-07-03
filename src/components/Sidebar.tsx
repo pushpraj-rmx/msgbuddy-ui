@@ -7,6 +7,8 @@ import type { MeResponse } from "@/lib/api";
 import { getAppNav, isActivePath } from "@/lib/navigation";
 import { PanelLeft, PanelRight } from "lucide-react";
 import { WorkspaceSwitcher } from "@/components/WorkspaceSwitcher";
+import { BrandLogo } from "@/components/BrandLogo";
+import { BrandIcon } from "@/components/BrandIcon";
 
 function closeDrawer(drawerId: string) {
   (document.getElementById(drawerId) as HTMLInputElement | null)?.click();
@@ -41,20 +43,25 @@ export function Sidebar({
       {/* Header: logo + toggle */}
       <div className={`flex min-h-15 shrink-0 items-center border-b border-base-300 ${collapsed ? "justify-center px-3" : "justify-between px-3"}`}>
         {collapsed ? (
-          onToggle && (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm btn-square"
-              aria-label="Expand sidebar"
-              onClick={onToggle}
-            >
-              <PanelLeft className="h-4 w-4" />
-            </button>
-          )
+          <div className="flex flex-col items-center gap-1.5 py-1.5">
+            <Link href="/dashboard" aria-label="MsgBuddy home">
+              <BrandIcon title="MsgBuddy" className="h-8 w-8" />
+            </Link>
+            {onToggle && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-square"
+                aria-label="Expand sidebar"
+                onClick={onToggle}
+              >
+                <PanelLeft className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         ) : (
           <>
-            <Link href="/dashboard" aria-label="MsgBuddy home" className="font-mono-op text-[1.5rem] font-semibold tracking-[-0.01em] text-base-content">
-              MsgBuddy
+            <Link href="/dashboard" aria-label="MsgBuddy home" className="text-base-content">
+              <BrandLogo className="h-7 w-auto" />
             </Link>
             {onToggle && (
               <button

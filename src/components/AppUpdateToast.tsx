@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { RefreshCw, X } from "lucide-react";
+import { X } from "lucide-react";
+import { BrandIcon } from "@/components/BrandIcon";
 
 /**
  * Polls /api/version every 60s (and on window focus). When the deployed build ID
@@ -75,8 +76,8 @@ export function AppUpdateToast() {
       aria-live="polite"
     >
       <div className="flex max-w-md items-center gap-3 rounded-box border border-base-300 bg-base-200 px-4 py-3 shadow-lg">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100 text-primary">
-          <RefreshCw className="h-4 w-4" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100">
+          <BrandIcon expression="happy" className="h-5 w-5" title="MsgBuddy" />
         </div>
         <div className="flex-1">
           <span className="op-label block text-primary">update available</span>

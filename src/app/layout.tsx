@@ -32,6 +32,18 @@ export const metadata: Metadata = {
   metadataBase: new URL(getAppOrigin()),
   title: "MsgBuddy - WhatsApp SaaS",
   description: "Multi-tenant WhatsApp SaaS platform",
+  applicationName: "MsgBuddy",
+  openGraph: {
+    title: "MsgBuddy — WhatsApp SaaS",
+    description: "Run your customer relationships from WhatsApp — inbox, contacts, campaigns.",
+    siteName: "MsgBuddy",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MsgBuddy — WhatsApp SaaS",
+    description: "Run your customer relationships from WhatsApp — inbox, contacts, campaigns.",
+  },
 };
 
 export const viewport: Viewport = {

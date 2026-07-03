@@ -94,7 +94,7 @@ function AcceptInviteInner() {
     <div className="flex min-h-dvh items-center justify-center px-4 py-8">
       <div className="w-full max-w-md rounded-box border border-base-300 bg-base-100 p-6 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
-          <BrandLogo />
+          <BrandLogo className="h-7 w-auto" priority />
         </div>
 
         {loading ? (
