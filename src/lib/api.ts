@@ -1033,6 +1033,7 @@ export const templatesApi = {
   metaImport: async (providerTemplateIds?: string[]): Promise<{
     total: number;
     templatesCreated: number;
+    templatesRevived: number;
     channelTemplatesCreated: number;
     versionsCreated: number;
     linked: number;

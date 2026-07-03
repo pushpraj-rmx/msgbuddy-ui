@@ -164,9 +164,34 @@ export function WhatsAppMetaTemplateImportClient({
           </span>
         </div>
       )}
-      {importMutation.isSuccess && (
-        <div role="status" className="rounded-box border border-success/30 border-l-2 border-l-success bg-base-200 px-4 py-3">
-          <span>Import completed.</span>
+      {importMutation.isSuccess && importMutation.data && (
+        <div
+          role="status"
+          className={`rounded-box border border-l-2 bg-base-200 px-4 py-3 ${
+            importMutation.data.errors.length > 0
+              ? "border-warning/30 border-l-warning"
+              : "border-success/30 border-l-success"
+          }`}
+        >
+          <div className="text-sm font-medium">
+            Import finished — {importMutation.data.templatesCreated} created
+            {importMutation.data.templatesRevived > 0 &&
+              `, ${importMutation.data.templatesRevived} restored`}
+            , {importMutation.data.linked} linked, {importMutation.data.skipped}{" "}
+            skipped
+            {importMutation.data.errors.length > 0 &&
+              `, ${importMutation.data.errors.length} failed`}
+            .
+          </div>
+          {importMutation.data.errors.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs text-error">
+              {importMutation.data.errors.map((e) => (
+                <li key={e.providerTemplateId}>
+                  <span className="font-mono">{e.name}</span>: {e.error}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>
