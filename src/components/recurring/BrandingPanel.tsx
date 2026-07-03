@@ -31,6 +31,28 @@ function onAccent(hex: string): string {
   return L > 0.4 ? "#1a1a1a" : "#ffffff";
 }
 
+/** Best-effort brand accent from a logo. node-vibrant (v4) runs a Web Worker that
+ *  can hang in a bundled app, so we race it against a hard 6s timeout — it can
+ *  never block or break the upload; the user can always pick a color manually. */
+async function extractAccent(file: File): Promise<string | null> {
+  const objUrl = URL.createObjectURL(file);
+  try {
+    const run = (async () => {
+      const { Vibrant } = await import("node-vibrant/browser");
+      const p = await Vibrant.from(objUrl).getPalette();
+      return (
+        p.Vibrant?.hex ?? p.DarkVibrant?.hex ?? p.LightVibrant?.hex ?? p.Muted?.hex ?? null
+      );
+    })();
+    const timeout = new Promise<null>((r) => setTimeout(() => r(null), 6000));
+    return await Promise.race([run, timeout]);
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(objUrl);
+  }
+}
+
 /**
  * White-label storefront branding editor. Upload a logo → the accent color is
  * auto-extracted client-side (node-vibrant) and can be overridden; pick a preset,
@@ -67,31 +89,19 @@ export function BrandingPanel() {
     setUploading(true);
     setError(null);
     setSaved(false);
-    const objUrl = URL.createObjectURL(file);
     try {
-      // 1) Auto-extract accent from the logo (client-side, no CORS — local blob).
-      try {
-        const { Vibrant } = await import("node-vibrant/browser");
-        const palette = await Vibrant.from(objUrl).getPalette();
-        const hex =
-          palette.Vibrant?.hex ??
-          palette.DarkVibrant?.hex ??
-          palette.LightVibrant?.hex ??
-          palette.Muted?.hex ??
-          null;
-        if (hex) set("accentColor", hex);
-      } catch {
-        /* extraction is best-effort; the picker still lets them choose */
-      }
-      // 2) Upload the logo, keep the media id + preview url.
+      // 1) Upload FIRST — the logo must save regardless of colour extraction.
       const res = (await mediaApi.upload(file)) as { id: string; url: string };
-      setB((prev) =>
-        prev ? { ...prev, logoMediaId: res.id, logoUrl: res.url } : prev,
-      );
+      setB((prev) => (prev ? { ...prev, logoMediaId: res.id, logoUrl: res.url } : prev));
+
+      // 2) Auto-extract the accent — best-effort, fire-and-forget, hard-timed-out
+      //    so node-vibrant (Web Worker) can never hang or break the upload.
+      void extractAccent(file)
+        .then((hex) => hex && set("accentColor", hex))
+        .catch(() => {});
     } catch (e) {
       setError(errMsg(e));
     } finally {
-      URL.revokeObjectURL(objUrl);
       setUploading(false);
     }
   }
