@@ -31,6 +31,7 @@ export const endpoints = {
     triggerGenerate: `${P}/subscriptions/triggers/generate`,
     triggerLock: `${P}/subscriptions/triggers/lock`,
     settings: `${P}/subscriptions/settings`,
+    branding: `${P}/subscriptions/branding`,
     deliveryWindows: `${P}/subscriptions/delivery-windows`,
     deliveryWindowById: (id: string) => `${P}/subscriptions/delivery-windows/${id}`,
     /** Per-merchant Razorpay connect (3B). */

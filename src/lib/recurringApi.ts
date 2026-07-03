@@ -131,6 +131,19 @@ export interface RazorpayStatus {
   webhookConfigured: boolean;
 }
 
+export type ThemePreset = "WARM" | "MINIMAL" | "BOLD";
+
+export interface StorefrontBranding {
+  displayName: string;
+  tagline: string | null;
+  accentColor: string | null;
+  themePreset: ThemePreset;
+  logoMediaId: string | null;
+  logoUrl: string | null;
+  heroImageMediaId: string | null;
+  heroImageUrl: string | null;
+}
+
 export const recurringApi = {
   // Products
   listProducts: async () =>
@@ -235,4 +248,18 @@ export const recurringApi = {
   getSettings: async () => (await api.get<RecurringSettings>(endpoints.recurring.settings)).data,
   updateSettings: async (dto: Partial<RecurringSettings>) =>
     (await api.patch<RecurringSettings>(endpoints.recurring.settings, dto)).data,
+
+  // Storefront branding (white-label)
+  getBranding: async () =>
+    (await api.get<StorefrontBranding>(endpoints.recurring.branding)).data,
+  updateBranding: async (
+    dto: Partial<{
+      displayName: string;
+      tagline: string;
+      logoMediaId: string;
+      heroImageMediaId: string;
+      accentColor: string;
+      themePreset: ThemePreset;
+    }>,
+  ) => (await api.put<StorefrontBranding>(endpoints.recurring.branding, dto)).data,
 };

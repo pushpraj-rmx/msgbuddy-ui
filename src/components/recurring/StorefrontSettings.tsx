@@ -105,10 +105,16 @@ export function StorefrontFields({
     !!value.otpTemplateVersionId &&
     !otpLoading &&
     !otpOptions.some((o) => o.versionId === value.otpTemplateVersionId);
-  const link =
-    value.storefrontHandle && typeof window !== "undefined"
-      ? `${window.location.origin}/s/${value.storefrontHandle}`
-      : null;
+  // Prefer the dedicated storefront app (shop.msgbuddy.com/<handle>); fall back to
+  // the in-app /s/<handle> route when the env isn't set.
+  const storeBase = process.env.NEXT_PUBLIC_STOREFRONT_URL?.replace(/\/$/, "");
+  const link = value.storefrontHandle
+    ? storeBase
+      ? `${storeBase}/${value.storefrontHandle}`
+      : typeof window !== "undefined"
+        ? `${window.location.origin}/s/${value.storefrontHandle}`
+        : null
+    : null;
 
   useEffect(() => {
     let cancelled = false;

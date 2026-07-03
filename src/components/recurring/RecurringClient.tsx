@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { contactsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
 import { DeliveryWindowsPanel, RazorpayConnectPanel, StorefrontFields } from "./StorefrontSettings";
+import { BrandingPanel } from "./BrandingPanel";
 import {
   recurringApi,
   type Cadence,
@@ -862,6 +863,8 @@ function SettingsTab() {
         </button>
         {saved && <span className="text-sm text-success">Saved.</span>}
       </div>
+
+      <BrandingPanel />
 
       <DeliveryWindowsPanel />
 
