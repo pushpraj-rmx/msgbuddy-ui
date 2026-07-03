@@ -9,6 +9,7 @@ import {
   type ThemePreset,
 } from "@/lib/recurringApi";
 import { mediaApi } from "@/lib/api";
+import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 
 const PRESETS: { id: ThemePreset; label: string }[] = [
   { id: "WARM", label: "Warm" },
@@ -140,6 +141,7 @@ export function BrandingPanel() {
   }
 
   const accent = b.accentColor || "#6EA8FE";
+  const logoSrc = resolveMediaUrlForUi(b.logoUrl); // relative /v2/media → absolute API URL
 
   return (
     <div className="space-y-4 rounded-box border border-base-300 p-4">
@@ -154,9 +156,9 @@ export function BrandingPanel() {
         {/* Left: controls */}
         <div className="space-y-3">
           <div className="flex items-center gap-3">
-            {b.logoUrl ? (
+            {logoSrc ? (
               // eslint-disable-next-line @next/next/no-img-element -- signed media URL preview
-              <img src={b.logoUrl} alt="logo" className="h-14 w-14 rounded-box border border-base-300 object-cover" />
+              <img src={logoSrc} alt="logo" className="h-14 w-14 rounded-box border border-base-300 object-cover" />
             ) : (
               <div className="flex h-14 w-14 items-center justify-center rounded-box border border-dashed border-base-300 text-base-content/40">
                 <UploadCloud className="h-5 w-5" />
@@ -241,9 +243,9 @@ export function BrandingPanel() {
               className="flex items-center gap-3 p-4"
               style={{ background: `color-mix(in oklab, ${accent} 16%, var(--color-base-200))` }}
             >
-              {b.logoUrl ? (
+              {logoSrc ? (
                 <Image
-                  src={b.logoUrl}
+                  src={logoSrc}
                   alt=""
                   width={40}
                   height={40}
