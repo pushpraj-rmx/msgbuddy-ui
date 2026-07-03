@@ -437,12 +437,12 @@ export function DashboardClient({ meRole }: { meRole: string }) {
   const [summaryMonthly, setSummaryMonthly] = useState<PeriodSummary | null>(null);
   const [summaryPeriodTab, setSummaryPeriodTab] = useState<"daily" | "weekly" | "monthly">("daily");
 
-  const { setContent: setRightPanelContent, clearContent: clearRightPanelContent, close: closeRightPanel } = useRightPanel();
+  const { setContent: setRightPanelContent, clearContent: clearRightPanelContent } = useRightPanel();
 
-  // Ensure panel is closed on dashboard mount
+  // Ensure the panel starts empty on dashboard mount (visibility is content-driven).
   useEffect(() => {
-    closeRightPanel();
-  }, [closeRightPanel]);
+    clearRightPanelContent();
+  }, [clearRightPanelContent]);
 
   // Fetch today's stats once (period-independent — drives the Now tab)
   useEffect(() => {

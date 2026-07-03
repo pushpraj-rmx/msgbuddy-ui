@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   dispatchOpenGlobalSearch,
-  dispatchToggleDetailsPanel,
   SHORTCUT_EVENTS,
 } from "@/lib/shortcuts";
 import { GlobalContextMenu } from "./GlobalContextMenu";
@@ -66,14 +65,6 @@ export function AppShortcuts() {
         }
         if (isAnyModalDialogOpen()) return;
         setHelpOpen(true);
-        return;
-      }
-
-      if (e.key === "." && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        if (typing) return;
-        if (isAnyModalDialogOpen()) return;
-        e.preventDefault();
-        dispatchToggleDetailsPanel();
         return;
       }
 

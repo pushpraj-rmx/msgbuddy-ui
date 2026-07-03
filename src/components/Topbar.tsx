@@ -3,10 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { X, PanelLeft, Bell, Search, FileText, Bug, ListChecks } from "lucide-react";
+import { X, PanelLeft, Bell, Search, Bug, ListChecks } from "lucide-react";
 import type { MeResponse, TaskCounts } from "@/lib/api";
 import { tasksApi, TASK_CHANGED_EVENT } from "@/lib/api";
-import { useRightPanel } from "@/components/right-panel/useRightPanel";
 import { logoutAction } from "@/app/actions/auth";
 import { clearToken } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
@@ -37,12 +36,6 @@ export function Topbar({
   });
   const { connectionState: sseState } = useNotificationSSE(workspaceId);
   const { permission, requestAndSubscribe } = usePushSubscription(workspaceId);
-  const {
-    isOpen: isRightPanelOpen,
-    open: openRightPanel,
-    close: closeRightPanel,
-    panel: rightPanel,
-  } = useRightPanel();
 
   const handleLogout = async () => {
     clearToken();
@@ -216,20 +209,6 @@ export function Topbar({
           </Link>
         </div>
         <ThemeToggle />
-        {rightPanel?.content ? (
-          <div className="tooltip tooltip-bottom" data-tip="Toggle details (.)" >
-            <button
-              type="button"
-              className="btn btn-ghost btn-square"
-              aria-label={isRightPanelOpen ? "Close details" : "Open details"}
-              onClick={() =>
-                isRightPanelOpen ? closeRightPanel() : openRightPanel()
-              }
-            >
-              <FileText className="h-5 w-5" />
-            </button>
-          </div>
-        ) : null}
         <div className="dropdown dropdown-end">
           <div className="tooltip tooltip-bottom" data-tip={unreadCount > 0 ? `${unreadCount} unread` : "Notifications"}>
           <button

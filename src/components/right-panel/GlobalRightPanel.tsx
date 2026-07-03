@@ -1,10 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X, ArrowLeft, PanelRight } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { useMediaQuery, LG_MEDIA_QUERY } from "@/hooks/useMediaQuery";
 import { useRightPanel } from "./useRightPanel";
-import { SHORTCUT_EVENTS } from "@/lib/shortcuts";
 
 const PANEL_WIDTH_KEY = "global-details-pane-width";
 const DEFAULT_WIDTH = 420; // px — roughly 28vw at 1500px
@@ -39,7 +38,11 @@ function persistWidth(w: number) {
  * - Keyboard shortcut: `.` toggles panel
  */
 export function GlobalRightPanel() {
-  const { isOpen, close, toggle, panel, activeTab, setActiveTab } = useRightPanel();
+  // Visibility is content-driven: the panel shows whenever a page provides
+  // content and hides when the page clears it. It is intentionally NOT
+  // collapsible — no Esc/shortcut/toggle to dismiss it (agents rely on it).
+  // `isOpen`/`close` are retained only for the mobile dismissable overlay.
+  const { isOpen, close, panel, activeTab, setActiveTab } = useRightPanel();
   const isLgUp = useMediaQuery(LG_MEDIA_QUERY);
 
   // Resize state (desktop only)
@@ -86,13 +89,6 @@ export function GlobalRightPanel() {
     persistWidth(DEFAULT_WIDTH);
   }, []);
 
-  // Listen for keyboard shortcut to toggle panel
-  useEffect(() => {
-    const onToggle = () => toggle();
-    window.addEventListener(SHORTCUT_EVENTS.TOGGLE_DETAILS_PANEL, onToggle);
-    return () => window.removeEventListener(SHORTCUT_EVENTS.TOGGLE_DETAILS_PANEL, onToggle);
-  }, [toggle]);
-
   const detailsContent = panel?.content;
   const tabs = panel?.tabs;
   const hasDetails = Boolean(detailsContent) || Boolean(tabs?.length);
@@ -108,18 +104,6 @@ export function GlobalRightPanel() {
 
   // Key for fade animation — changes when source or title changes
   const contentKey = `${panel?.source ?? ""}-${panel?.title ?? ""}`;
-
-  // ESC closes the panel
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.preventDefault();
-      close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, close]);
 
   // Lock body scroll when mobile overlay is open
   useEffect(() => {
@@ -151,8 +135,8 @@ export function GlobalRightPanel() {
     </div>
   ) : null;
 
-  // ── Desktop: inline resizable panel ──
-  if (isLgUp && isOpen) {
+  // ── Desktop: inline resizable panel — shown whenever there is content ──
+  if (isLgUp && hasDetails) {
     return (
       <aside
         aria-label={panel?.title || "Details"}
@@ -172,39 +156,20 @@ export function GlobalRightPanel() {
         />
 
         {/* Header */}
-        <div className="flex min-h-15 shrink-0 items-center justify-between gap-2 border-b border-base-300 px-4">
+        <div className="flex min-h-15 shrink-0 items-center gap-2 border-b border-base-300 px-4">
           <h2 className="op-label min-w-0 truncate text-base-content">
             {panel?.title || "Details"}
           </h2>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm btn-square shrink-0"
-            onClick={close}
-            aria-label="Close details pane"
-          >
-            <X className="h-5 w-5" />
-          </button>
         </div>
 
         {tabsBar}
 
-        {/* Content or empty state */}
-        {hasDetails ? (
-          <div
-            key={contentKey}
-            className="min-h-0 flex-1 animate-[op-panel-fade-in_150ms_ease-out] overflow-y-auto overscroll-contain p-4"
-          >
-            {renderedContent}
-          </div>
-        ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-            <PanelRight className="h-8 w-8 text-base-content/20" />
-            <span className="op-label">No selection</span>
-            <p className="text-[0.8125rem] text-base-content/55">
-              Select a contact, campaign, or template to see details here.
-            </p>
-          </div>
-        )}
+        <div
+          key={contentKey}
+          className="min-h-0 flex-1 animate-[op-panel-fade-in_150ms_ease-out] overflow-y-auto overscroll-contain p-4"
+        >
+          {renderedContent}
+        </div>
       </aside>
     );
   }
