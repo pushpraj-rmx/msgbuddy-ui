@@ -33,6 +33,13 @@ type CarouselCard = {
   buttons?: TemplateButton[];
 };
 
+/** Config to render a realistic AUTHENTICATION-template preview (Meta auto-generates the body). */
+export type AuthPreviewConfig = {
+  otpButtonText?: string;
+  addSecurityRecommendation?: boolean;
+  codeExpirationMinutes?: number | null;
+};
+
 export type WhatsAppTemplatePreviewProps = {
   headerType?: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | null;
   headerContent?: string | null;
@@ -44,32 +51,42 @@ export type WhatsAppTemplatePreviewProps = {
   carouselCards?: CarouselCard[] | null;
   category?: "MARKETING" | "UTILITY" | "AUTHENTICATION" | null;
   language?: string | null;
+  /** Sample values keyed by variable token ("1", "name", …); substituted into the bubble. */
+  sampleValues?: Record<string, string>;
+  /** When category is AUTHENTICATION, render the fixed OTP layout instead of body/buttons. */
+  authConfig?: AuthPreviewConfig | null;
   className?: string;
 };
 
 /* ─── Helpers ─── */
 
 /**
- * Replace {{N}} / {{name}} placeholders with highlighted spans.
+ * Replace {{N}} / {{name}} placeholders with highlighted spans, optionally
+ * substituting a sample value so the bubble reads like a real message.
  * Grammar is kept in lock-step with the backend send/mapper regex
  * (`NAMED_VAR_REGEX = /\{\{(\w+)\}\}/g`): only `{{word}}` is a real variable.
  * Something like `{{ full name }}` (spaces/punctuation) is literal text the
  * backend will NOT substitute, so it must NOT be highlighted here either.
  */
-export function renderVariableText(text: string) {
+export function renderVariableText(
+  text: string,
+  sampleValues?: Record<string, string>
+) {
   const parts = text.split(/(\{\{\w+\}\})/g);
-  return parts.map((part, i) =>
-    /^\{\{\w+\}\}$/.test(part) ? (
+  return parts.map((part, i) => {
+    const m = /^\{\{(\w+)\}\}$/.exec(part);
+    if (!m) return part;
+    const sample = sampleValues?.[m[1]]?.trim();
+    return (
       <span
         key={i}
-        className="rounded bg-primary/15 px-0.5 font-mono text-[0.6875rem] text-primary"
+        className="rounded bg-primary/15 px-0.5 text-primary"
+        title={sample ? `sample for {{${m[1]}}}` : undefined}
       >
-        {part}
+        {sample ? sample : <span className="font-mono text-[0.6875rem]">{part}</span>}
       </span>
-    ) : (
-      part
-    )
-  );
+    );
+  });
 }
 
 const BUTTON_ICON: Record<string, typeof Reply> = {
@@ -152,6 +169,7 @@ function BubbleCard({
   footer,
   buttons,
   compact,
+  sampleValues,
 }: {
   headerType?: string | null;
   headerContent?: string | null;
@@ -160,6 +178,7 @@ function BubbleCard({
   footer?: string | null;
   buttons?: TemplateButton[];
   compact?: boolean;
+  sampleValues?: Record<string, string>;
 }) {
   const ht = headerType ?? "NONE";
   const btns = buttons ?? [];
@@ -170,7 +189,7 @@ function BubbleCard({
       {/* Header */}
       {ht === "TEXT" && headerContent && (
         <div className="rounded-md bg-base-300/50 px-2 py-1.5 text-center text-xs font-medium text-base-content/80">
-          {renderVariableText(headerContent)}
+          {renderVariableText(headerContent, sampleValues)}
         </div>
       )}
       {(ht === "IMAGE" || ht === "VIDEO" || ht === "DOCUMENT") && (
@@ -186,7 +205,7 @@ function BubbleCard({
         <div
           className={`whitespace-pre-wrap break-words leading-snug text-base-content ${bodySize}`}
         >
-          {renderVariableText(body)}
+          {renderVariableText(body, sampleValues)}
         </div>
       ) : (
         <div className={`italic text-base-content/35 ${bodySize}`}>
@@ -213,7 +232,15 @@ function BubbleCard({
   );
 }
 
-function CarouselStrip({ cards, body }: { cards: CarouselCard[]; body?: string }) {
+function CarouselStrip({
+  cards,
+  body,
+  sampleValues,
+}: {
+  cards: CarouselCard[];
+  body?: string;
+  sampleValues?: Record<string, string>;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -236,7 +263,7 @@ function CarouselStrip({ cards, body }: { cards: CarouselCard[]; body?: string }
       {/* Intro body */}
       {body?.trim() && (
         <div className="whitespace-pre-wrap break-words text-[0.8125rem] leading-snug text-base-content">
-          {renderVariableText(body)}
+          {renderVariableText(body, sampleValues)}
         </div>
       )}
 
@@ -265,6 +292,7 @@ function CarouselStrip({ cards, body }: { cards: CarouselCard[]; body?: string }
                 body={card.body}
                 buttons={card.buttons}
                 compact
+                sampleValues={sampleValues}
               />
             </div>
           ))}
@@ -279,6 +307,31 @@ function CarouselStrip({ cards, body }: { cards: CarouselCard[]; body?: string }
             <ChevronRight className="h-3.5 w-3.5" />
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+/** Fixed AUTHENTICATION layout: Meta auto-generates the body; we render a realistic version. */
+function AuthBubble({ config }: { config: AuthPreviewConfig }) {
+  const code = "123456";
+  const buttonText = config.otpButtonText?.trim() || "Copy code";
+  return (
+    <div className="space-y-1.5 rounded-xl bg-base-200 p-2.5 ring-1 ring-base-300">
+      <div className="whitespace-pre-wrap break-words text-[0.8125rem] leading-snug text-base-content">
+        <span className="rounded bg-primary/15 px-0.5 text-primary">{code}</span> is
+        your verification code.
+        {config.addSecurityRecommendation
+          ? " For your security, do not share this code."
+          : ""}
+      </div>
+      {config.codeExpirationMinutes != null && (
+        <div className="border-t border-base-300/50 pt-1 text-[0.6875rem] text-base-content/45">
+          This code expires in {config.codeExpirationMinutes} minutes.
+        </div>
+      )}
+      <div className="space-y-1 border-t border-base-300/50 pt-1.5">
+        <ButtonRow btn={{ type: "COPY_CODE", text: buttonText }} />
       </div>
     </div>
   );
@@ -305,9 +358,13 @@ export function WhatsAppTemplatePreview({
   carouselCards,
   category,
   language,
+  sampleValues,
+  authConfig,
   className,
 }: WhatsAppTemplatePreviewProps) {
+  const isAuth = category === "AUTHENTICATION";
   const isCarousel =
+    !isAuth &&
     layoutType === "CAROUSEL" &&
     Array.isArray(carouselCards) &&
     carouselCards.length > 0;
@@ -338,8 +395,14 @@ export function WhatsAppTemplatePreview({
       )}
 
       {/* Content */}
-      {isCarousel ? (
-        <CarouselStrip cards={carouselCards!} body={body} />
+      {isAuth ? (
+        <AuthBubble config={authConfig ?? {}} />
+      ) : isCarousel ? (
+        <CarouselStrip
+          cards={carouselCards!}
+          body={body}
+          sampleValues={sampleValues}
+        />
       ) : (
         <BubbleCard
           headerType={headerType}
@@ -348,6 +411,7 @@ export function WhatsAppTemplatePreview({
           body={body}
           footer={footer}
           buttons={parsedButtons}
+          sampleValues={sampleValues}
         />
       )}
     </div>

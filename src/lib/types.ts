@@ -347,6 +347,8 @@ export type ChannelTemplate = {
   /** Raw quality string from Meta. Use `normalizeQualityRating()` when reading. */
   qualityScore?: string | null;
   lastQualityCheckAt?: string | null;
+  /** Meta's proposed category when it differs from `category` (reclassification pending). */
+  providerCorrectCategory?: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;

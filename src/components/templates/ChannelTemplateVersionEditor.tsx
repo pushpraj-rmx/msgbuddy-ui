@@ -27,6 +27,11 @@ import {
 import { CopyableId } from "@/components/ui/CopyableId";
 import { getApiError } from "@/lib/api-error";
 import { WhatsAppTemplatePreview } from "@/components/templates/WhatsAppTemplatePreview";
+import { LanguageCombobox } from "@/components/templates/LanguageCombobox";
+import {
+  lintTemplateDraft,
+  extractVariableNames,
+} from "@/lib/whatsapp-template-lint";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 const BODY_MAX = 1024;
@@ -275,6 +280,8 @@ export const ChannelTemplateVersionEditor = forwardRef<
   const [carouselPreviewUrlsByIndex, setCarouselPreviewUrlsByIndex] = useState<
     Record<number, string>
   >({});
+  /** Preview-only sample values keyed by variable token ("1", "name", …). Not persisted. */
+  const [sampleValues, setSampleValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setSaveOk(null);
@@ -400,6 +407,30 @@ export const ChannelTemplateVersionEditor = forwardRef<
     return opts;
   }, [language]);
 
+  // Distinct variable tokens across body / text header / carousel card bodies —
+  // drives the "preview with sample data" inputs.
+  const detectedVariables = useMemo(() => {
+    const names = new Set<string>();
+    for (const n of extractVariableNames(body)) names.add(n);
+    if (headerType === "TEXT")
+      for (const n of extractVariableNames(headerContent)) names.add(n);
+    if (layoutType === "CAROUSEL")
+      for (const c of carouselCards)
+        for (const n of extractVariableNames(String(c.body ?? ""))) names.add(n);
+    return [...names];
+  }, [body, headerType, headerContent, layoutType, carouselCards]);
+
+  // Non-blocking Meta-policy lint, surfaced live so authors fix issues before submit.
+  const lintIssues = useMemo(() => {
+    if (isAuth) return [];
+    const btns = (standardButtonRows ?? []).map((r) => ({
+      type: r.type,
+      text: r.text,
+      url: r.url,
+    }));
+    return lintTemplateDraft({ body, footer, parameterFormat, buttons: btns });
+  }, [isAuth, body, footer, parameterFormat, standardButtonRows]);
+
   const mediaAccept = useMemo(() => {
     switch (headerType) {
       case "IMAGE":
@@ -516,7 +547,13 @@ export const ChannelTemplateVersionEditor = forwardRef<
             : headerContent.trim();
     }
 
-    if (parsedButtons.value !== undefined) {
+    if (layoutType === "STANDARD") {
+      // standardButtonRows is the UI source of truth; derive the payload from it
+      // directly so a missed mirror into buttonsJson can never desync the save.
+      payload.buttons = standardButtonRows
+        ? (rowsToApiButtons(standardButtonRows) as unknown[])
+        : [];
+    } else if (parsedButtons.value !== undefined) {
       payload.buttons = Array.isArray(parsedButtons.value)
         ? (parsedButtons.value as unknown[])
         : null;
@@ -604,6 +641,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
     parameterFormat,
     layoutType,
     buttonsJson,
+    standardButtonRows,
     variablesJson,
     carouselJson,
     carouselCards,
@@ -644,7 +682,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
       language,
       parameterFormat,
       layoutType,
-      buttonsJson: buttonsJson.trim(),
+      standardButtonRows,
       variablesJson: variablesJson.trim(),
       carouselCards,
       carouselButtonRowsByIndex,
@@ -683,6 +721,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
     parameterFormat,
     layoutType,
     buttonsJson,
+    standardButtonRows,
     variablesJson,
     carouselJson,
     carouselCards,
@@ -731,6 +770,19 @@ export const ChannelTemplateVersionEditor = forwardRef<
         buttons={standardButtons}
         layoutType={layoutType as "STANDARD" | "CAROUSEL"}
         carouselCards={carouselForPreview}
+        category={channelCategory}
+        sampleValues={sampleValues}
+        authConfig={
+          isAuth
+            ? {
+                otpButtonText: authButtonText,
+                addSecurityRecommendation: authSecurityRec,
+                codeExpirationMinutes: authExpiryMinutes.trim()
+                  ? Number(authExpiryMinutes)
+                  : null,
+              }
+            : null
+        }
       />
     );
   }, [
@@ -744,6 +796,12 @@ export const ChannelTemplateVersionEditor = forwardRef<
     carouselCards,
     carouselButtonRowsByIndex,
     carouselPreviewUrlsByIndex,
+    channelCategory,
+    sampleValues,
+    isAuth,
+    authButtonText,
+    authSecurityRec,
+    authExpiryMinutes,
   ]);
 
   useEffect(() => {
@@ -981,17 +1039,12 @@ export const ChannelTemplateVersionEditor = forwardRef<
           )}
           <label className="form-control w-full">
             <span className="label-text text-xs">Language</span>
-            <select
-              className="select select-bordered select-sm w-full"
+            <LanguageCombobox
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-            >
-              {languageOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label} ({o.value})
-                </option>
-              ))}
-            </select>
+              options={languageOptions}
+              onChange={setLanguage}
+              disabled={!editable}
+            />
           </label>
         </div>
       </div>
@@ -1238,6 +1291,56 @@ export const ChannelTemplateVersionEditor = forwardRef<
               placeholder="Main message text. Use {{1}}, {{2}} (positional) or {{name}} (named) for variables."
             />
           </div>
+
+          {/* Live Meta-policy lint (non-blocking; server re-checks at submit) */}
+          {!isAuth && lintIssues.length > 0 && (
+            <div className="space-y-1">
+              {lintIssues.map((iss, i) => (
+                <div
+                  key={i}
+                  className={`rounded-md border px-2 py-1 text-[0.6875rem] ${
+                    iss.level === "error"
+                      ? "border-error/30 bg-error/5 text-error"
+                      : "border-warning/30 bg-warning/5 text-warning"
+                  }`}
+                >
+                  {iss.message}
+                </div>
+              ))}
+              <p className="text-[0.625rem] text-base-content/45">
+                Meta policy checks — fix these before submitting for approval.
+              </p>
+            </div>
+          )}
+
+          {/* Preview with sample data (not persisted — right-panel preview only) */}
+          {!isAuth && detectedVariables.length > 0 && (
+            <div className="space-y-2 rounded-box border border-base-300 bg-base-200 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium">Preview with sample data</span>
+                <span className="text-[0.625rem] text-base-content/50">
+                  Not saved · preview only
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {detectedVariables.map((name) => (
+                  <label key={name} className="form-control">
+                    <span className="label-text font-mono-op text-[0.6875rem]">
+                      {`{{${name}}}`}
+                    </span>
+                    <input
+                      className="input input-bordered input-xs w-full"
+                      value={sampleValues[name] ?? ""}
+                      onChange={(e) =>
+                        setSampleValues((p) => ({ ...p, [name]: e.target.value }))
+                      }
+                      placeholder="Sample value"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Footer */}
           <label className="form-control w-full">

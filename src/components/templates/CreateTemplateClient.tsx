@@ -17,6 +17,18 @@ import type { TemplateCategory } from "@/lib/types";
  * list. Message content is still edited inline on the channel-template editor;
  * nothing is sent to Meta until the user submits for approval.
  */
+/** Mirror of the backend `sanitizeMetaTemplateName` so users see the name they'll register. */
+function sanitizeMetaName(name: string): string {
+  return (
+    name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/_+/g, "_")
+      .replace(/^_|_$/g, "") || "template"
+  );
+}
+
 const CATEGORY_OPTIONS: { value: TemplateCategory; label: string; hint: string }[] = [
   {
     value: "UTILITY",
@@ -92,6 +104,12 @@ export function CreateTemplateClient() {
               placeholder="e.g. Order shipped"
               maxLength={512}
             />
+            {name.trim() && (
+              <p className="mt-1 text-xs text-base-content/55">
+                Registered with Meta as{" "}
+                <span className="font-mono-op">{sanitizeMetaName(name)}</span>
+              </p>
+            )}
           </label>
 
           <label className="block">

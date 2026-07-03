@@ -57,9 +57,26 @@ function WhatsAppStatusCell({ template }: { template: Template }) {
     : { label: "Draft", cls: "" };
   const rating = normalizeQualityRating(ct.qualityScore);
   const showQuality = ct.qualityScore != null && rating !== "UNKNOWN";
+  const reclassifyPending =
+    !!ct.providerCorrectCategory &&
+    ct.providerCorrectCategory.toUpperCase() !==
+      (ct.category ?? "").toUpperCase();
   return (
     <div className="flex flex-col gap-1">
       <span className={`op-tag ${badge.cls}`}>{badge.label}</span>
+      {ct.category && (
+        <span className="op-tag" title="WhatsApp template category">
+          {ct.category}
+        </span>
+      )}
+      {reclassifyPending && (
+        <span
+          className="op-tag op-tag-warn"
+          title={`Meta plans to reclassify this to ${ct.providerCorrectCategory}`}
+        >
+          → {ct.providerCorrectCategory}
+        </span>
+      )}
       {showQuality && (
         <span
           className={`op-tag ${
@@ -541,8 +558,35 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
                 </tr>
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
-                  <td colSpan={columns.length} className="px-3 py-8 text-center text-[0.8125rem] text-base-content/55">
-                    No templates found.
+                  <td colSpan={columns.length} className="px-3 py-12 text-center">
+                    {debouncedSearch.trim() || isActive || sendable ? (
+                      <p className="text-[0.8125rem] text-base-content/55">
+                        No templates match your filters.
+                      </p>
+                    ) : (
+                      <div className="mx-auto max-w-sm space-y-2">
+                        <p className="text-sm font-medium text-base-content/80">
+                          No templates yet
+                        </p>
+                        <p className="text-[0.8125rem] text-base-content/55">
+                          Create a WhatsApp message template, or import the ones
+                          you already have on Meta.
+                        </p>
+                        {canCreateTemplate && (
+                          <div className="flex items-center justify-center gap-2 pt-1">
+                            <Link href="/templates/new" className="btn btn-primary btn-sm gap-1">
+                              <Plus className="h-3.5 w-3.5" /> Create template
+                            </Link>
+                            <Link
+                              href="/settings/integrations/whatsapp/import-templates?returnTo=%2Ftemplates"
+                              className="btn btn-ghost btn-sm gap-1"
+                            >
+                              <Download className="h-3.5 w-3.5" /> Import from Meta
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
