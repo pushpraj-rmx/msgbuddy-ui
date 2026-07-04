@@ -76,6 +76,8 @@ export const endpoints = {
     setPassword: `${P}/auth/set-password`,
     selectWorkspace: `${P}/auth/select-workspace`,
     loginHistory: `${P}/auth/login-history`,
+    /** POST — authed; mints a single-use code for the desktop browser-login handoff. */
+    desktopAuthorize: `${P}/auth/desktop/authorize`,
   },
   backgroundTasks: {
     active: `${P}/background-tasks/active`,

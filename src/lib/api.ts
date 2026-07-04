@@ -190,6 +190,17 @@ export const authApi = {
     const response = await api.get<MeResponse>(endpoints.auth.me);
     return response.data;
   },
+
+  /** Desktop browser-login handoff: mint a single-use code for the current session. */
+  desktopAuthorize: async (
+    codeChallenge: string,
+  ): Promise<{ code: string; expiresIn: number }> => {
+    const response = await api.post<{ code: string; expiresIn: number }>(
+      endpoints.auth.desktopAuthorize,
+      { codeChallenge, codeChallengeMethod: "S256" },
+    );
+    return response.data;
+  },
 };
 
 export interface ConversationFilters {

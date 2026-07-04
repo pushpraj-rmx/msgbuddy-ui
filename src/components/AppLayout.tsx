@@ -8,6 +8,7 @@ import { BackgroundTasksBar } from "./BackgroundTasksBar";
 import { BackgroundTaskToast } from "./BackgroundTaskToast";
 import { useBackgroundTasks } from "@/hooks/useBackgroundTasks";
 import { SessionRefresh } from "./SessionRefresh";
+import { DesktopBridge } from "./DesktopBridge";
 import { AppShortcuts } from "./shortcuts/AppShortcuts";
 import { GlobalRightPanel } from "./right-panel/GlobalRightPanel";
 import { RightPanelProvider } from "./right-panel/RightPanelProvider";
@@ -118,6 +119,7 @@ export function AppLayout({
   return (
     <RightPanelProvider>
       <SessionRefresh />
+      <DesktopBridge />
       <AppShortcuts />
       <PwaInstallPrompt />
       <AppUpdateToast />

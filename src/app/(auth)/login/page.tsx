@@ -89,12 +89,19 @@ export default function LoginPage() {
   const [resendPending, setResendPending] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [activeSlide, setActiveSlide] = useState(0);
+  // True only when running inside the msgbuddy-desktop shell (set post-hydration
+  // to avoid an SSR/client mismatch), which unlocks the "log in via browser" option.
+  const [isDesktopApp, setIsDesktopApp] = useState(false);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setActiveSlide((prev) => (prev + 1) % loginFeatureSlides.length);
     }, 3500);
     return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    if (window.msgbuddyDesktop?.isDesktop) setIsDesktopApp(true);
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -152,6 +159,17 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-3">
+              {isDesktopApp ? (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-block"
+                  onClick={() => {
+                    void window.msgbuddyDesktop?.loginViaBrowser();
+                  }}
+                >
+                  Continue in your browser
+                </button>
+              ) : null}
               <GoogleSignInButton />
               <p className="font-mono-op text-[0.625rem] tracking-[0.04em] text-base-content/50 text-center">
                 no inbox link required · google handles sign-in

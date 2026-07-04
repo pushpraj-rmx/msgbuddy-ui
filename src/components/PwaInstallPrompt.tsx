@@ -54,6 +54,8 @@ export function PwaInstallPrompt() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
+    // The desktop (Electron) app is already a "native install" — never prompt.
+    if (window.msgbuddyDesktop?.isDesktop) return;
     if (isStandalone()) return;
     if (isDismissedRecently()) return;
 
