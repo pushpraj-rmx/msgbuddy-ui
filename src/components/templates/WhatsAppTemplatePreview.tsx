@@ -9,6 +9,7 @@ import {
   Reply,
   Copy,
   LayoutGrid,
+  MapPin,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -41,7 +42,7 @@ export type AuthPreviewConfig = {
 };
 
 export type WhatsAppTemplatePreviewProps = {
-  headerType?: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | null;
+  headerType?: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | "LOCATION" | null;
   headerContent?: string | null;
   headerPreviewUrl?: string | null;
   body: string;
@@ -210,6 +211,11 @@ function BubbleCard({
           previewUrl={headerPreviewUrl}
           content={headerContent}
         />
+      )}
+      {ht === "LOCATION" && (
+        <div className="flex aspect-[2/1] w-full items-center justify-center rounded-lg bg-base-300/60">
+          <MapPin className="h-7 w-7 text-base-content/30" />
+        </div>
       )}
 
       {/* Body */}

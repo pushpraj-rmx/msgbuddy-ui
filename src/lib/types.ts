@@ -267,7 +267,8 @@ export type TemplateHeaderType =
   | "TEXT"
   | "IMAGE"
   | "VIDEO"
-  | "DOCUMENT";
+  | "DOCUMENT"
+  | "LOCATION";
 export type TemplateVersionStatus =
   | "DRAFT"
   | "PENDING"

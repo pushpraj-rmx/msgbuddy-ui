@@ -52,6 +52,7 @@ const HEADER_TYPES: TemplateHeaderType[] = [
   "IMAGE",
   "VIDEO",
   "DOCUMENT",
+  "LOCATION",
 ];
 
 /** Meta template button label limit (QUICK_REPLY / URL / PHONE_NUMBER) — official Meta cap. */
@@ -785,7 +786,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
     }));
     return (
       <WhatsAppTemplatePreview
-        headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT"}
+        headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | "LOCATION"}
         headerContent={headerContent}
         headerPreviewUrl={headerPreviewUrl}
         body={body}
@@ -1206,6 +1207,14 @@ export const ChannelTemplateVersionEditor = forwardRef<
                 ))}
               </select>
             </label>
+
+            {headerType === "LOCATION" && (
+              <div className="rounded-box border border-base-300 bg-base-200/50 px-3 py-2 text-xs text-base-content/70">
+                A map-pin header. Nothing to configure here — the latitude,
+                longitude, name and address are supplied per send (bound like
+                variables in the campaign/inbox composer).
+              </div>
+            )}
 
             {headerType === "TEXT" && (
               <label className="form-control w-full">
