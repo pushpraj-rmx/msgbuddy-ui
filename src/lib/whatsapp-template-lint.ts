@@ -160,6 +160,19 @@ export function lintTemplateDraft(input: {
     });
   }
 
+  // Quick-reply buttons must be contiguous — Meta rejects a URL/phone button
+  // sandwiched between quick replies (e.g. QR, URL, QR).
+  const qrIdx = (input.buttons ?? [])
+    .map((b, i) => ((b.type ?? "").toUpperCase() === "QUICK_REPLY" ? i : -1))
+    .filter((i) => i >= 0);
+  if (qrIdx.length > 1 && qrIdx[qrIdx.length - 1] - qrIdx[0] + 1 !== qrIdx.length) {
+    issues.push({
+      level: "error",
+      message:
+        "Quick-reply buttons must be grouped together — Meta rejects another button placed between quick replies.",
+    });
+  }
+
   for (const btn of input.buttons ?? []) {
     if ((btn.type ?? "").toUpperCase() !== "URL") continue;
     const url = btn.url ?? "";

@@ -47,6 +47,7 @@ import { StatusTag } from "@/components/ui/StatusTag";
 /** Meta's coarse rejection codes → readable text. Unknown/free-text reasons pass through. */
 const META_REJECTION_LABELS: Record<string, string> = {
   ABUSIVE_CONTENT: "Abusive or objectionable content.",
+  CATEGORY_NOT_AVAILABLE: "That category isn't available for this account/content.",
   INCORRECT_CATEGORY: "Wrong category for this content — Meta expected a different one.",
   INVALID_FORMAT: "Invalid format — check placeholders, formatting, and structure.",
   PROMOTIONAL: "A utility/authentication template contained promotional (marketing) content.",
