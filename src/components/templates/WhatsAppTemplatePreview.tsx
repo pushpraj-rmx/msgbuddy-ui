@@ -96,6 +96,16 @@ const BUTTON_ICON: Record<string, typeof Reply> = {
   COPY_CODE: Copy,
   OTP: Copy,
   FLOW: LayoutGrid,
+  CATALOG: LayoutGrid,
+  MPM: LayoutGrid,
+};
+
+/** Default label for buttons whose label is fixed by WhatsApp (no `text`). */
+const BUTTON_DEFAULT_LABEL: Record<string, string> = {
+  COPY_CODE: "Copy code",
+  OTP: "Copy code",
+  CATALOG: "View catalog",
+  MPM: "View items",
 };
 
 /* ─── Sub-components ─── */
@@ -153,10 +163,12 @@ function HeaderMedia({
 
 function ButtonRow({ btn }: { btn: TemplateButton }) {
   const Icon = BUTTON_ICON[btn.type] ?? Reply;
+  const label =
+    btn.text || BUTTON_DEFAULT_LABEL[(btn.type ?? "").toUpperCase()] || "(button)";
   return (
     <div className="flex items-center justify-center gap-1.5 rounded bg-base-100/60 py-1.5 text-[0.75rem] font-medium text-info">
       <Icon className="h-3 w-3" />
-      <span>{btn.text || "(button)"}</span>
+      <span>{label}</span>
     </div>
   );
 }

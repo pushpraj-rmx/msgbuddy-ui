@@ -56,6 +56,8 @@ const HEADER_TYPES: TemplateHeaderType[] = [
 
 /** Meta template button label limit (QUICK_REPLY / URL / PHONE_NUMBER) — official Meta cap. */
 const META_TEMPLATE_BUTTON_LABEL_MAX = 25;
+/** COPY_CODE (coupon) sample-code limit — Meta coupon templates. */
+const COUPON_CODE_MAX = 20;
 /** Carousel card body limit (Meta) — far tighter than the 1024 main body. */
 const CAROUSEL_CARD_BODY_MAX = 160;
 /** Meta header media caps, per type: image 5 MB, video 16 MB, document 100 MB. */
@@ -67,7 +69,9 @@ const HEADER_MEDIA_MAX_BYTES_BY_TYPE: Record<string, number> = {
 /** Largest header media cap (document); used where the type isn't known up front. */
 const HEADER_MEDIA_MAX_BYTES = HEADER_MEDIA_MAX_BYTES_BY_TYPE.DOCUMENT;
 
-type CarouselButtonUiType = "QUICK_REPLY" | "URL" | "PHONE_NUMBER";
+// COPY_CODE (coupon) is valid only on STANDARD templates — Meta doesn't allow it
+// in carousel cards, so the standard button editor offers it but the carousel one doesn't.
+type CarouselButtonUiType = "QUICK_REPLY" | "URL" | "PHONE_NUMBER" | "COPY_CODE";
 
 type CarouselButtonRow = {
   id: string;
@@ -75,6 +79,8 @@ type CarouselButtonRow = {
   text: string;
   url: string;
   phone_number: string;
+  /** COPY_CODE only: sample coupon code (Meta `example`), ≤20 chars. */
+  example: string;
 };
 
 function newCarouselButtonRowId(): string {
@@ -91,6 +97,7 @@ function defaultCarouselButtonRow(): CarouselButtonRow {
     text: "Learn more",
     url: "",
     phone_number: "",
+    example: "",
   };
 }
 
@@ -111,6 +118,7 @@ function rowsFromApiButtons(raw: unknown): CarouselButtonRow[] {
         text,
         url: String(btn.url ?? ""),
         phone_number: "",
+        example: "",
       };
     }
     if (type === "PHONE_NUMBER" || type === "PHONE") {
@@ -122,6 +130,17 @@ function rowsFromApiButtons(raw: unknown): CarouselButtonRow[] {
         phone_number: String(
           (btn as { phone_number?: string }).phone_number ?? ""
         ),
+        example: "",
+      };
+    }
+    if (type === "COPY_CODE") {
+      return {
+        id,
+        type: "COPY_CODE",
+        text: "",
+        url: "",
+        phone_number: "",
+        example: String((btn as { example?: string; code?: string }).example ?? (btn as { code?: string }).code ?? ""),
       };
     }
     return {
@@ -130,6 +149,7 @@ function rowsFromApiButtons(raw: unknown): CarouselButtonRow[] {
       text,
       url: "",
       phone_number: "",
+      example: "",
     };
   });
 }
@@ -146,6 +166,9 @@ function rowsToApiButtons(rows: CarouselButtonRow[]): unknown[] {
         text: tidyWhitespace(r.text),
         phone_number: r.phone_number.trim(),
       };
+    }
+    if (r.type === "COPY_CODE") {
+      return { type: "COPY_CODE", example: r.example.trim() };
     }
     return { type: "QUICK_REPLY", text: tidyWhitespace(r.text) };
   });
@@ -1392,10 +1415,10 @@ export const ChannelTemplateVersionEditor = forwardRef<
                             if (!prev) return prev;
                             const next = [...prev];
                             const cur = { ...next[bi], type: t };
-                            if (t === "QUICK_REPLY") {
-                              cur.url = "";
-                              cur.phone_number = "";
-                            }
+                            if (t !== "URL") cur.url = "";
+                            if (t !== "PHONE_NUMBER") cur.phone_number = "";
+                            if (t !== "COPY_CODE") cur.example = "";
+                            if (t === "COPY_CODE") cur.text = ""; // Meta fixes the label
                             next[bi] = cur;
                             setButtonsJson(
                               JSON.stringify(rowsToApiButtons(next), null, 2)
@@ -1407,6 +1430,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
                         <option value="QUICK_REPLY">Quick reply</option>
                         <option value="URL">Visit website (URL)</option>
                         <option value="PHONE_NUMBER">Call phone number</option>
+                        <option value="COPY_CODE">Copy code (coupon)</option>
                       </select>
                     </label>
 
@@ -1430,30 +1454,63 @@ export const ChannelTemplateVersionEditor = forwardRef<
                     </button>
                   </div>
 
-                  <label className="form-control w-full">
-                    <span className="label-text text-xs">
-                      Button text ({row.text.length}/{META_TEMPLATE_BUTTON_LABEL_MAX})
-                    </span>
-                    <input
-                      type="text"
-                      className="input input-bordered input-xs w-full"
-                      maxLength={META_TEMPLATE_BUTTON_LABEL_MAX}
-                      value={row.text}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setStandardButtonRows((prev) => {
-                          if (!prev) return prev;
-                          const next = [...prev];
-                          next[bi] = { ...next[bi], text: v };
-                          setButtonsJson(
-                            JSON.stringify(rowsToApiButtons(next), null, 2)
-                          );
-                          return next;
-                        });
-                      }}
-                      placeholder="Label shown on the button"
-                    />
-                  </label>
+                  {row.type !== "COPY_CODE" && (
+                    <label className="form-control w-full">
+                      <span className="label-text text-xs">
+                        Button text ({row.text.length}/{META_TEMPLATE_BUTTON_LABEL_MAX})
+                      </span>
+                      <input
+                        type="text"
+                        className="input input-bordered input-xs w-full"
+                        maxLength={META_TEMPLATE_BUTTON_LABEL_MAX}
+                        value={row.text}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setStandardButtonRows((prev) => {
+                            if (!prev) return prev;
+                            const next = [...prev];
+                            next[bi] = { ...next[bi], text: v };
+                            setButtonsJson(
+                              JSON.stringify(rowsToApiButtons(next), null, 2)
+                            );
+                            return next;
+                          });
+                        }}
+                        placeholder="Label shown on the button"
+                      />
+                    </label>
+                  )}
+
+                  {row.type === "COPY_CODE" && (
+                    <label className="form-control w-full">
+                      <span className="label-text text-xs">
+                        Sample coupon code ({row.example.length}/{COUPON_CODE_MAX})
+                      </span>
+                      <input
+                        type="text"
+                        className="input input-bordered input-xs w-full font-mono text-xs"
+                        maxLength={COUPON_CODE_MAX}
+                        value={row.example}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setStandardButtonRows((prev) => {
+                            if (!prev) return prev;
+                            const next = [...prev];
+                            next[bi] = { ...next[bi], example: v };
+                            setButtonsJson(
+                              JSON.stringify(rowsToApiButtons(next), null, 2)
+                            );
+                            return next;
+                          });
+                        }}
+                        placeholder="e.g. SAVE20"
+                      />
+                      <span className="mt-0.5 text-xs text-base-content/50">
+                        The label is fixed by WhatsApp (&ldquo;Copy code&rdquo;). The real code is
+                        supplied per send. Max {COUPON_CODE_MAX} chars.
+                      </span>
+                    </label>
+                  )}
 
                   {row.type === "URL" && (
                     <label className="form-control w-full">
