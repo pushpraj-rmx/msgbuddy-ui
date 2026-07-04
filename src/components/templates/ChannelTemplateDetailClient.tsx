@@ -44,6 +44,20 @@ import { getApiError } from "@/lib/api-error";
 import { StatusTag } from "@/components/ui/StatusTag";
 
 
+/** Meta's coarse rejection codes → readable text. Unknown/free-text reasons pass through. */
+const META_REJECTION_LABELS: Record<string, string> = {
+  ABUSIVE_CONTENT: "Abusive or objectionable content.",
+  INCORRECT_CATEGORY: "Wrong category for this content — Meta expected a different one.",
+  INVALID_FORMAT: "Invalid format — check placeholders, formatting, and structure.",
+  PROMOTIONAL: "A utility/authentication template contained promotional (marketing) content.",
+  SCAM: "Flagged as a potential scam.",
+  TAG_CONTENT_MISMATCH: "Content doesn't match the template's category.",
+};
+
+function metaRejectionLabel(reason: string): string {
+  return META_REJECTION_LABELS[reason.trim().toUpperCase()] ?? reason;
+}
+
 function statusLabel(status: TemplateVersionStatus): string {
   switch (status) {
     case "DRAFT": return "Draft";
@@ -1150,11 +1164,24 @@ export function ChannelTemplateDetailClient({
             <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3">
               <span className="op-label mb-1 block text-error">rejected by meta — content review</span>
               <p className="text-[0.8125rem] text-base-content">
-                {version.providerRejectionReason || version.syncError || "Meta rejected this template after content review."}
+                {version.providerRejectionReason
+                  ? metaRejectionLabel(version.providerRejectionReason)
+                  : version.syncError ||
+                    "Meta rejected this template during content review. Open WhatsApp Manager for the detailed reason."}
               </p>
+              {version.providerRejectionReason &&
+              metaRejectionLabel(version.providerRejectionReason) !==
+                version.providerRejectionReason ? (
+                <p className="mt-0.5 font-mono-op text-[0.6875rem] text-base-content/50">
+                  Meta code: {version.providerRejectionReason}
+                </p>
+              ) : null}
               <p className="mt-1.5 text-[0.75rem] text-base-content/55">
-                This template name is now registered on Meta&apos;s side as rejected.
-                You cannot reuse the same name — create a new template with a different name, or create a new version and resubmit.
+                This template still exists on Meta (rejected, not deleted). Fix the
+                content to address the reason above, then create a new version and
+                resubmit — Meta re-reviews it under the same name. You don&apos;t need
+                a new name. (A different name is only required for a deleted template,
+                whose name Meta locks for ~30 days.)
               </p>
             </div>
           )}
