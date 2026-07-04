@@ -133,6 +133,11 @@ export interface RazorpayStatus {
 
 export type ThemePreset = "WARM" | "MINIMAL" | "BOLD";
 
+export interface StorefrontFeature {
+  title: string;
+  body: string;
+}
+
 export interface StorefrontBranding {
   displayName: string;
   tagline: string | null;
@@ -142,6 +147,9 @@ export interface StorefrontBranding {
   logoUrl: string | null;
   heroImageMediaId: string | null;
   heroImageUrl: string | null;
+  heroHeadline: string | null;
+  aboutBody: string | null;
+  features: StorefrontFeature[];
 }
 
 export const recurringApi = {
@@ -260,6 +268,9 @@ export const recurringApi = {
       heroImageMediaId: string;
       accentColor: string;
       themePreset: ThemePreset;
+      heroHeadline: string;
+      aboutBody: string;
+      features: StorefrontFeature[];
     }>,
   ) => (await api.put<StorefrontBranding>(endpoints.recurring.branding, dto)).data,
 };

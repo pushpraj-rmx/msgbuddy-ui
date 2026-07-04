@@ -6,6 +6,7 @@ import { UploadCloud, Wand2 } from "lucide-react";
 import {
   recurringApi,
   type StorefrontBranding,
+  type StorefrontFeature,
   type ThemePreset,
 } from "@/lib/recurringApi";
 import { mediaApi } from "@/lib/api";
@@ -65,8 +66,10 @@ export function BrandingPanel() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [heroUploading, setHeroUploading] = useState(false);
   const [saved, setSaved] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const heroRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -107,6 +110,38 @@ export function BrandingPanel() {
     }
   }
 
+  async function onPickHero(file: File) {
+    setHeroUploading(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const res = (await mediaApi.upload(file)) as { id: string; url: string };
+      setB((prev) => (prev ? { ...prev, heroImageMediaId: res.id, heroImageUrl: res.url } : prev));
+    } catch (e) {
+      setError(errMsg(e));
+    } finally {
+      setHeroUploading(false);
+    }
+  }
+
+  // ── Feature (highlight) list editing ─────────────────────────────────────────
+  function setFeatures(next: StorefrontFeature[]) {
+    setB((prev) => (prev ? { ...prev, features: next } : prev));
+    setSaved(false);
+  }
+  function updateFeature(i: number, patch: Partial<StorefrontFeature>) {
+    if (!b) return;
+    setFeatures(b.features.map((f, idx) => (idx === i ? { ...f, ...patch } : f)));
+  }
+  function addFeature() {
+    if (!b || b.features.length >= 6) return;
+    setFeatures([...b.features, { title: "", body: "" }]);
+  }
+  function removeFeature(i: number) {
+    if (!b) return;
+    setFeatures(b.features.filter((_, idx) => idx !== i));
+  }
+
   async function save() {
     if (!b) return;
     setBusy(true);
@@ -116,8 +151,12 @@ export function BrandingPanel() {
         displayName: b.displayName,
         tagline: b.tagline ?? "",
         logoMediaId: b.logoMediaId ?? "",
+        heroImageMediaId: b.heroImageMediaId ?? "",
         accentColor: b.accentColor ?? undefined,
         themePreset: b.themePreset,
+        heroHeadline: b.heroHeadline ?? "",
+        aboutBody: b.aboutBody ?? "",
+        features: b.features.filter((f) => f.title.trim() || f.body.trim()),
       });
       setB(updated);
       setSaved(true);
@@ -142,6 +181,7 @@ export function BrandingPanel() {
 
   const accent = b.accentColor || "#6EA8FE";
   const logoSrc = resolveMediaUrlForUi(b.logoUrl); // relative /v2/media → absolute API URL
+  const heroSrc = resolveMediaUrlForUi(b.heroImageUrl);
 
   return (
     <div className="space-y-4 rounded-box border border-base-300 p-4">
@@ -277,6 +317,96 @@ export function BrandingPanel() {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ── Landing page marketing content (Option B) ─────────────────────── */}
+      <div className="space-y-3 border-t border-base-300 pt-4">
+        <div className="op-label">Landing page content</div>
+
+        <div className="flex items-center gap-3">
+          {heroSrc ? (
+            // eslint-disable-next-line @next/next/no-img-element -- signed media URL preview
+            <img src={heroSrc} alt="hero" className="h-14 w-24 rounded-box border border-base-300 object-cover" />
+          ) : (
+            <div className="flex h-14 w-24 items-center justify-center rounded-box border border-dashed border-base-300 text-[10px] text-base-content/40">
+              hero image
+            </div>
+          )}
+          <button className="btn btn-sm" disabled={heroUploading} onClick={() => heroRef.current?.click()}>
+            {heroUploading && <span className="loading loading-spinner loading-xs" />}
+            {b.heroImageUrl ? "Replace hero image" : "Add hero image"}
+          </button>
+          {b.heroImageUrl && (
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => setB((prev) => (prev ? { ...prev, heroImageMediaId: null, heroImageUrl: null } : prev))}
+            >
+              Remove
+            </button>
+          )}
+          <input
+            ref={heroRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onPickHero(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+
+        <label className="flex flex-col gap-1 text-xs text-base-content/60">
+          Hero headline (optional — defaults to the business name)
+          <input
+            className="input input-bordered input-sm w-full"
+            placeholder="Fresh bread, delivered weekly"
+            value={b.heroHeadline ?? ""}
+            onChange={(e) => set("heroHeadline", e.target.value)}
+          />
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs text-base-content/60">
+          About (optional)
+          <textarea
+            className="textarea textarea-bordered textarea-sm w-full"
+            rows={3}
+            placeholder="A short paragraph about your shop…"
+            value={b.aboutBody ?? ""}
+            onChange={(e) => set("aboutBody", e.target.value)}
+          />
+        </label>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-base-content/60">
+              Highlights (optional — replaces the default &ldquo;How it works&rdquo;)
+            </span>
+            <button className="btn btn-xs" onClick={addFeature} disabled={b.features.length >= 6}>
+              + Add
+            </button>
+          </div>
+          {b.features.map((f, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                className="input input-bordered input-sm w-40"
+                placeholder="Title"
+                value={f.title}
+                onChange={(e) => updateFeature(i, { title: e.target.value })}
+              />
+              <input
+                className="input input-bordered input-sm flex-1"
+                placeholder="Description"
+                value={f.body}
+                onChange={(e) => updateFeature(i, { body: e.target.value })}
+              />
+              <button className="btn btn-ghost btn-xs text-error" onClick={() => removeFeature(i)}>
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
       </div>
 
