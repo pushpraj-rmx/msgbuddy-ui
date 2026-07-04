@@ -56,6 +56,8 @@ import {
 import { extractApiErrorMessage } from "@/lib/messageApiErrors";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
+import { TemplateValueField } from "@/components/templates/TemplateValueField";
+import { variableKeyLabel, variableInputKind } from "@/lib/template-variables";
 import {
   isContactBulkUpdated,
   isContactUpdated,
@@ -4287,10 +4289,10 @@ export function InboxClient({
                                     >
                                       {isRequired ? (
                                         <span
-                                          className="w-1/3 truncate font-mono-op text-xs text-base-content/70"
+                                          className="w-1/3 truncate text-xs text-base-content/70"
                                           title={row.key}
                                         >
-                                          {row.key}
+                                          {variableKeyLabel(row.key)}
                                         </span>
                                       ) : (
                                         <input
@@ -4305,18 +4307,18 @@ export function InboxClient({
                                           }
                                         />
                                       )}
-                                      <input
-                                        type="text"
-                                        className="input input-bordered input-sm flex-1"
+                                      <TemplateValueField
+                                        kind={variableInputKind(row.key)}
+                                        className="flex-1"
+                                        value={row.value}
                                         placeholder={
                                           isRequired
-                                            ? `value for ${row.key}`
+                                            ? `value for ${variableKeyLabel(row.key)}`
                                             : "value"
                                         }
-                                        value={row.value}
-                                        onChange={(event) =>
+                                        onChange={(next) =>
                                           updateTemplateVariableRow(row.id, {
-                                            value: event.target.value,
+                                            value: next,
                                           })
                                         }
                                       />

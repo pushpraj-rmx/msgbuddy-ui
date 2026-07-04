@@ -2240,61 +2240,11 @@ export const ChannelTemplateVersionEditor = forwardRef<
                         + Add button
                       </button>
                     </div>
-
-                    <details className="group">
-                      <summary className="cursor-pointer text-xs text-base-content/60 hover:text-base-content">
-                        Advanced: edit buttons as JSON
-                      </summary>
-                      <div className="mt-2">
-                        <textarea
-                          className="textarea textarea-bordered w-full min-h-[72px] font-mono text-xs"
-                          value={jsonToTextarea(rowsToApiButtons(btnRowsForCard))}
-                          onChange={(e) => {
-                            const parsed = parseJsonOptional(
-                              e.target.value,
-                              "Buttons"
-                            );
-                            if (!parsed.ok || !Array.isArray(parsed.value)) return;
-                            setCarouselButtonRowsByIndex((prev) => ({
-                              ...prev,
-                              [idx]: rowsFromApiButtons(parsed.value),
-                            }));
-                          }}
-                          placeholder="[]"
-                        />
-                      </div>
-                    </details>
                   </div>
                 );
               })}
             </div>
           )}
-
-          <details className="group">
-            <summary className="cursor-pointer text-sm text-base-content/70 hover:text-base-content">
-              Advanced: carousel cards JSON
-            </summary>
-            <div className="mt-2">
-              <textarea
-                className="textarea textarea-bordered w-full min-h-[160px] font-mono text-xs"
-                value={carouselJson}
-                onChange={(e) => {
-                  const raw = e.target.value;
-                  setCarouselJson(raw);
-                  const parsed = safeParseCarouselCards(raw);
-                  if (parsed) {
-                    setCarouselCards(parsed);
-                    const btnRows: Record<number, CarouselButtonRow[]> = {};
-                    for (let i = 0; i < parsed.length; i++) {
-                      btnRows[i] = rowsFromApiButtons(parsed[i]?.buttons);
-                    }
-                    setCarouselButtonRowsByIndex(btnRows);
-                  }
-                }}
-                placeholder={`[\n  {\n    \"headerFormat\": \"IMAGE\",\n    \"headerHandle\": \"…\",\n    \"body\": \"…\",\n    \"buttons\": []\n  }\n]`}
-              />
-            </div>
-          </details>
           </div>
         </div>
       )}

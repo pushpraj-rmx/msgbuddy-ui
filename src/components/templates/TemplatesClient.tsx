@@ -28,33 +28,69 @@ import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 const PAGE_SIZES = [10, 25, 50, 100];
 
-/** Raw Meta provider status → list badge. Keys match ChannelTemplate.providerStatus strings. */
-const WA_STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  APPROVED: { label: "Approved", cls: "op-tag-ok" },
-  PENDING: { label: "Pending", cls: "op-tag-warn" },
-  PROVIDER_PENDING: { label: "Pending", cls: "op-tag-warn" },
-  REJECTED: { label: "Rejected", cls: "op-tag-danger" },
-  PAUSED: { label: "Paused", cls: "op-tag-warn" },
-  DISABLED: { label: "Disabled", cls: "op-tag-danger" },
-  IN_APPEAL: { label: "In appeal", cls: "op-tag-warn" },
-  APPEAL_REQUESTED: { label: "In appeal", cls: "op-tag-warn" },
-  ARCHIVED_BY_META: { label: "Archived", cls: "op-tag-danger" },
+/** Coarse WhatsApp approval status derived from a row's raw Meta providerStatus. */
+type WhatsAppDerivedStatus =
+  | "approved"
+  | "pending"
+  | "appeal"
+  | "rejected"
+  | "paused"
+  | "disabled"
+  | "archived"
+  | "draft";
+
+/** Raw Meta provider status → coarse derived status. Keys match ChannelTemplate.providerStatus strings. */
+const WA_RAW_STATUS_TO_DERIVED: Record<string, WhatsAppDerivedStatus> = {
+  APPROVED: "approved",
+  PENDING: "pending",
+  PROVIDER_PENDING: "pending",
+  REJECTED: "rejected",
+  PAUSED: "paused",
+  DISABLED: "disabled",
+  IN_APPEAL: "appeal",
+  APPEAL_REQUESTED: "appeal",
+  ARCHIVED_BY_META: "archived",
+};
+
+/** Derived status → list badge presentation. */
+const WA_STATUS_BADGE: Record<WhatsAppDerivedStatus, { label: string; cls: string }> = {
+  approved: { label: "Approved", cls: "op-tag-ok" },
+  pending: { label: "Pending", cls: "op-tag-warn" },
+  appeal: { label: "In appeal", cls: "op-tag-warn" },
+  rejected: { label: "Rejected", cls: "op-tag-danger" },
+  paused: { label: "Paused", cls: "op-tag-warn" },
+  disabled: { label: "Disabled", cls: "op-tag-danger" },
+  archived: { label: "Archived", cls: "op-tag-danger" },
+  draft: { label: "Draft", cls: "" },
 };
 
 /**
- * WhatsApp approval + quality badge for a list row, derived from the WhatsApp
- * channel template's raw Meta status (the only status carried in the list
- * payload). Lets users see approved / pending / rejected without opening each row.
+ * Single source of truth for a row's WhatsApp status: reads the first
+ * non-deleted WHATSAPP channel template's raw Meta providerStatus (the only
+ * status carried in the list payload) and maps it to a coarse derived status.
+ * Returns null when the template has no WhatsApp channel template at all. Used
+ * by both the list badge cell and the status filter so they never diverge.
+ */
+function deriveWhatsAppStatus(template: Template): WhatsAppDerivedStatus | null {
+  const ct = (template.channelTemplates ?? []).find(
+    (c) => c.channel === "WHATSAPP" && !c.deletedAt
+  );
+  if (!ct) return null;
+  const raw = (ct.providerStatus ?? "").toUpperCase();
+  if (!raw) return "draft";
+  return WA_RAW_STATUS_TO_DERIVED[raw] ?? "draft";
+}
+
+/**
+ * WhatsApp approval + quality badge for a list row. Lets users see approved /
+ * pending / rejected without opening each row.
  */
 function WhatsAppStatusCell({ template }: { template: Template }) {
   const ct = (template.channelTemplates ?? []).find(
     (c) => c.channel === "WHATSAPP" && !c.deletedAt
   );
   if (!ct) return <span className="op-tag">No WhatsApp</span>;
-  const raw = (ct.providerStatus ?? "").toUpperCase();
-  const badge = raw
-    ? WA_STATUS_BADGE[raw] ?? { label: ct.providerStatus as string, cls: "" }
-    : { label: "Draft", cls: "" };
+  const badge = WA_STATUS_BADGE[deriveWhatsAppStatus(template) ?? "draft"];
   const rating = normalizeQualityRating(ct.qualityScore);
   const showQuality = ct.qualityScore != null && rating !== "UNKNOWN";
   const reclassifyPending =
@@ -99,7 +135,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
   const canCreateTemplate = roleHasWorkspacePermission(meRole, "templates.create");
   const [search, setSearch] = useState("");
   const [isActive, setIsActive] = useState<string>("");
-  const [sendable, setSendable] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("updatedAt");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
@@ -119,7 +155,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
           : isActive === "false"
             ? false
             : undefined,
-      hasWhatsAppSendableVersion: sendable === "true" ? true : undefined,
+      hasWhatsAppSendableVersion: statusFilter === "sendable" ? true : undefined,
       sortBy: sortBy || undefined,
       sortOrder,
       page,
@@ -128,7 +164,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
     [
       debouncedSearch,
       isActive,
-      sendable,
+      statusFilter,
       sortBy,
       sortOrder,
       page,
@@ -143,6 +179,15 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
   const atLimit = limits ? limits.current >= limits.max : false;
   const removeMutation = useRemoveTemplate();
 
+  // "sendable" is applied server-side via hasWhatsAppSendableVersion; the coarse
+  // derived-status buckets are applied client-side from the list payload so the
+  // filter and the WhatsApp badge column always agree (shared deriveWhatsAppStatus).
+  const filteredItems = useMemo(() => {
+    const items = data?.items ?? [];
+    if (!statusFilter || statusFilter === "sendable") return items;
+    return items.filter((t) => deriveWhatsAppStatus(t) === statusFilter);
+  }, [data?.items, statusFilter]);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkDeleteError, setBulkDeleteError] = useState<string | null>(null);
@@ -150,7 +195,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
   // Clear selection when filters/search/pagination change
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [debouncedSearch, isActive, sendable, sortBy, sortOrder, page, limit]);
+  }, [debouncedSearch, isActive, statusFilter, sortBy, sortOrder, page, limit]);
 
   const bulkDeleteMutation = useMutation({
     // allSettled, not all — one failure (e.g. a template in use by a campaign)
@@ -195,7 +240,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
   };
 
   const selectAllOnPage = () => {
-    const displayedIds = (data?.items ?? []).map((t) => t.id);
+    const displayedIds = filteredItems.map((t) => t.id);
     if (displayedIds.length === 0) return;
     const allSelected = displayedIds.every((id) => selectedIds.has(id));
     setSelectedIds((prev) => {
@@ -208,11 +253,11 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
 
   const headerCheckboxRef = useRef<HTMLInputElement>(null);
   const selectedOnPageCount = useMemo(
-    () => (data?.items ?? []).filter((t) => selectedIds.has(t.id)).length,
-    [data?.items, selectedIds]
+    () => filteredItems.filter((t) => selectedIds.has(t.id)).length,
+    [filteredItems, selectedIds]
   );
   const headerIndeterminate =
-    selectedOnPageCount > 0 && selectedOnPageCount < (data?.items ?? []).length;
+    selectedOnPageCount > 0 && selectedOnPageCount < filteredItems.length;
 
   useEffect(() => {
     if (headerCheckboxRef.current)
@@ -257,7 +302,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
             ref={headerCheckboxRef}
             type="checkbox"
             className="checkbox checkbox-sm"
-            checked={(data?.items ?? []).length > 0 && selectedOnPageCount === (data?.items ?? []).length}
+            checked={filteredItems.length > 0 && selectedOnPageCount === filteredItems.length}
             onChange={selectAllOnPage}
             onClick={(e) => e.stopPropagation()}
           />
@@ -370,11 +415,11 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- selection state drives checkbox renders
-    [selectedIds, selectedOnPageCount, data?.items]
+    [selectedIds, selectedOnPageCount, filteredItems]
   );
 
   const table = useReactTable({
-    data: data?.items ?? [],
+    data: filteredItems,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
@@ -437,13 +482,18 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
             <option value="false">Inactive</option>
           </select>
           <select
-            className="select select-bordered select-sm w-36"
-            value={sendable}
-            onChange={(e) => { setSendable(e.target.value); setPage(1); }}
-            aria-label="Filter by WhatsApp sendability"
+            className="select select-bordered select-sm w-40"
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            aria-label="Filter by WhatsApp status"
           >
             <option value="">WhatsApp: All</option>
-            <option value="true">Sendable only</option>
+            <option value="sendable">Sendable</option>
+            <option value="pending">Pending</option>
+            <option value="appeal">In appeal</option>
+            <option value="rejected">Rejected</option>
+            <option value="paused">Paused</option>
+            <option value="draft">Draft</option>
           </select>
           <select
             className="select select-bordered select-sm w-20"
@@ -505,16 +555,24 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
               </div>
             </>
           )}
-          {canCreateTemplate && (
-            <Link
-              href="/templates/new"
-              className={`btn btn-primary btn-sm gap-1 ${atLimit ? "btn-disabled" : ""}`}
-              aria-disabled={atLimit}
-              title={atLimit ? "Template limit reached" : undefined}
-            >
-              <Plus className="h-3.5 w-3.5" /> Create
-            </Link>
-          )}
+          {canCreateTemplate &&
+            (atLimit ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1"
+                disabled
+                title={`Template limit reached (${limits?.current ?? ""}/${limits?.max ?? ""}). Delete a template or upgrade to create more.`}
+              >
+                <Plus className="h-3.5 w-3.5" /> Create
+              </button>
+            ) : (
+              <Link
+                href="/templates/new"
+                className="btn btn-primary btn-sm gap-1"
+              >
+                <Plus className="h-3.5 w-3.5" /> Create
+              </Link>
+            ))}
         </div>
       </div>
 
@@ -559,7 +617,7 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
               ) : table.getRowModel().rows.length === 0 ? (
                 <tr>
                   <td colSpan={columns.length} className="px-3 py-12 text-center">
-                    {debouncedSearch.trim() || isActive || sendable ? (
+                    {debouncedSearch.trim() || isActive || statusFilter ? (
                       <p className="text-[0.8125rem] text-base-content/55">
                         No templates match your filters.
                       </p>
@@ -574,9 +632,20 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
                         </p>
                         {canCreateTemplate && (
                           <div className="flex items-center justify-center gap-2 pt-1">
-                            <Link href="/templates/new" className="btn btn-primary btn-sm gap-1">
-                              <Plus className="h-3.5 w-3.5" /> Create template
-                            </Link>
+                            {atLimit ? (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm gap-1"
+                                disabled
+                                title={`Template limit reached (${limits?.current ?? ""}/${limits?.max ?? ""}). Delete a template or upgrade to create more.`}
+                              >
+                                <Plus className="h-3.5 w-3.5" /> Create template
+                              </button>
+                            ) : (
+                              <Link href="/templates/new" className="btn btn-primary btn-sm gap-1">
+                                <Plus className="h-3.5 w-3.5" /> Create template
+                              </Link>
+                            )}
                             <Link
                               href="/settings/integrations/whatsapp/import-templates?returnTo=%2Ftemplates"
                               className="btn btn-ghost btn-sm gap-1"

@@ -12,6 +12,8 @@ import {
 } from "@/lib/whatsappTemplateMedia";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { WhatsAppTemplatePreviewFromVersion } from "@/components/templates/WhatsAppTemplatePreview";
+import { TemplateValueField } from "@/components/templates/TemplateValueField";
+import { variableKeyLabel, variableInputKind } from "@/lib/template-variables";
 import { useRightPanel } from "@/components/right-panel/RightPanelProvider";
 
 export type CampaignCreateTemplate = {
@@ -89,17 +91,6 @@ export type CampaignDraftSeed = {
   chunkSize?: number | null;
   throttlePerMin?: number | null;
 };
-
-/** Friendly label for a template placeholder key (e.g. "button_1_code" → "Button 1 · {{code}}"). */
-function variableKeyLabel(key: string): string {
-  const card = key.match(/^card_(\d+)_(.+)$/);
-  if (card) return `Card ${card[1]} · ${variableKeyLabel(card[2])}`;
-  const btn = key.match(/^button_(\d+)_(.+)$/);
-  if (btn) return `Button ${btn[1]} · {{${btn[2]}}}`;
-  const hdr = key.match(/^header_(.+)$/);
-  if (hdr) return `Header · {{${hdr[1]}}}`;
-  return `{{${key}}}`;
-}
 
 export function CreateCampaignForm({
   templates,
@@ -1084,15 +1075,16 @@ export function CreateCampaignForm({
                                   ))}
                                 </select>
                               ) : (
-                                <input
-                                  type="text"
-                                  className="input input-bordered input-xs min-w-[10rem]"
+                                <TemplateValueField
+                                  kind={variableInputKind(key)}
+                                  size="xs"
+                                  className="min-w-[10rem]"
                                   value={b.value}
                                   placeholder="Fixed value for all recipients"
-                                  onChange={(e) =>
+                                  onChange={(next) =>
                                     setVariableBindings((prev) => ({
                                       ...prev,
-                                      [key]: { mode: "static", value: e.target.value },
+                                      [key]: { mode: "static", value: next },
                                     }))
                                   }
                                 />

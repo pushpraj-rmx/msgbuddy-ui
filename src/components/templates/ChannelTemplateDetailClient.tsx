@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useChannelTemplateState,
@@ -23,6 +24,7 @@ import {
 import type {
   ChannelTemplateVersion,
   ChannelTemplateVersionPayload,
+  TemplateLimitedTimeOffer,
   TemplateQualityRating,
   TemplateVersionStatus,
 } from "@/lib/types";
@@ -419,6 +421,13 @@ export function ChannelTemplateDetailClient({
   const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error" | "warning"; message: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Seed hints from the create screen (`?type=<preset>&lang=<code>`). Applied only
+  // to the very first version so the editor opens already configured for the
+  // chosen template type. Ignored once any version exists.
+  const searchParams = useSearchParams();
+  const seedType = searchParams.get("type");
+  const seedLang = searchParams.get("lang");
+
   const queryClient = useQueryClient();
 
   const stateQuery = useChannelTemplateState(channelTemplateId, {
@@ -630,33 +639,59 @@ export function ChannelTemplateDetailClient({
   }, [currentCategory, channelTemplateId, updateChannelTemplateMutation]);
 
   const onCreate = useCallback(() => {
-    const payload: ChannelTemplateVersionPayload =
-      version
-        ? {
-            // Clone the currently selected version as a starting point. (Auth templates have an
-            // empty body, so we key off `version` existing — not `version.body` — and carry
-            // authConfig, otherwise the OTP setup would be lost.)
-            body: version.body ?? "",
-            headerType: version.headerType ?? "NONE",
-            headerContent: version.headerContent ?? null,
-            footer: version.footer ?? null,
-            language: version.language ?? "en",
-            parameterFormat: version.parameterFormat ?? "POSITIONAL",
-            layoutType: version.layoutType ?? "STANDARD",
-            buttons: (version.buttons as unknown[] | null) ?? null,
-            variables: (version.variables as unknown[] | null) ?? null,
-            carouselCards: (version.carouselCards as unknown[] | null) ?? null,
-            allowCategoryChange: version.allowCategoryChange !== false,
-            authConfig: version.authConfig ?? null,
-          }
-        : {
-            // First version default.
-            body: "Hello {{1}}",
+    // `limitedTimeOffer` isn't part of the create payload type but the backend
+    // accepts it (see the update payload) — widen locally so the LTO preset can
+    // seed it without an extra round-trip.
+    type SeededPayload = ChannelTemplateVersionPayload & {
+      limitedTimeOffer?: TemplateLimitedTimeOffer;
+    };
+    const payload: SeededPayload = version
+      ? {
+          // Clone the currently selected version as a starting point. (Auth templates have an
+          // empty body, so we key off `version` existing — not `version.body` — and carry
+          // authConfig, otherwise the OTP setup would be lost.)
+          body: version.body ?? "",
+          headerType: version.headerType ?? "NONE",
+          headerContent: version.headerContent ?? null,
+          footer: version.footer ?? null,
+          language: version.language ?? "en",
+          parameterFormat: version.parameterFormat ?? "POSITIONAL",
+          layoutType: version.layoutType ?? "STANDARD",
+          buttons: (version.buttons as unknown[] | null) ?? null,
+          variables: (version.variables as unknown[] | null) ?? null,
+          carouselCards: (version.carouselCards as unknown[] | null) ?? null,
+          allowCategoryChange: version.allowCategoryChange !== false,
+          authConfig: version.authConfig ?? null,
+        }
+      : (() => {
+          // First version — seed from the create-screen preset (`seedType`) so the
+          // editor opens configured. Only the first version gets seeded.
+          const base: SeededPayload = {
+            body: seedType === "authentication" ? "" : "Hello {{1}}",
             headerType: "NONE",
-            language: "en",
+            language: seedLang?.trim() || "en",
             parameterFormat: "POSITIONAL",
             allowCategoryChange: true,
           };
+          switch (seedType) {
+            case "media":
+              return { ...base, headerType: "IMAGE" };
+            case "carousel":
+              return { ...base, layoutType: "CAROUSEL" };
+            case "coupon":
+              return { ...base, buttons: [{ type: "COPY_CODE", example: "" }] };
+            case "catalog":
+              return { ...base, buttons: [{ type: "CATALOG", text: "View catalog" }] };
+            case "flow":
+              return { ...base, buttons: [{ type: "FLOW", text: "", flow_action: "NAVIGATE" }] };
+            case "lto":
+              return { ...base, limitedTimeOffer: { text: "", hasExpiration: true } };
+            case "authentication":
+              return { ...base, authConfig: { otpType: "COPY_CODE" } };
+            default:
+              return base;
+          }
+        })();
     createMutation.mutate(
       { id: channelTemplateId, data: payload },
       {
@@ -666,7 +701,7 @@ export function ChannelTemplateDetailClient({
         },
       }
     );
-  }, [createMutation, channelTemplateId, version]);
+  }, [createMutation, channelTemplateId, version, seedType, seedLang]);
 
   const onActivate = useCallback(() => {
     if (!version) return;
@@ -1447,8 +1482,9 @@ export function ChannelTemplateDetailClient({
             <label className="label">
               <span className="label-text">Reason</span>
             </label>
-            <input
-              className="input input-bordered w-full"
+            <textarea
+              className="textarea textarea-bordered w-full"
+              rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Why is this being rejected?"
