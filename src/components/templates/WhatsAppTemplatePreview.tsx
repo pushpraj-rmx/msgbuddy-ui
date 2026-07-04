@@ -12,6 +12,7 @@ import {
   MapPin,
   ChevronLeft,
   ChevronRight,
+  Clock,
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
@@ -56,6 +57,8 @@ export type WhatsAppTemplatePreviewProps = {
   sampleValues?: Record<string, string>;
   /** When category is AUTHENTICATION, render the fixed OTP layout instead of body/buttons. */
   authConfig?: AuthPreviewConfig | null;
+  /** MARKETING limited-time-offer: renders a countdown banner above the header/body. */
+  limitedTimeOffer?: { text?: string; hasExpiration?: boolean } | null;
   className?: string;
 };
 
@@ -363,6 +366,28 @@ const CATEGORY_STYLES: Record<string, string> = {
   AUTHENTICATION: "op-tag op-tag-warn",
 };
 
+/* ─── Limited-time-offer banner ─── */
+
+function LtoBanner({
+  text,
+  hasExpiration,
+}: {
+  text: string;
+  hasExpiration: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-t-box bg-error px-3 py-2 text-error-content">
+      <span className="text-xs font-semibold">{text}</span>
+      {hasExpiration && (
+        <span className="flex items-center gap-1 text-[0.6875rem] font-medium tabular-nums opacity-90">
+          <Clock className="h-3 w-3" />
+          <span>23h 59m left</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main component ─── */
 
 export function WhatsAppTemplatePreview({
@@ -378,6 +403,7 @@ export function WhatsAppTemplatePreview({
   language,
   sampleValues,
   authConfig,
+  limitedTimeOffer,
   className,
 }: WhatsAppTemplatePreviewProps) {
   const isAuth = category === "AUTHENTICATION";
@@ -422,15 +448,23 @@ export function WhatsAppTemplatePreview({
           sampleValues={sampleValues}
         />
       ) : (
-        <BubbleCard
-          headerType={headerType}
-          headerContent={headerContent}
-          headerPreviewUrl={headerPreviewUrl}
-          body={body}
-          footer={footer}
-          buttons={parsedButtons}
-          sampleValues={sampleValues}
-        />
+        <div className="space-y-0">
+          {limitedTimeOffer?.text?.trim() && (
+            <LtoBanner
+              text={limitedTimeOffer.text.trim()}
+              hasExpiration={limitedTimeOffer.hasExpiration !== false}
+            />
+          )}
+          <BubbleCard
+            headerType={headerType}
+            headerContent={headerContent}
+            headerPreviewUrl={headerPreviewUrl}
+            body={body}
+            footer={footer}
+            buttons={parsedButtons}
+            sampleValues={sampleValues}
+          />
+        </div>
       )}
     </div>
   );
@@ -467,6 +501,7 @@ export function WhatsAppTemplatePreviewFromVersion({
       carouselCards={cards}
       category={category}
       language={version.language}
+      limitedTimeOffer={version.limitedTimeOffer}
       className={className}
     />
   );

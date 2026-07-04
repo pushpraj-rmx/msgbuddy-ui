@@ -59,6 +59,7 @@ const HEADER_TYPES: TemplateHeaderType[] = [
 const META_TEMPLATE_BUTTON_LABEL_MAX = 25;
 /** COPY_CODE (coupon) sample-code limit — Meta coupon templates. */
 const COUPON_CODE_MAX = 20;
+const LTO_TEXT_MAX = 16;
 /** Carousel card body limit (Meta) — far tighter than the 1024 main body. */
 const CAROUSEL_CARD_BODY_MAX = 160;
 /** Meta header media caps, per type: image 5 MB, video 16 MB, document 100 MB. */
@@ -257,6 +258,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
 ) {
   const editable = !version.isLocked && !version.archivedAt;
   const isAuth = channelCategory === "AUTHENTICATION";
+  const isMarketing = channelCategory === "MARKETING";
   const updateMutation = useUpdateChannelTemplateVersion();
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -280,6 +282,10 @@ export const ChannelTemplateVersionEditor = forwardRef<
     Record<number, CarouselButtonRow[]>
   >({});
   const [allowCategoryChange, setAllowCategoryChange] = useState(true);
+  // MARKETING limited-time-offer (countdown) config. Enabled → a countdown offer leads the template.
+  const [ltoEnabled, setLtoEnabled] = useState(false);
+  const [ltoText, setLtoText] = useState("");
+  const [ltoHasExpiration, setLtoHasExpiration] = useState(true);
   // AUTHENTICATION-template config (Meta-fixed shape; no header/body/footer/buttons).
   const [authOtpType, setAuthOtpType] = useState<TemplateOtpType>("COPY_CODE");
   const [authButtonText, setAuthButtonText] = useState("Copy code");
@@ -361,6 +367,10 @@ export const ChannelTemplateVersionEditor = forwardRef<
       setCarouselUploadBusyByIndex({});
     }
     setAllowCategoryChange(version.allowCategoryChange !== false);
+    const lto = version.limitedTimeOffer ?? null;
+    setLtoEnabled(!!(lto && (lto.text || lto.hasExpiration)));
+    setLtoText(lto?.text ?? "");
+    setLtoHasExpiration(lto?.hasExpiration !== false);
     const ac = version.authConfig ?? null;
     setAuthOtpType(
       ac?.otpType === "ONE_TAP" || ac?.otpType === "ZERO_TAP" ? ac.otpType : "COPY_CODE"
@@ -387,6 +397,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
     version.carouselCards,
     version.allowCategoryChange,
     version.authConfig,
+    version.limitedTimeOffer,
   ]);
 
   // Meta restriction: carousel templates cannot be UTILITY. Auto switch category to MARKETING.
@@ -554,6 +565,11 @@ export const ChannelTemplateVersionEditor = forwardRef<
       parameterFormat,
       layoutType,
       allowCategoryChange,
+      // Limited-time offer: MARKETING-only. Persist null when disabled so clearing it sticks.
+      limitedTimeOffer:
+        isMarketing && ltoEnabled && ltoText.trim()
+          ? { text: ltoText.trim(), hasExpiration: ltoHasExpiration }
+          : null,
     };
 
     if (layoutType === "CAROUSEL") {
@@ -632,6 +648,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
       payload.variables = [];
       payload.carouselCards = null;
       payload.layoutType = "STANDARD";
+      payload.limitedTimeOffer = null;
     }
 
     try {
@@ -674,6 +691,10 @@ export const ChannelTemplateVersionEditor = forwardRef<
     version.version,
     updateMutation,
     allowCategoryChange,
+    isMarketing,
+    ltoEnabled,
+    ltoText,
+    ltoHasExpiration,
     isAuth,
     authOtpType,
     authButtonText,
@@ -711,6 +732,9 @@ export const ChannelTemplateVersionEditor = forwardRef<
       carouselCards,
       carouselButtonRowsByIndex,
       allowCategoryChange,
+      ltoEnabled,
+      ltoText,
+      ltoHasExpiration,
     });
 
     if (signature === lastAutoSavedSignatureRef.current) return;
@@ -751,6 +775,9 @@ export const ChannelTemplateVersionEditor = forwardRef<
     carouselCards,
     carouselButtonRowsByIndex,
     allowCategoryChange,
+    ltoEnabled,
+    ltoText,
+    ltoHasExpiration,
     onSave,
   ]);
 
@@ -796,6 +823,11 @@ export const ChannelTemplateVersionEditor = forwardRef<
         carouselCards={carouselForPreview}
         category={channelCategory}
         sampleValues={sampleValues}
+        limitedTimeOffer={
+          isMarketing && ltoEnabled && ltoText.trim()
+            ? { text: ltoText.trim(), hasExpiration: ltoHasExpiration }
+            : null
+        }
         authConfig={
           isAuth
             ? {
@@ -822,6 +854,10 @@ export const ChannelTemplateVersionEditor = forwardRef<
     carouselPreviewUrlsByIndex,
     channelCategory,
     sampleValues,
+    isMarketing,
+    ltoEnabled,
+    ltoText,
+    ltoHasExpiration,
     isAuth,
     authButtonText,
     authSecurityRec,
@@ -1391,6 +1427,70 @@ export const ChannelTemplateVersionEditor = forwardRef<
               placeholder="Optional short footer text"
             />
           </label>
+
+          {/* Limited-time offer (MARKETING only) */}
+          {isMarketing && (
+            <div className="space-y-2 rounded-box border border-base-300 bg-base-200 p-3">
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm mt-0.5"
+                  checked={ltoEnabled}
+                  disabled={!editable}
+                  onChange={(e) => setLtoEnabled(e.target.checked)}
+                />
+                <span>
+                  <span className="text-xs font-medium">Limited-time offer</span>
+                  <span className="block text-[0.6875rem] text-base-content/60">
+                    Lead the message with a countdown offer banner. Needs a copy-code or URL
+                    button; the footer must be empty.
+                  </span>
+                </span>
+              </label>
+              {ltoEnabled && (
+                <div className="space-y-2 pl-6">
+                  <label className="form-control w-full">
+                    <span className="label-text text-xs">
+                      Offer text{" "}
+                      <span className={charCounterClass(ltoText.length, LTO_TEXT_MAX)}>
+                        ({ltoText.length}/{LTO_TEXT_MAX})
+                      </span>
+                    </span>
+                    <input
+                      type="text"
+                      className="input input-bordered input-sm w-full"
+                      value={ltoText}
+                      maxLength={LTO_TEXT_MAX}
+                      disabled={!editable}
+                      onChange={(e) => setLtoText(e.target.value)}
+                      placeholder="e.g. 10% off today"
+                    />
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-sm"
+                      checked={ltoHasExpiration}
+                      disabled={!editable}
+                      onChange={(e) => setLtoHasExpiration(e.target.checked)}
+                    />
+                    <span className="text-xs">Show a live countdown to the offer&apos;s expiry</span>
+                  </label>
+                  {ltoHasExpiration && (
+                    <p className="text-[0.6875rem] text-base-content/60">
+                      Each send must supply an <code className="text-[0.625rem]">offer_expiration</code>{" "}
+                      variable (Unix timestamp in milliseconds).
+                    </p>
+                  )}
+                  {footer.trim() && (
+                    <p className="text-[0.6875rem] text-warning">
+                      Remove the footer — limited-time-offer templates don&apos;t support one.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Buttons */}
           <div className="space-y-2 rounded-box border border-base-300 bg-base-200 p-3">

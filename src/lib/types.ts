@@ -409,10 +409,20 @@ export type ChannelTemplateVersion = {
   carouselCards?: unknown;
   /** AUTHENTICATION templates only — fixed OTP shape (see TemplateAuthConfig). */
   authConfig?: TemplateAuthConfig | null;
+  /** MARKETING limited-time-offer templates only (see TemplateLimitedTimeOffer). */
+  limitedTimeOffer?: TemplateLimitedTimeOffer | null;
   createdAt?: string;
 };
 
 export type TemplateOtpType = "COPY_CODE" | "ONE_TAP" | "ZERO_TAP";
+
+/** MARKETING limited-time-offer (countdown) config. `expiration_time_ms` is supplied per send. */
+export type TemplateLimitedTimeOffer = {
+  /** Offer label, ≤16 chars (e.g. "10% off today"). */
+  text?: string;
+  /** When true, a live countdown to the offer's expiry is shown; requires `offer_expiration` at send. */
+  hasExpiration?: boolean;
+};
 
 export type TemplateAuthConfig = {
   otpType: TemplateOtpType;
@@ -440,6 +450,7 @@ export type ChannelTemplateVersionUpdatePayload = {
   carouselCards?: unknown[] | null;
   allowCategoryChange?: boolean;
   authConfig?: TemplateAuthConfig | null;
+  limitedTimeOffer?: TemplateLimitedTimeOffer | null;
 };
 
 export type ChannelTemplateVersionPayload = {
