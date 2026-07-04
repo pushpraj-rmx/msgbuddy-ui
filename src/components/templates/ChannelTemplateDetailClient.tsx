@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useChannelTemplateState,
@@ -24,7 +23,6 @@ import {
 import type {
   ChannelTemplateVersion,
   ChannelTemplateVersionPayload,
-  TemplateLimitedTimeOffer,
   TemplateQualityRating,
   TemplateVersionStatus,
 } from "@/lib/types";
@@ -421,13 +419,6 @@ export function ChannelTemplateDetailClient({
   const [syncFeedback, setSyncFeedback] = useState<{ type: "success" | "error" | "warning"; message: string } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // Seed hints from the create screen (`?type=<preset>&lang=<code>`). Applied only
-  // to the very first version so the editor opens already configured for the
-  // chosen template type. Ignored once any version exists.
-  const searchParams = useSearchParams();
-  const seedType = searchParams.get("type");
-  const seedLang = searchParams.get("lang");
-
   const queryClient = useQueryClient();
 
   const stateQuery = useChannelTemplateState(channelTemplateId, {
@@ -639,13 +630,10 @@ export function ChannelTemplateDetailClient({
   }, [currentCategory, channelTemplateId, updateChannelTemplateMutation]);
 
   const onCreate = useCallback(() => {
-    // `limitedTimeOffer` isn't part of the create payload type but the backend
-    // accepts it (see the update payload) — widen locally so the LTO preset can
-    // seed it without an extra round-trip.
-    type SeededPayload = ChannelTemplateVersionPayload & {
-      limitedTimeOffer?: TemplateLimitedTimeOffer;
-    };
-    const payload: SeededPayload = version
+    // Subsequent versions clone the selected one. (The very first version is
+    // auto-created + type-seeded by the backend on channel add, so this "Create
+    // version" path only ever clones — the no-version fallback is defensive.)
+    const payload: ChannelTemplateVersionPayload = version
       ? {
           // Clone the currently selected version as a starting point. (Auth templates have an
           // empty body, so we key off `version` existing — not `version.body` — and carry
@@ -663,35 +651,14 @@ export function ChannelTemplateDetailClient({
           allowCategoryChange: version.allowCategoryChange !== false,
           authConfig: version.authConfig ?? null,
         }
-      : (() => {
-          // First version — seed from the create-screen preset (`seedType`) so the
-          // editor opens configured. Only the first version gets seeded.
-          const base: SeededPayload = {
-            body: seedType === "authentication" ? "" : "Hello {{1}}",
-            headerType: "NONE",
-            language: seedLang?.trim() || "en",
-            parameterFormat: "POSITIONAL",
-            allowCategoryChange: true,
-          };
-          switch (seedType) {
-            case "media":
-              return { ...base, headerType: "IMAGE" };
-            case "carousel":
-              return { ...base, layoutType: "CAROUSEL" };
-            case "coupon":
-              return { ...base, buttons: [{ type: "COPY_CODE", example: "" }] };
-            case "catalog":
-              return { ...base, buttons: [{ type: "CATALOG", text: "View catalog" }] };
-            case "flow":
-              return { ...base, buttons: [{ type: "FLOW", text: "", flow_action: "NAVIGATE" }] };
-            case "lto":
-              return { ...base, limitedTimeOffer: { text: "", hasExpiration: true } };
-            case "authentication":
-              return { ...base, authConfig: { otpType: "COPY_CODE" } };
-            default:
-              return base;
-          }
-        })();
+      : {
+          // First version default (defensive — the backend normally seeds v1).
+          body: "Hello {{1}}",
+          headerType: "NONE",
+          language: "en",
+          parameterFormat: "POSITIONAL",
+          allowCategoryChange: true,
+        };
     createMutation.mutate(
       { id: channelTemplateId, data: payload },
       {
@@ -701,7 +668,7 @@ export function ChannelTemplateDetailClient({
         },
       }
     );
-  }, [createMutation, channelTemplateId, version, seedType, seedLang]);
+  }, [createMutation, channelTemplateId, version]);
 
   const onActivate = useCallback(() => {
     if (!version) return;

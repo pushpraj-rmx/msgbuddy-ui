@@ -1022,7 +1022,7 @@ export const templatesApi = {
   },
   addWhatsApp: async (
     id: string,
-    data?: { category?: TemplateCategory }
+    data?: { category?: TemplateCategory; type?: string; language?: string }
   ): Promise<{ id: string; templateId: string; channel: string }> => {
     const response = await api.post(endpoints.templates.addWhatsApp(id), data ?? {});
     return response.data as { id: string; templateId: string; channel: string };

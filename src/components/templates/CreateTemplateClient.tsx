@@ -124,16 +124,18 @@ export function CreateTemplateClient() {
     setError(null);
     try {
       const template = await templatesApi.create({ name: trimmed });
+      // The backend auto-creates the first version; pass the type preset + language so
+      // it's seeded (e.g. carousel → CAROUSEL layout) and the editor opens configured.
       const channel = await templatesApi.addWhatsApp(template.id, {
         category: effectiveCategory,
+        type: preset,
+        language,
       });
       // Raw API (not a mutation hook), so refresh the list/limits ourselves — otherwise the
       // new draft is missing when the user returns to the templates list.
       void queryClient.invalidateQueries({ queryKey: templateKeys.lists() });
       void queryClient.invalidateQueries({ queryKey: templateKeys.limits() });
-      // Thread the chosen preset + language so the editor seeds the first version.
-      const params = new URLSearchParams({ type: preset, lang: language });
-      router.replace(`/channel-templates/${channel.id}?${params.toString()}`);
+      router.replace(`/channel-templates/${channel.id}`);
     } catch (err) {
       setSubmitting(false);
       setError(getApiError(err) || "Failed to create template.");
