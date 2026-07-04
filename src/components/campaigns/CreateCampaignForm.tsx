@@ -14,6 +14,7 @@ import { InfoTip } from "@/components/ui/InfoTip";
 import { WhatsAppTemplatePreviewFromVersion } from "@/components/templates/WhatsAppTemplatePreview";
 import { TemplateValueField } from "@/components/templates/TemplateValueField";
 import { variableKeyLabel, variableInputKind } from "@/lib/template-variables";
+import { getWaCategory } from "@/lib/templateCategory";
 import { useRightPanel } from "@/components/right-panel/RightPanelProvider";
 
 export type CampaignCreateTemplate = {
@@ -23,6 +24,7 @@ export type CampaignCreateTemplate = {
     id: string;
     channel: string;
     deletedAt?: string | null;
+    category?: string | null;
   }>;
 };
 
@@ -103,6 +105,11 @@ export function CreateCampaignForm({
   initialCampaign?: CampaignDraftSeed;
 }) {
   const router = useRouter();
+  // Campaigns may only use MARKETING templates (Meta rules); hide UTILITY/AUTH.
+  const visibleTemplates = useMemo(
+    () => templates.filter((t) => getWaCategory(t.channelTemplates) === "MARKETING"),
+    [templates],
+  );
   const [step, setStep] = useState(1);
   const [name, setName] = useState<string>(initialCampaign?.name ?? "");
   const [description, setDescription] = useState<string>(
@@ -824,25 +831,25 @@ export function CreateCampaignForm({
                   className="select select-bordered w-full"
                   value={templateId || ""}
                   onChange={(event) => setTemplateId(event.target.value || null)}
-                  disabled={templates.length === 0}
+                  disabled={visibleTemplates.length === 0}
                 >
                   <option value="">
-                    {templates.length === 0
-                      ? "No approved WhatsApp templates"
+                    {visibleTemplates.length === 0
+                      ? "No approved Marketing templates"
                       : "Select a message"}
                   </option>
-                  {templates.map((template) => (
+                  {visibleTemplates.map((template) => (
                     <option key={template.id} value={template.id}>
                       {template.name}
                     </option>
                   ))}
                 </select>
               </label>
-              {templates.length === 0 && (
+              {visibleTemplates.length === 0 && (
                 <p className="text-sm text-base-content/60">
-                  Only templates with a live WhatsApp-approved version appear
-                  here. Submit & approve a version under Templates, then try
-                  again.
+                  Campaigns use <strong>Marketing</strong> templates with a live
+                  WhatsApp-approved version. Create/approve one under Templates,
+                  then try again.
                 </p>
               )}
               {templateId && !canUseSelectedTemplate && (

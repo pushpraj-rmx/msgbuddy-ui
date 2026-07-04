@@ -33,6 +33,7 @@ import {
   CONTACT_LIFECYCLE_STAGES,
   type ContactLifecycleStage,
 } from "@/lib/types";
+import { getWaCategory } from "@/lib/templateCategory";
 import { EmptyState, ErrorState } from "@/components/ui/states";
 import { MessageBubble } from "@/components/inbox/MessageBubble";
 import { MessageStatusIcon } from "@/components/inbox/MessageStatusIcon";
@@ -364,6 +365,16 @@ export function InboxClient({
   const [templateListFetched, setTemplateListFetched] = useState(false);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [templateOptions, setTemplateOptions] = useState<Template[]>([]);
+  // Manual send may only use MARKETING + UTILITY templates; hide AUTHENTICATION
+  // (OTP/auth templates aren't for manual sends — Meta usage alignment).
+  const visibleTemplateOptions = useMemo(
+    () =>
+      templateOptions.filter((t) => {
+        const c = getWaCategory(t.channelTemplates);
+        return c === "MARKETING" || c === "UTILITY";
+      }),
+    [templateOptions],
+  );
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [selectedTemplateVersion, setSelectedTemplateVersion] = useState<{
     id: string;
@@ -4061,7 +4072,7 @@ export function InboxClient({
                                   disabled={templatesLoading}
                                 >
                                   <option value="">Select template</option>
-                                  {templateOptions.map((template) => (
+                                  {visibleTemplateOptions.map((template) => (
                                     <option key={template.id} value={template.id}>
                                       {template.name}
                                     </option>
@@ -4822,7 +4833,7 @@ export function InboxClient({
                           aria-label="Template"
                         >
                           <option value="">Select template</option>
-                          {templateOptions.map((template) => (
+                          {visibleTemplateOptions.map((template) => (
                             <option key={template.id} value={template.id}>
                               {template.name}
                             </option>
