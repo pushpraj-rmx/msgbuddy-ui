@@ -71,9 +71,16 @@ const HEADER_MEDIA_MAX_BYTES_BY_TYPE: Record<string, number> = {
 /** Largest header media cap (document); used where the type isn't known up front. */
 const HEADER_MEDIA_MAX_BYTES = HEADER_MEDIA_MAX_BYTES_BY_TYPE.DOCUMENT;
 
-// COPY_CODE (coupon) is valid only on STANDARD templates — Meta doesn't allow it
-// in carousel cards, so the standard button editor offers it but the carousel one doesn't.
-type CarouselButtonUiType = "QUICK_REPLY" | "URL" | "PHONE_NUMBER" | "COPY_CODE";
+// COPY_CODE (coupon), CATALOG and FLOW are valid only on STANDARD templates — Meta
+// doesn't allow them in carousel cards, so the standard button editor offers them but
+// the carousel one doesn't.
+type CarouselButtonUiType =
+  | "QUICK_REPLY"
+  | "URL"
+  | "PHONE_NUMBER"
+  | "COPY_CODE"
+  | "CATALOG"
+  | "FLOW";
 
 type CarouselButtonRow = {
   id: string;
@@ -83,6 +90,12 @@ type CarouselButtonRow = {
   phone_number: string;
   /** COPY_CODE only: sample coupon code (Meta `example`), ≤20 chars. */
   example: string;
+  /** FLOW only: published Flow ID from Meta Flows. */
+  flowId: string;
+  /** FLOW only: NAVIGATE or DATA_EXCHANGE. */
+  flowAction: "NAVIGATE" | "DATA_EXCHANGE";
+  /** FLOW only (NAVIGATE): target screen id. */
+  navigateScreen: string;
 };
 
 function newCarouselButtonRowId(): string {
@@ -100,6 +113,9 @@ function defaultCarouselButtonRow(): CarouselButtonRow {
     url: "",
     phone_number: "",
     example: "",
+    flowId: "",
+    flowAction: "NAVIGATE",
+    navigateScreen: "",
   };
 }
 
@@ -112,47 +128,51 @@ function rowsFromApiButtons(raw: unknown): CarouselButtonRow[] {
     const btn = rawBtn as Record<string, unknown>;
     const type = String(btn.type ?? "QUICK_REPLY").toUpperCase();
     const text = String(btn.text ?? "");
-    const id = newCarouselButtonRowId();
+    const base = { ...defaultCarouselButtonRow(), text };
     if (type === "URL") {
-      return {
-        id,
-        type: "URL",
-        text,
-        url: String(btn.url ?? ""),
-        phone_number: "",
-        example: "",
-      };
+      return { ...base, type: "URL" as const, url: String(btn.url ?? "") };
     }
     if (type === "PHONE_NUMBER" || type === "PHONE") {
       return {
-        id,
-        type: "PHONE_NUMBER",
-        text,
-        url: "",
-        phone_number: String(
-          (btn as { phone_number?: string }).phone_number ?? ""
-        ),
-        example: "",
+        ...base,
+        type: "PHONE_NUMBER" as const,
+        phone_number: String((btn as { phone_number?: string }).phone_number ?? ""),
       };
     }
     if (type === "COPY_CODE") {
       return {
-        id,
-        type: "COPY_CODE",
+        ...base,
+        type: "COPY_CODE" as const,
         text: "",
-        url: "",
-        phone_number: "",
-        example: String((btn as { example?: string; code?: string }).example ?? (btn as { code?: string }).code ?? ""),
+        example: String(
+          (btn as { example?: string; code?: string }).example ??
+            (btn as { code?: string }).code ??
+            ""
+        ),
       };
     }
-    return {
-      id,
-      type: "QUICK_REPLY",
-      text,
-      url: "",
-      phone_number: "",
-      example: "",
-    };
+    if (type === "CATALOG") {
+      return { ...base, type: "CATALOG" as const, text: text || "View catalog" };
+    }
+    if (type === "FLOW") {
+      const b = btn as {
+        flow_id?: string;
+        flowId?: string;
+        flow_action?: string;
+        flowAction?: string;
+        navigate_screen?: string;
+        navigateScreen?: string;
+      };
+      const action = String(b.flow_action ?? b.flowAction ?? "NAVIGATE").toUpperCase();
+      return {
+        ...base,
+        type: "FLOW" as const,
+        flowId: String(b.flow_id ?? b.flowId ?? ""),
+        flowAction: action === "DATA_EXCHANGE" ? "DATA_EXCHANGE" : "NAVIGATE",
+        navigateScreen: String(b.navigate_screen ?? b.navigateScreen ?? ""),
+      };
+    }
+    return { ...base, type: "QUICK_REPLY" as const, text };
   });
 }
 
@@ -171,6 +191,21 @@ function rowsToApiButtons(rows: CarouselButtonRow[]): unknown[] {
     }
     if (r.type === "COPY_CODE") {
       return { type: "COPY_CODE", example: r.example.trim() };
+    }
+    if (r.type === "CATALOG") {
+      return { type: "CATALOG", text: tidyWhitespace(r.text) || "View catalog" };
+    }
+    if (r.type === "FLOW") {
+      const flow: Record<string, unknown> = {
+        type: "FLOW",
+        text: tidyWhitespace(r.text),
+        flow_id: r.flowId.trim(),
+        flow_action: r.flowAction,
+      };
+      if (r.flowAction === "NAVIGATE" && r.navigateScreen.trim()) {
+        flow.navigate_screen = r.navigateScreen.trim();
+      }
+      return flow;
     }
     return { type: "QUICK_REPLY", text: tidyWhitespace(r.text) };
   });
@@ -1527,7 +1562,13 @@ export const ChannelTemplateVersionEditor = forwardRef<
                             if (t !== "URL") cur.url = "";
                             if (t !== "PHONE_NUMBER") cur.phone_number = "";
                             if (t !== "COPY_CODE") cur.example = "";
+                            if (t !== "FLOW") {
+                              cur.flowId = "";
+                              cur.navigateScreen = "";
+                            }
                             if (t === "COPY_CODE") cur.text = ""; // Meta fixes the label
+                            if (t === "CATALOG" && !cur.text.trim())
+                              cur.text = "View catalog";
                             next[bi] = cur;
                             setButtonsJson(
                               JSON.stringify(rowsToApiButtons(next), null, 2)
@@ -1540,6 +1581,10 @@ export const ChannelTemplateVersionEditor = forwardRef<
                         <option value="URL">Visit website (URL)</option>
                         <option value="PHONE_NUMBER">Call phone number</option>
                         <option value="COPY_CODE">Copy code (coupon)</option>
+                        {!isAuth && <option value="FLOW">Open a Flow</option>}
+                        {isMarketing && (
+                          <option value="CATALOG">View catalog</option>
+                        )}
                       </select>
                     </label>
 
@@ -1670,6 +1715,98 @@ export const ChannelTemplateVersionEditor = forwardRef<
                         placeholder="+15551234567"
                       />
                     </label>
+                  )}
+
+                  {row.type === "CATALOG" && (
+                    <p className="text-xs text-base-content/50">
+                      Opens the product catalog connected to this WhatsApp account. No
+                      extra setup here — Meta uses your connected catalog.
+                    </p>
+                  )}
+
+                  {row.type === "FLOW" && (
+                    <div className="space-y-2">
+                      <label className="form-control w-full">
+                        <span className="label-text text-xs">Flow ID</span>
+                        <input
+                          type="text"
+                          className="input input-bordered input-xs w-full font-mono text-xs"
+                          value={row.flowId}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setStandardButtonRows((prev) => {
+                              if (!prev) return prev;
+                              const next = [...prev];
+                              next[bi] = { ...next[bi], flowId: v };
+                              setButtonsJson(
+                                JSON.stringify(rowsToApiButtons(next), null, 2)
+                              );
+                              return next;
+                            });
+                          }}
+                          placeholder="Published Flow ID from Meta Flows"
+                        />
+                        <span className="mt-0.5 text-xs text-base-content/50">
+                          Create + publish the Flow in Meta first, then paste its ID here.
+                        </span>
+                      </label>
+                      <div className="flex flex-wrap gap-2">
+                        <label className="form-control min-w-[150px] flex-1">
+                          <span className="label-text text-xs">On tap</span>
+                          <select
+                            className="select select-bordered select-xs w-full"
+                            value={row.flowAction}
+                            onChange={(e) => {
+                              const v = e.target.value as
+                                | "NAVIGATE"
+                                | "DATA_EXCHANGE";
+                              setStandardButtonRows((prev) => {
+                                if (!prev) return prev;
+                                const next = [...prev];
+                                next[bi] = {
+                                  ...next[bi],
+                                  flowAction: v,
+                                  navigateScreen:
+                                    v === "NAVIGATE" ? next[bi].navigateScreen : "",
+                                };
+                                setButtonsJson(
+                                  JSON.stringify(rowsToApiButtons(next), null, 2)
+                                );
+                                return next;
+                              });
+                            }}
+                          >
+                            <option value="NAVIGATE">Open a screen (navigate)</option>
+                            <option value="DATA_EXCHANGE">
+                              Data exchange (endpoint)
+                            </option>
+                          </select>
+                        </label>
+                        {row.flowAction === "NAVIGATE" && (
+                          <label className="form-control min-w-[150px] flex-1">
+                            <span className="label-text text-xs">Target screen</span>
+                            <input
+                              type="text"
+                              className="input input-bordered input-xs w-full font-mono text-xs"
+                              value={row.navigateScreen}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setStandardButtonRows((prev) => {
+                                  if (!prev) return prev;
+                                  const next = [...prev];
+                                  next[bi] = { ...next[bi], navigateScreen: v };
+                                  setButtonsJson(
+                                    JSON.stringify(rowsToApiButtons(next), null, 2)
+                                  );
+                                  return next;
+                                });
+                              }}
+                              placeholder="e.g. WELCOME_SCREEN"
+                            />
+                          </label>
+                        )}
+                      </div>
+                    </div>
                   )}
                 </div>
               ))}

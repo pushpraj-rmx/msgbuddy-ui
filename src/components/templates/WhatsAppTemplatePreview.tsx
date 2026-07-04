@@ -110,6 +110,7 @@ const BUTTON_DEFAULT_LABEL: Record<string, string> = {
   OTP: "Copy code",
   CATALOG: "View catalog",
   MPM: "View items",
+  FLOW: "Open",
 };
 
 /* ─── Sub-components ─── */
