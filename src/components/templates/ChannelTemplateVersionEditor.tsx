@@ -443,6 +443,22 @@ export const ChannelTemplateVersionEditor = forwardRef<
     // eslint-disable-next-line react-hooks/exhaustive-deps -- callback ref intentionally excluded to prevent infinite loop
   }, [layoutType, channelCategory]);
 
+  // A carousel always needs ≥2 cards. New carousel templates are seeded server-side,
+  // but switching an existing template's layout to CAROUSEL leaves it empty — seed the
+  // starter pair so the user never faces an invalid zero-card carousel.
+  useEffect(() => {
+    if (layoutType !== "CAROUSEL") return;
+    if (carouselCards.length > 0) return;
+    const starter = starterCarouselCards(2);
+    setCarouselCards(starter);
+    const br: Record<number, CarouselButtonRow[]> = {};
+    for (let i = 0; i < starter.length; i++) {
+      br[i] = rowsFromApiButtons(starter[i]?.buttons);
+    }
+    setCarouselButtonRowsByIndex(br);
+    setCarouselJson(JSON.stringify(starter, null, 2));
+  }, [layoutType, carouselCards.length]);
+
   /** Ensure each card index has button row state (avoids unstable fallbacks on every render). */
   useEffect(() => {
     if (layoutType !== "CAROUSEL") return;
@@ -1868,22 +1884,6 @@ export const ChannelTemplateVersionEditor = forwardRef<
             <div className="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => {
-                  const starter = starterCarouselCards(2);
-                  setCarouselCards(starter);
-                  const br: Record<number, CarouselButtonRow[]> = {};
-                  for (let i = 0; i < starter.length; i++) {
-                    br[i] = rowsFromApiButtons(starter[i]?.buttons);
-                  }
-                  setCarouselButtonRowsByIndex(br);
-                  setCarouselJson(JSON.stringify(starter, null, 2));
-                }}
-              >
-                Starter 2 cards
-              </button>
-              <button
-                type="button"
                 className="btn btn-primary btn-sm"
                 disabled={carouselCards.length >= 10}
                 title={carouselCards.length >= 10 ? "Maximum 10 cards (Meta limit)" : undefined}
@@ -1915,8 +1915,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
 
           {carouselCards.length === 0 ? (
             <div className="rounded-box border border-dashed border-base-300 bg-base-100 p-4 text-sm text-base-content/60">
-              No cards yet. Click <span className="font-medium">Starter 2 cards</span> or{" "}
-              <span className="font-medium">Add card</span>.
+              Setting up the starter cards…
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
