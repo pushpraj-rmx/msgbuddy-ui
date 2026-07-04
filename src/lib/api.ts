@@ -51,6 +51,11 @@ import type {
   FeedbackType,
   FeedbackPriority,
   FeedbackAttachment,
+  CommerceCredentialStatus,
+  ProductCatalog,
+  CatalogProduct,
+  ProductSyncLog,
+  CommerceProductsResponse,
 } from "./types";
 
 export type {
@@ -1054,6 +1059,77 @@ export const templatesApi = {
     const response = await api.post(endpoints.templates.metaImport, {
       providerTemplateIds,
     });
+    return response.data;
+  },
+};
+
+export const commerceApi = {
+  getCredentialStatus: async (): Promise<CommerceCredentialStatus> => {
+    const response = await api.get<CommerceCredentialStatus>(
+      endpoints.commerce.credential
+    );
+    return response.data;
+  },
+  connectCredential: async (data: {
+    accessToken: string;
+    businessId?: string;
+  }): Promise<CommerceCredentialStatus> => {
+    const response = await api.post<CommerceCredentialStatus>(
+      endpoints.commerce.credential,
+      data
+    );
+    return response.data;
+  },
+  disconnectCredential: async (): Promise<CommerceCredentialStatus> => {
+    const response = await api.delete<CommerceCredentialStatus>(
+      endpoints.commerce.credential
+    );
+    return response.data;
+  },
+  listCatalogs: async (): Promise<ProductCatalog[]> => {
+    const response = await api.get<ProductCatalog[]>(endpoints.commerce.catalogs);
+    return response.data;
+  },
+  refreshCatalogs: async (): Promise<ProductCatalog[]> => {
+    const response = await api.post<ProductCatalog[]>(
+      endpoints.commerce.refreshCatalogs
+    );
+    return response.data;
+  },
+  connectCatalog: async (id: string): Promise<ProductCatalog> => {
+    const response = await api.post<ProductCatalog>(
+      endpoints.commerce.connectCatalog(id)
+    );
+    return response.data;
+  },
+  syncCatalog: async (id: string): Promise<ProductCatalog> => {
+    const response = await api.post<ProductCatalog>(
+      endpoints.commerce.syncCatalog(id)
+    );
+    return response.data;
+  },
+  catalogSyncLogs: async (id: string): Promise<ProductSyncLog[]> => {
+    const response = await api.get<ProductSyncLog[]>(
+      endpoints.commerce.catalogSyncLogs(id)
+    );
+    return response.data;
+  },
+  listProducts: async (params?: {
+    catalogId?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<CommerceProductsResponse> => {
+    const response = await api.get<CommerceProductsResponse>(
+      endpoints.commerce.products,
+      { params }
+    );
+    return response.data;
+  },
+  getProduct: async (id: string): Promise<CatalogProduct> => {
+    const response = await api.get<CatalogProduct>(
+      endpoints.commerce.productById(id)
+    );
     return response.data;
   },
 };

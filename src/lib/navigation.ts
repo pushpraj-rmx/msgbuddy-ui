@@ -2,15 +2,18 @@ import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
   Bell,
+  Boxes,
   FileText,
   Home,
   Image,
   Layers,
   ListChecks,
   MessageSquare,
+  Package,
   RefreshCw,
   Rocket,
   Settings,
+  ShoppingBag,
   Terminal,
   Users,
   Workflow,
@@ -18,6 +21,7 @@ import {
 import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
 import {
   canAccessCampaigns,
+  canAccessCommerce,
   canAccessFlows,
   canAccessRecurring,
   canAccessUsagePage,
@@ -51,6 +55,16 @@ export function getAppNav(
     { href: "/subscriptions", label: "Subscriptions", Icon: RefreshCw },
     { href: "/flows", label: "Flows", Icon: Workflow },
     { href: "/templates", label: "Templates", Icon: FileText, showInDock: true },
+    {
+      href: "/commerce/catalogs",
+      label: "Commerce",
+      Icon: ShoppingBag,
+      children: [
+        { href: "/commerce/catalogs", label: "Catalogs", Icon: Boxes },
+        { href: "/commerce/products", label: "Products", Icon: Package },
+        { href: "/commerce/settings", label: "Settings", Icon: Settings },
+      ],
+    },
     { href: "/tasks", label: "Tasks", Icon: ListChecks },
     { href: "/media", label: "Media", Icon: Image },
     { href: "/notifications", label: "Notifications", Icon: Bell },
@@ -82,6 +96,7 @@ export function getAppNav(
       if (item.href === "/subscriptions" && !canAccessRecurring(wr)) return false;
       if (item.href === "/flows" && !canAccessFlows(wr)) return false;
       if (item.href === "/templates" && !canViewTemplates(wr)) return false;
+      if (item.href === "/commerce/catalogs" && !canAccessCommerce(wr)) return false;
       if (item.href === "/usage" && !canAccessUsagePage(wr)) return false;
       return true;
     });
@@ -104,6 +119,10 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/subscriptions")) return "Subscriptions";
   if (pathname.startsWith("/flows")) return "Flows";
   if (pathname.startsWith("/templates")) return "Templates";
+  if (pathname.startsWith("/commerce/catalogs")) return "Catalogs";
+  if (pathname.startsWith("/commerce/products")) return "Products";
+  if (pathname.startsWith("/commerce/settings")) return "Commerce settings";
+  if (pathname.startsWith("/commerce")) return "Commerce";
   if (pathname.startsWith("/tasks")) return "Tasks";
   if (pathname.startsWith("/media")) return "Media";
   if (pathname.startsWith("/settings/integrations/whatsapp")) return "WhatsApp";

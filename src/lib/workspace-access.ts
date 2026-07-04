@@ -3,6 +3,8 @@
  * (msgbuddy-v2/src/auth/permissions.ts). Keep wire strings in sync when roles change.
  */
 
+import { roleHasWorkspacePermission } from "./workspace-role-permissions";
+
 function R(workspaceRole: string): string {
   return String(workspaceRole).toUpperCase();
 }
@@ -54,6 +56,15 @@ export function canAccessBillingPage(workspaceRole: string): boolean {
 export function canAccessRecurring(workspaceRole: string): boolean {
   const r = R(workspaceRole);
   return r === "OWNER" || r === "ADMIN";
+}
+
+/**
+ * Commerce — Meta product catalogs mirrored for WhatsApp. Gated by `commerce.view`
+ * on the API → OWNER, ADMIN, SUPERVISOR, AGENT, AUDITOR (everyone but VIEWER).
+ * Catalog management (connect / sync / credential) additionally needs `commerce.manage`.
+ */
+export function canAccessCommerce(workspaceRole: string): boolean {
+  return roleHasWorkspacePermission(R(workspaceRole), "commerce.view");
 }
 
 /** Workspace hard-delete — OWNER only (product rule; ADMIN is excluded intentionally). */

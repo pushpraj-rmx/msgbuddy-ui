@@ -846,3 +846,79 @@ export type PaginatedFeedbackResponse = {
   page: number;
   limit: number;
 };
+
+// ─── Commerce (Meta product catalogs mirrored for WhatsApp) ───────────────────
+
+/** Mirror sync state of a catalog's products. Keep in sync with backend. */
+export type ProductCatalogSyncStatus =
+  | "NEVER_SYNCED"
+  | "SYNCING"
+  | "SYNCED"
+  | "ERROR";
+
+/** A Meta product catalog surfaced via the workspace's System User credential. */
+export type ProductCatalog = {
+  id: string;
+  metaCatalogId: string;
+  name: string;
+  vertical?: string | null;
+  productCount: number;
+  feedCount: number;
+  connectedToWaba: boolean;
+  syncStatus: ProductCatalogSyncStatus;
+  lastSyncedAt?: string | null;
+  createdAt?: string;
+};
+
+/** A single product mirrored from a Meta catalog. Money fields are strings. */
+export type CatalogProduct = {
+  id: string;
+  catalogId: string;
+  retailerId: string;
+  name: string;
+  description?: string | null;
+  price?: string | null;
+  currency?: string | null;
+  availability: string;
+  condition?: string | null;
+  imageUrl?: string | null;
+  additionalImageUrls?: string[];
+  url?: string | null;
+  brand?: string | null;
+  category?: string | null;
+  visibility: string;
+  reviewStatus?: string | null;
+  inventory?: number | null;
+  updatedAt?: string;
+};
+
+/** Audit record for a catalog product-mirror sync run. */
+export type ProductSyncLog = {
+  id: string;
+  kind: string;
+  status: string;
+  createdCount: number;
+  updatedCount: number;
+  deletedCount: number;
+  failedCount: number;
+  error?: string | null;
+  startedAt: string;
+  finishedAt?: string | null;
+};
+
+/** GET /commerce/credential — connection state for the catalog System User token. */
+export type CommerceCredentialStatus = {
+  connected: boolean;
+  status: "PENDING" | "CONNECTED" | "ERROR" | "DISCONNECTED";
+  businessId: string | null;
+  lastVerifiedAt: string | null;
+  lastError: string | null;
+};
+
+/** GET /commerce/products — offset-paginated product mirror. */
+export type CommerceProductsResponse = {
+  items: CatalogProduct[];
+  total: number;
+  page: number;
+  limit: number;
+};

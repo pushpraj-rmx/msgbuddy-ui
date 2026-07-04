@@ -427,4 +427,15 @@ export const endpoints = {
     byId: (id: string) => `${P}/feedback/${id}`,
     vote: (id: string) => `${P}/feedback/${id}/vote`,
   },
+  /** Commerce — Meta product catalogs mirrored for WhatsApp. */
+  commerce: {
+    credential: `${P}/commerce/credential`,
+    catalogs: `${P}/commerce/catalogs`,
+    refreshCatalogs: `${P}/commerce/catalogs/refresh`,
+    connectCatalog: (id: string) => `${P}/commerce/catalogs/${id}/connect`,
+    syncCatalog: (id: string) => `${P}/commerce/catalogs/${id}/sync`,
+    catalogSyncLogs: (id: string) => `${P}/commerce/catalogs/${id}/sync-logs`,
+    products: `${P}/commerce/products`,
+    productById: (id: string) => `${P}/commerce/products/${id}`,
+  },
 };

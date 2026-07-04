@@ -34,6 +34,8 @@ const OWNER_PERMISSIONS: readonly string[] = [
   "automations.manage",
   "tasks.view",
   "tasks.manage",
+  "commerce.view",
+  "commerce.manage",
 ];
 
 const ADMIN_PERMISSIONS: readonly string[] = [...OWNER_PERMISSIONS];
@@ -55,6 +57,7 @@ const SUPERVISOR_PERMISSIONS: readonly string[] = [
   "members.view",
   "tasks.view",
   "tasks.manage",
+  "commerce.view",
 ];
 
 const AGENT_PERMISSIONS: readonly string[] = [
@@ -70,6 +73,7 @@ const AGENT_PERMISSIONS: readonly string[] = [
   "templates.view",
   "tasks.view",
   "tasks.manage",
+  "commerce.view",
 ];
 
 const AUDITOR_PERMISSIONS: readonly string[] = [
@@ -83,6 +87,7 @@ const AUDITOR_PERMISSIONS: readonly string[] = [
   "analytics.export",
   "members.view",
   "tasks.view",
+  "commerce.view",
 ];
 
 const VIEWER_PERMISSIONS: readonly string[] = [
