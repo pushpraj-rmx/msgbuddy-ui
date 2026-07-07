@@ -113,7 +113,7 @@ export function Topbar({
   }, [mobileSearchOpen]);
 
   return (
-    <header className="sticky top-0 z-10 relative flex min-h-15 shrink-0 items-center border-b border-base-300 pt-[env(safe-area-inset-top,0px)]">
+    <header className="sticky top-0 z-20 relative flex min-h-15 shrink-0 items-center border-b border-base-300 pt-[env(safe-area-inset-top,0px)]">
       {/* Mobile hamburger */}
       <div className="flex shrink-0 items-center px-4 lg:hidden">
         <label
