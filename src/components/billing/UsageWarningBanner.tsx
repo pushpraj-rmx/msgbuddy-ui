@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import { usageApi } from "@/lib/api";
 
 type UsageWithLimits = {
+  limitsEnforced?: boolean;
   limits?: {
     messages?: {
       current?: number;
@@ -58,6 +59,8 @@ export function UsageWarningBanner() {
   }, []);
 
   if (dismissed) return null;
+  // Enforcement off → everyone is unlimited, so there is no quota to warn about.
+  if (data && data.limitsEnforced === false) return null;
   const m = data?.limits?.messages;
   const limit = m?.limit ?? 0;
   const current = m?.current ?? 0;

@@ -26,6 +26,7 @@ type LimitSlice = {
 };
 
 type UsageWithLimitsResponse = {
+  limitsEnforced?: boolean;
   usage: UsageSummary;
   limits: {
     messages: LimitSlice;
@@ -73,10 +74,12 @@ function QuotaBlock({
   title,
   slice,
   subtitle,
+  enforced,
 }: {
   title: string;
   slice: LimitSlice;
   subtitle?: string;
+  enforced: boolean;
 }) {
   const pct = Math.min(100, Math.max(0, slice.percentUsed));
 
@@ -89,23 +92,33 @@ function QuotaBlock({
             <p className="mt-0.5 text-xs text-base-content/60">{subtitle}</p>
           ) : null}
         </div>
-        <span className={`shrink-0 ${pct >= 100 ? "op-tag op-tag-danger" : pct >= 90 ? "op-tag op-tag-warn" : "op-tag"}`}>
-          {pct}%
-        </span>
+        {enforced ? (
+          <span className={`shrink-0 ${pct >= 100 ? "op-tag op-tag-danger" : pct >= 90 ? "op-tag op-tag-warn" : "op-tag"}`}>
+            {pct}%
+          </span>
+        ) : (
+          <span className="op-tag shrink-0">Unlimited</span>
+        )}
       </div>
       <p className="mt-3 tabular-nums text-2xl font-semibold tracking-tight text-base-content">
         {slice.current}
-        <span className="text-base font-normal text-base-content/50"> / {slice.limit}</span>
+        <span className="text-base font-normal text-base-content/50"> used</span>
       </p>
-      <p className="text-xs text-base-content/60">
-        {slice.remaining} remaining this period
-      </p>
-      <div className="mt-3 h-2 w-full overflow-hidden rounded-sm bg-base-300">
-        <div
-          className={`h-full ${progressBarColor(pct)} transition-[width] duration-300`}
-          style={{ width: `${Math.min(100, pct)}%` }}
-        />
-      </div>
+      {enforced ? (
+        <>
+          <p className="text-xs text-base-content/60">
+            {slice.remaining} remaining this period
+          </p>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-sm bg-base-300">
+            <div
+              className={`h-full ${progressBarColor(pct)} transition-[width] duration-300`}
+              style={{ width: `${Math.min(100, pct)}%` }}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="text-xs text-base-content/60">this billing month</p>
+      )}
     </div>
   );
 }
@@ -262,6 +275,9 @@ export function UsageClient() {
 
   const usage = limitsData?.usage;
   const lim = limitsData?.limits;
+  // Default to enforced=true if the backend didn't send the flag (older builds),
+  // so we never accidentally hide a real limit.
+  const enforced = limitsData?.limitsEnforced !== false;
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-8">
@@ -302,20 +318,22 @@ export function UsageClient() {
         <>
           <section className="space-y-4">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
-              Plan limits
+              {enforced ? "Plan limits" : "Usage this month"}
             </h2>
             <div className="grid gap-4 md:grid-cols-3">
               <QuotaBlock
                 title="Messages"
                 subtitle="Outbound + campaign sends this month"
                 slice={lim.messages}
+                enforced={enforced}
               />
-              <QuotaBlock title="Contacts" slice={lim.contacts} />
-              <QuotaBlock title="Team seats" slice={lim.agents} />
+              <QuotaBlock title="Contacts" slice={lim.contacts} enforced={enforced} />
+              <QuotaBlock title="Team seats" slice={lim.agents} enforced={enforced} />
               <QuotaBlock
                 title="AI replies"
                 subtitle="MsgBuddy AI replies this month (managed mode)"
                 slice={lim.aiReplies}
+                enforced={enforced}
               />
             </div>
           </section>
@@ -342,26 +360,36 @@ export function UsageClient() {
                   <span className="font-semibold text-base-content">
                     {formatBytes(storageData.usedBytes)}
                   </span>
-                  <span className="text-base-content/50"> of </span>
-                  {formatBytes(storageData.limitBytes)}
+                  {enforced ? (
+                    <>
+                      <span className="text-base-content/50"> of </span>
+                      {formatBytes(storageData.limitBytes)}
+                    </>
+                  ) : null}
                   <span className="text-base-content/50"> used</span>
                 </p>
               </div>
-              <span className={storageData.usedPercent >= 95 ? "op-tag op-tag-warn" : "op-tag"}>
-                {storageData.usedPercent}%
-              </span>
+              {enforced ? (
+                <span className={storageData.usedPercent >= 95 ? "op-tag op-tag-warn" : "op-tag"}>
+                  {storageData.usedPercent}%
+                </span>
+              ) : (
+                <span className="op-tag">Unlimited</span>
+              )}
             </div>
-            <div className="mt-4 h-3 w-full overflow-hidden rounded-sm bg-base-300">
-              <div
-                className={`h-full ${progressBarColor(storageData.usedPercent)} transition-[width] duration-300`}
-                style={{ width: `${Math.min(100, storageData.usedPercent)}%` }}
-              />
-            </div>
+            {enforced ? (
+              <div className="mt-4 h-3 w-full overflow-hidden rounded-sm bg-base-300">
+                <div
+                  className={`h-full ${progressBarColor(storageData.usedPercent)} transition-[width] duration-300`}
+                  style={{ width: `${Math.min(100, storageData.usedPercent)}%` }}
+                />
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
 
-      {(msgCheck || contactCheck) && limitsData ? (
+      {enforced && (msgCheck || contactCheck) && limitsData ? (
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wider text-base-content/50">
             Next actions
