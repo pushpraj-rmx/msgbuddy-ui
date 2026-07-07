@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle, Rocket, Star, Crown, RefreshCw } from "lucide-react";
+import { CheckCircle, Rocket, Star, Crown, RefreshCw, ShieldCheck } from "lucide-react";
 import { billingApi, type BillingCurrentResponse } from "@/lib/api";
 import { getApiError } from "@/lib/api-error";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -82,6 +82,21 @@ const PLAN_CARDS: PlanCardDef[] = [
     ],
     cta: "Contact sales",
   },
+];
+
+// Shown on the "full access" billing state (limits lifted). The whole product
+// is available to every workspace, so we present one consolidated feature list
+// instead of the tiered upgrade cards.
+const FULL_ACCESS_FEATURES: string[] = [
+  "Unlimited messages & broadcasts",
+  "Unlimited contacts",
+  "Unlimited team members",
+  "Unlimited WhatsApp numbers",
+  "Unlimited media storage",
+  "Campaigns & automation flows",
+  "AI chatbot replies",
+  "Advanced analytics & reporting",
+  "All integrations & developer API",
 ];
 
 function formatDate(iso: string | null | undefined): string {
@@ -208,8 +223,130 @@ export function BillingClient({ workspaceId }: { workspaceId: string }) {
 
   if (!billing) return null;
 
+  const enforced = billing.limitsEnforced !== false;
   const isTrial = billing.plan === "growth" && billing.planExpiresAt;
   const trialDays = daysUntil(billing.planExpiresAt);
+
+  // Limits lifted: show a "full access" state instead of the plan/paywall view.
+  if (!enforced) {
+    const u = billing.usage;
+    const activity: { label: string; value: number }[] = [
+      { label: "Messages sent", value: u?.messagesSent ?? 0 },
+      { label: "Campaign messages", value: u?.campaignMessages ?? 0 },
+      { label: "Contacts created", value: u?.contactsCreated ?? 0 },
+      { label: "Media uploads", value: u?.mediaUploaded ?? 0 },
+      { label: "Templates sent", value: u?.templatesSent ?? 0 },
+    ];
+    const hasSubscription = Boolean(billing.subscriptionId);
+
+    return (
+      <div className="space-y-6">
+        {/* Full access hero */}
+        <section className="rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm">
+          <div className="flex items-start gap-4">
+            <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h2 className="text-xl font-bold tracking-tight">You have full access</h2>
+              <p className="max-w-2xl text-sm text-base-content/70">
+                Every feature is available to your workspace with no usage limits.
+                We&rsquo;ll give you advance notice before any pricing or limits take effect.
+              </p>
+            </div>
+          </div>
+
+          {/* Live activity — plain counts, no caps */}
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            {activity.map((a) => (
+              <div
+                key={a.label}
+                className="rounded-xl border border-base-300 bg-base-100 px-3 py-2.5"
+              >
+                <div className="text-[0.6875rem] font-semibold uppercase tracking-wide text-base-content/50">
+                  {a.label}
+                </div>
+                <div className="mt-1 tabular-nums text-lg font-semibold text-base-content">
+                  {a.value.toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-base-content/50">
+            <span>This billing month</span>
+            <Link href="/usage" className="link link-hover text-primary">
+              View detailed usage
+            </Link>
+          </div>
+        </section>
+
+        {/* Everything included */}
+        <section className="space-y-3">
+          <h2 className="text-lg font-semibold tracking-tight">Everything included</h2>
+          <div className="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm">
+            <ul className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              {FULL_ACCESS_FEATURES.map((f) => (
+                <li key={f} className="flex items-start gap-2 text-sm text-base-content/80">
+                  <CheckCircle className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                  {f}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-5 text-xs text-base-content/50">
+              Paid plans are coming later — you&rsquo;ll be notified before anything changes. See{" "}
+              <Link href="/pricing" className="link link-hover text-primary">
+                upcoming pricing
+              </Link>
+              .
+            </p>
+          </div>
+        </section>
+
+        {/* Subscription management — only for workspaces already on a paid plan */}
+        {hasSubscription ? (
+          <section className="space-y-3">
+            <h2 className="text-lg font-semibold tracking-tight">Subscription</h2>
+            <div className="rounded-2xl border border-base-300 bg-base-100 p-5 shadow-sm">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {billing.billingEmail ? (
+                  <InfoCard label="Billing email" value={billing.billingEmail} />
+                ) : null}
+                {billing.subscriptionId ? (
+                  <InfoCard label="Subscription ID" value={billing.subscriptionId} />
+                ) : null}
+                {subscriptionDetail ? (
+                  <>
+                    <InfoCard label="Status" value={subscriptionDetail.status} />
+                    {subscriptionDetail.currentEnd ? (
+                      <InfoCard label="Period end" value={formatDate(subscriptionDetail.currentEnd)} />
+                    ) : null}
+                    <InfoCard label="Next charge" value={formatDate(subscriptionDetail.chargeAt)} />
+                  </>
+                ) : null}
+              </div>
+              <button
+                className="btn btn-sm mt-4 border-error/40 text-error hover:bg-error/10"
+                onClick={() => setShowCancelConfirm(true)}
+              >
+                Cancel subscription
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        <ConfirmDialog
+          open={showCancelConfirm}
+          title="Cancel subscription"
+          description="You will be moved off your paid plan at the end of the current billing period. Your access is unaffected while limits are lifted."
+          confirmLabel="Cancel subscription"
+          tone="danger"
+          loading={cancelLoading}
+          onConfirm={handleCancel}
+          onClose={() => setShowCancelConfirm(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -2227,6 +2227,8 @@ export const billingApi = {
 
 export type BillingCurrentResponse = {
   plan: string;
+  /** When false, per-plan quotas are not enforced — the workspace has full access. */
+  limitsEnforced?: boolean;
   billingEmail: string | null;
   subscriptionId: string | null;
   planExpiresAt: string | null;
