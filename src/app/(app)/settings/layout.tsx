@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { SettingsNav, type SettingsNavGating } from "@/components/settings/SettingsNav";
+import { SettingsHeader } from "@/components/settings/SettingsHeader";
 import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
@@ -32,7 +33,10 @@ export default async function SettingsLayout({
       <aside className="shrink-0 lg:w-56 lg:py-1">
         <SettingsNav gating={gating} />
       </aside>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+        <SettingsHeader />
+        {children}
+      </div>
     </div>
   );
 }
