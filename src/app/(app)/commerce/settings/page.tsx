@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { CommerceSettingsClient } from "@/components/commerce/CommerceSettingsClient";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -8,6 +9,11 @@ import { canAccessCommerce } from "@/lib/workspace-access";
 
 export default async function CommerceSettingsPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
+
+  // Feature disabled for this workspace (Settings → Features) — keep it invisible.
+  if (!me.workspace?.commerceEnabled) {
+    redirect("/dashboard");
+  }
 
   if (!canAccessCommerce(String(me.role))) {
     return (

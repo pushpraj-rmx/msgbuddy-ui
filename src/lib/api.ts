@@ -115,6 +115,10 @@ export interface Workspace {
   plan?: string;
   status?: string;
   trialEndsAt?: string | null;
+  // Per-workspace feature toggles (Settings → Features). Gate the Commerce and
+  // Subscriptions nav entries. Absent/false = hidden.
+  commerceEnabled?: boolean;
+  recurringEnabled?: boolean;
 }
 
 export type WorkspaceMemberResponseDto = {
@@ -3436,5 +3440,21 @@ export const knowledgeApi = {
   },
   remove: async (id: string): Promise<void> => {
     await api.delete(endpoints.knowledge.byId(id));
+  },
+  reembed: async (id: string): Promise<KnowledgeDoc> => {
+    const res = await api.post<KnowledgeDoc>(endpoints.knowledge.reembed(id));
+    return res.data;
+  },
+  reembedAll: async (): Promise<{
+    total: number;
+    embedded: number;
+    failed: number;
+  }> => {
+    const res = await api.post<{
+      total: number;
+      embedded: number;
+      failed: number;
+    }>(endpoints.knowledge.reembedAll);
+    return res.data;
   },
 };

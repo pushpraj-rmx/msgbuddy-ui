@@ -6,6 +6,7 @@ import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
   BookOpen,
+  Blocks,
   Clock,
   CreditCard,
   KeyRound,
@@ -57,6 +58,7 @@ function buildGroups(g: SettingsNavGating): NavGroup[] {
       label: "Workspace",
       items: [
         { href: "/settings/workspace", label: "General", Icon: Building2, show: g.canManageSettings },
+        { href: "/settings/features", label: "Features", Icon: Blocks, show: g.canManageSettings },
         { href: "/settings/team", label: "Team & roles", Icon: Users, show: g.canViewMembers },
         { href: "/billing", label: "Billing & plan", Icon: CreditCard, show: g.canSeeBilling },
         { href: "/usage", label: "Usage", Icon: Layers, show: g.canAccessUsage },

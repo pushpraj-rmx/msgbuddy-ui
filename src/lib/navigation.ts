@@ -38,9 +38,16 @@ export type AppNavItem = {
   children?: Array<{ href: string; label: string; Icon: NavIcon }>;
 };
 
+/** Per-workspace feature toggles that gate optional nav modules. */
+export type NavFeatures = {
+  commerceEnabled?: boolean;
+  recurringEnabled?: boolean;
+};
+
 export function getAppNav(
   platformRole: string,
   workspaceRole?: string,
+  features?: NavFeatures,
 ): AppNavItem[] {
   const items: AppNavItem[] = [
     { href: "/dashboard", label: "Dashboard", Icon: Home, showInDock: true },
@@ -93,10 +100,10 @@ export function getAppNav(
   if (wr != null && wr !== "") {
     return items.filter((item) => {
       if (item.href === "/campaigns" && !canAccessCampaigns(wr)) return false;
-      if (item.href === "/subscriptions" && !canAccessRecurring(wr)) return false;
+      if (item.href === "/subscriptions" && (!canAccessRecurring(wr) || !features?.recurringEnabled)) return false;
       if (item.href === "/flows" && !canAccessFlows(wr)) return false;
       if (item.href === "/templates" && !canViewTemplates(wr)) return false;
-      if (item.href === "/commerce/catalogs" && !canAccessCommerce(wr)) return false;
+      if (item.href === "/commerce/catalogs" && (!canAccessCommerce(wr) || !features?.commerceEnabled)) return false;
       if (item.href === "/usage" && !canAccessUsagePage(wr)) return false;
       return true;
     });
@@ -135,6 +142,7 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/settings/canned-responses")) return "Canned responses";
   if (pathname.startsWith("/settings/automations")) return "Automations";
   if (pathname.startsWith("/settings/business-hours")) return "Business hours";
+  if (pathname.startsWith("/settings/features")) return "Features";
   if (pathname.startsWith("/settings/chatbot")) return "Chatbot";
   if (pathname.startsWith("/settings/knowledge")) return "Knowledge base";
   if (pathname.startsWith("/settings/developers")) return "Developers";

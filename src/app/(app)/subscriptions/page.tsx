@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { RecurringClient } from "@/components/recurring/RecurringClient";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -8,6 +9,11 @@ import { canAccessRecurring } from "@/lib/workspace-access";
 
 export default async function SubscriptionsPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
+
+  // Feature disabled for this workspace (Settings → Features) — keep it invisible.
+  if (!me.workspace?.recurringEnabled) {
+    redirect("/dashboard");
+  }
 
   if (!canAccessRecurring(String(me.role))) {
     return (

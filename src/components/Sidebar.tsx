@@ -31,7 +31,10 @@ export function Sidebar({
   onToggle?: () => void;
 }) {
   const pathname = usePathname();
-  const nav = getAppNav(me.platformRole ?? "NONE", String(me.role));
+  const nav = getAppNav(me.platformRole ?? "NONE", String(me.role), {
+    commerceEnabled: me.workspace?.commerceEnabled,
+    recurringEnabled: me.workspace?.recurringEnabled,
+  });
   const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>({});
 
   return (
