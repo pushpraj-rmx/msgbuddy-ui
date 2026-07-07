@@ -336,6 +336,8 @@ export const endpoints = {
   knowledge: {
     list: `${P}/knowledge-docs`,
     byId: (id: string) => `${P}/knowledge-docs/${id}`,
+    reembed: (id: string) => `${P}/knowledge-docs/${id}/reembed`,
+    reembedAll: `${P}/knowledge-docs/reembed-all`,
   },
   cannedResponses: {
     list: `${P}/canned-responses`,
