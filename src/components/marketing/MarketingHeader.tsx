@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth";
 import { BrandLogo } from "@/components/BrandLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -64,6 +65,7 @@ export async function MarketingHeader() {
         </div>
 
         <div className="navbar-end gap-2">
+          <ThemeToggle />
           {isAuthenticated ? (
             <Link href="/dashboard" className="btn btn-primary btn-sm">
               Dashboard
