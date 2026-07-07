@@ -36,7 +36,7 @@ export function SettingsGearMenu({
         {showTeamLink ? (
           <li role="none">
             <Link
-              href="/settings#team-members"
+              href="/settings/team"
               className="gap-3"
               role="menuitem"
             >

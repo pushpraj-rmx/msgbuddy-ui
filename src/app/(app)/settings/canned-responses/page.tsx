@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { CannedResponsesClient } from "@/components/canned-responses/CannedResponsesClient";
@@ -20,11 +19,6 @@ export default async function CannedResponsesPage() {
 
   return (
     <PageContainer>
-      <div className="mb-2">
-        <Link href="/settings" className="btn btn-ghost btn-sm gap-1">
-          ← Settings
-        </Link>
-      </div>
       <PageHeader
         title="Canned responses"
         description="Save your most-used replies as `/shortcut` snippets. Agents trigger them with one keystroke in the inbox."

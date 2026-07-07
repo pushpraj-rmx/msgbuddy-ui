@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { changePasswordAction } from "@/app/actions/auth";
@@ -39,10 +38,6 @@ export function ChangePasswordClient() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-6">
-      <Link href="/settings" className="btn btn-ghost btn-sm -ml-2 gap-1">
-        ← Settings
-      </Link>
-
       <div className="card bg-base-100 border border-base-300 p-4 sm:p-6">
         <form onSubmit={onChangePassword} className="mx-auto max-w-md space-y-3">
           {changeError ? <ErrorState message={changeError} /> : null}

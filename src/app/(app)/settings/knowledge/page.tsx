@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { KnowledgeClient } from "@/components/knowledge/KnowledgeClient";
@@ -20,11 +19,6 @@ export default async function KnowledgePage() {
 
   return (
     <PageContainer>
-      <div className="mb-2">
-        <Link href="/settings" className="btn btn-ghost btn-sm gap-1">
-          ← Settings
-        </Link>
-      </div>
       <PageHeader
         title="Knowledge base"
         description="Docs the AI chatbot retrieves from to ground its replies. Each doc is chunked and embedded for semantic search."

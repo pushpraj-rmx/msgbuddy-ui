@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { BusinessHoursForm } from "@/components/automation/BusinessHoursForm";
@@ -18,11 +17,6 @@ export default async function BusinessHoursPage() {
   if (!allowed) {
     return (
       <PageContainer>
-        <div className="mb-2">
-          <Link href="/settings" className="btn btn-ghost btn-sm gap-1">
-            ← Settings
-          </Link>
-        </div>
         <PageHeader
           title="Business hours"
           description="Configure when your workspace is open. Out-of-hours automation rules fire only when the schedule is set and active."
@@ -40,11 +34,6 @@ export default async function BusinessHoursPage() {
 
   return (
     <PageContainer>
-      <div className="mb-2">
-        <Link href="/settings" className="btn btn-ghost btn-sm gap-1">
-          ← Settings
-        </Link>
-      </div>
       <PageHeader
         title="Business hours"
         description="Configure when your workspace is open. Out-of-hours automation rules fire only when the schedule is set and active."

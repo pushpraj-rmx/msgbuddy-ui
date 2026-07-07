@@ -7,7 +7,7 @@ import type {
 } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
 import { endpoints } from "@/lib/endpoints";
-import type { WorkspaceSettings } from "@/components/settings/SettingsClient";
+import type { WorkspaceSettings } from "@/components/settings/types";
 
 async function getCloudApiSafe(
   workspaceId: string

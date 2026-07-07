@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { PageContainer } from "@/components/ui/PageContainer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AutomationsClient } from "@/components/automation/AutomationsClient";
@@ -18,11 +17,6 @@ export default async function AutomationsPage() {
   if (!allowed) {
     return (
       <PageContainer>
-        <div className="mb-2">
-          <Link href="/settings" className="btn btn-ghost btn-sm gap-1">
-            ← Settings
-          </Link>
-        </div>
         <PageHeader
           title="Inbox automation"
           description="Rules that fire actions in response to inbound messages."
@@ -40,11 +34,6 @@ export default async function AutomationsPage() {
 
   return (
     <PageContainer>
-      <div className="mb-2">
-        <Link href="/settings" className="btn btn-ghost btn-sm gap-1">
-          ← Settings
-        </Link>
-      </div>
       <PageHeader
         title="Inbox automation"
         description="Rules that fire actions in response to inbound messages. Configure business hours separately to drive out-of-hours rules."
