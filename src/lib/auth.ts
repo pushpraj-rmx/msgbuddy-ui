@@ -14,11 +14,17 @@ function readCookie(name: string): string | null {
 }
 
 export const getToken = (): string | null => {
-  if (inMemoryAccessToken) return inMemoryAccessToken;
+  // Prefer the cookie over the in-memory token. The server render (serverFetch)
+  // always authenticates with the cookie, so reading it here keeps client XHRs
+  // on the exact same token/session the page was rendered with — preventing an
+  // in-memory token from diverging from the SSR cookie. Both hold the same
+  // 15-min access token with the same expiry, so this never returns a staler
+  // token; in-memory remains the fallback when the cookie isn't readable.
   if (typeof window !== "undefined") {
-    return readCookie(ACCESS_TOKEN_COOKIE);
+    const cookie = readCookie(ACCESS_TOKEN_COOKIE);
+    if (cookie) return cookie;
   }
-  return null;
+  return inMemoryAccessToken;
 };
 
 export const setAccessToken = (
