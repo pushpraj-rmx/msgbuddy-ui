@@ -370,6 +370,10 @@ export const conversationsApi = {
     const response = await api.post(endpoints.conversations.resetAi(id));
     return response.data;
   },
+  handoffAi: async (id: string) => {
+    const response = await api.post(endpoints.conversations.handoffAi(id));
+    return response.data;
+  },
   searchMessages: async (params: {
     q: string;
     conversationId: string;

@@ -140,6 +140,7 @@ export const endpoints = {
     claim: (id: string) => `${P}/conversations/${id}/claim`,
     release: (id: string) => `${P}/conversations/${id}/release`,
     resetAi: (id: string) => `${P}/conversations/${id}/reset-ai`,
+    handoffAi: (id: string) => `${P}/conversations/${id}/handoff-ai`,
   },
   messages: {
     listByConversation: (conversationId: string) =>

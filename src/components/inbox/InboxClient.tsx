@@ -10,7 +10,7 @@ import {
   type ChangeEvent,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import { CircleUser, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical, Phone, Mail, Search as SearchIcon, Image as ImageIcon, StickyNote, ExternalLink, ChevronLeft, ChevronRight, Tag as TagIcon, ArrowUpDown, Clock, X as XIcon } from "lucide-react";
+import { CircleUser, Bot, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical, Phone, Mail, Search as SearchIcon, Image as ImageIcon, StickyNote, ExternalLink, ChevronLeft, ChevronRight, Tag as TagIcon, ArrowUpDown, Clock, X as XIcon } from "lucide-react";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -84,6 +84,7 @@ export type Conversation = {
   turn?: "YOUR_TURN" | "WAITING_ON_CUSTOMER";
   snoozedUntil?: string | null;
   assignedUserId?: string | null;
+  controlOwner?: "NONE" | "AI" | "HUMAN" | null;
   unreadCount?: number;
   lastMessageAt?: string;
   /** When the OLDEST unanswered inbound landed in the current streak. Drives
@@ -561,6 +562,22 @@ export function InboxClient({
     const member = members.find((m) => m.user?.id === selectedConversation.assignedUserId);
     return member?.user?.name || member?.user?.email || null;
   }, [selectedConversation?.assignedUserId, selectedConversation?.assignedUser, members]);
+  // The TRUE owner of a conversation. `assignedUserId` alone is unreliable — a
+  // chat can be unassigned yet still human-owned (controlOwner=HUMAN) and thus
+  // muted to the bot. This reflects the real state so it's never ambiguous.
+  const conversationOwner = useMemo<{
+    kind: "human" | "ai" | "unassigned";
+    label: string;
+  } | null>(() => {
+    if (!selectedConversation) return null;
+    if (selectedConversation.assignedUserId)
+      return { kind: "human", label: assigneeName ?? "Assigned agent" };
+    if (selectedConversation.controlOwner === "AI")
+      return { kind: "ai", label: "AI" };
+    if (selectedConversation.controlOwner === "HUMAN")
+      return { kind: "human", label: "With an agent" };
+    return { kind: "unassigned", label: "Unassigned" };
+  }, [selectedConversation, assigneeName]);
   const activeContactId =
     selectedConversation?.contactId ?? startContact?.id ?? null;
   const activeChannel =
@@ -2114,7 +2131,8 @@ export function InboxClient({
         | "unassign"
         | "claim"
         | "release"
-        | "resetAi",
+        | "resetAi"
+        | "handoffAi",
       payload?: { userId?: string; conversationId?: string }
     ) => {
       const targetId = payload?.conversationId ?? selectedId;
@@ -2132,6 +2150,7 @@ export function InboxClient({
         if (operation === "claim") await conversationsApi.claim(targetId);
         if (operation === "release") await conversationsApi.release(targetId);
         if (operation === "resetAi") await conversationsApi.resetAi(targetId);
+        if (operation === "handoffAi") await conversationsApi.handoffAi(targetId);
         await refreshConversationById(targetId);
         await fetchConversations(status, null, false);
       } catch (error: unknown) {
@@ -3629,10 +3648,25 @@ export function InboxClient({
                       : "Select a conversation"}
                   </h2>
                 )}
-                {selectedConversation?.assignedUserId && assigneeName ? (
-                  <span className="hidden shrink-0 items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-xs text-base-content/70 sm:flex">
-                    <CircleUser className="h-3.5 w-3.5 shrink-0" />
-                    {assigneeName}
+                {selectedConversation && conversationOwner ? (
+                  <span
+                    className="hidden shrink-0 items-center gap-1 rounded-full bg-base-200 px-2 py-0.5 text-xs text-base-content/70 sm:flex"
+                    title={
+                      conversationOwner.kind === "ai"
+                        ? "The AI chatbot is handling this conversation"
+                        : conversationOwner.kind === "unassigned"
+                          ? "No one is assigned — the AI will respond if enabled"
+                          : "Handled by a human agent"
+                    }
+                  >
+                    {conversationOwner.kind === "ai" ? (
+                      <Bot className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <CircleUser
+                        className={`h-3.5 w-3.5 shrink-0 ${conversationOwner.kind === "unassigned" ? "opacity-50" : ""}`}
+                      />
+                    )}
+                    {conversationOwner.label}
                   </span>
                 ) : null}
               </div>
@@ -3797,6 +3831,25 @@ export function InboxClient({
                         </li>
                         <li className="my-1 px-1" role="separator">
                           <hr className="border-base-300" />
+                        </li>
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full justify-start text-left font-normal"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "Hand this conversation to the AI assistant? It will take over replies to new messages, and any human assignment is cleared."
+                                )
+                              ) {
+                                void runConversationAction("handoffAi");
+                              }
+                            }}
+                            disabled={conversationActionBusy}
+                          >
+                            Hand to AI
+                          </button>
                         </li>
                         <li role="none">
                           <button
