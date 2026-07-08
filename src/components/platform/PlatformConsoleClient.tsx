@@ -907,6 +907,23 @@ function AccessRequestsTab() {
   );
 }
 
+// Renders a human name with the short id in small, muted parentheses. When no
+// name resolved (deleted entity, or a target that isn't a workspace/user), it
+// falls back to just the short id so the cell is never blank.
+function NameWithId({ name, id }: { name?: string | null; id?: string | null }) {
+  if (!id) return <span className="text-base-content/45">—</span>;
+  const shortId = id.slice(0, 8).toUpperCase();
+  if (!name) {
+    return <span className="font-mono-op text-[0.6875rem] tracking-wider text-base-content/70">{shortId}</span>;
+  }
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span className="font-medium">{name}</span>
+      <span className="font-mono-op text-[0.625rem] tracking-wider text-base-content/45">({shortId})</span>
+    </span>
+  );
+}
+
 function WebhookLogsTab() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [provider, setProvider] = useState("");
@@ -994,7 +1011,7 @@ function WebhookLogsTab() {
             {list.data?.items.map((row) => (
               <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
                 <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
-                <td className="font-mono-op px-3 py-3 text-[0.625rem] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3"><NameWithId name={row.workspaceName} id={row.workspaceId} /></td>
                 <td className="px-3 py-3"><span className="op-tag">{row.provider}</span></td>
                 <td className="px-3 py-3 font-medium">{row.eventType}</td>
                 <td className="px-3 py-3">
@@ -1095,7 +1112,7 @@ function UsageEventsTab() {
             {list.data?.items.map((row) => (
               <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
                 <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.id.slice(0, 8).toUpperCase()}</td>
-                <td className="font-mono-op px-3 py-3 text-[0.625rem] tracking-wider text-base-content/70">{row.workspaceId.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3"><NameWithId name={row.workspaceName} id={row.workspaceId} /></td>
                 <td className="px-3 py-3 font-medium">{row.eventType}</td>
                 <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
               </tr>
@@ -1218,10 +1235,11 @@ function AuditLogsTab() {
               <tr key={row.id} className="border-b border-base-300 transition hover:bg-base-300/40 last:border-b-0">
                 <td className="font-mono-op px-3 py-3 text-[0.6875rem] tabular-nums text-base-content/70">{formatDate(row.createdAt)}</td>
                 <td className="max-w-48 truncate px-3 py-3 font-medium">{row.action}</td>
-                <td className="font-mono-op max-w-64 truncate px-3 py-3 text-[0.6875rem] text-base-content/70">
-                  {row.targetType}:{row.targetId}
+                <td className="max-w-64 truncate px-3 py-3 text-[0.6875rem] text-base-content/70">
+                  <span className="op-tag mr-1.5">{row.targetType}</span>
+                  <NameWithId name={row.targetName} id={row.targetId} />
                 </td>
-                <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.actorUserId.slice(0, 8).toUpperCase()}</td>
+                <td className="px-3 py-3"><NameWithId name={row.actorName} id={row.actorUserId} /></td>
                 <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{row.requestId || "—"}</td>
               </tr>
             ))}

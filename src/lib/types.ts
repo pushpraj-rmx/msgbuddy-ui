@@ -704,6 +704,7 @@ export type PlatformUserDetail = PlatformUserListItem & {
 export type PlatformWebhookLog = {
   id: string;
   workspaceId: string;
+  workspaceName?: string | null;
   provider: string;
   processed: boolean;
   eventType: string;
@@ -713,6 +714,7 @@ export type PlatformWebhookLog = {
 export type PlatformUsageEvent = {
   id: string;
   workspaceId: string;
+  workspaceName?: string | null;
   eventType: string;
   createdAt: string;
   [key: string]: unknown;
@@ -721,9 +723,11 @@ export type PlatformUsageEvent = {
 export type PlatformAdminAuditLog = {
   id: string;
   actorUserId: string;
+  actorName?: string | null;
   action: string;
   targetType: string;
   targetId: string;
+  targetName?: string | null;
   before?: unknown;
   after?: unknown;
   ip?: string | null;
