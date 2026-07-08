@@ -42,7 +42,7 @@ type TabKey =
   | "channelAccounts"
   | "connectedClientBusinesses";
 
-function formatDate(value?: string | null): string {
+export function formatDate(value?: string | null): string {
   if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
@@ -132,7 +132,7 @@ export function PlatformConsoleClient({
   );
 }
 
-function WorkspacesTab() {
+export function WorkspacesTab() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<PlatformWorkspaceStatus | "">("");
   const [limit, setLimit] = useState(25);
@@ -429,7 +429,7 @@ function WorkspacesTab() {
   );
 }
 
-function UsersTab({ superAdmin }: { superAdmin: boolean }) {
+export function UsersTab({ superAdmin }: { superAdmin: boolean }) {
   const [search, setSearch] = useState("");
   const [platformRoleFilter, setPlatformRoleFilter] = useState<PlatformRole | "">("");
   const [offset, setOffset] = useState(0);
@@ -765,7 +765,7 @@ const ACCESS_REQUEST_STATUSES: AccountAccessRequestStatus[] = [
   "DISMISSED",
 ];
 
-function AccessRequestsTab() {
+export function AccessRequestsTab() {
   const [status, setStatus] = useState<AccountAccessRequestStatus | "">("");
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [resetLink, setResetLink] = useState<string | null>(null);
@@ -910,7 +910,7 @@ function AccessRequestsTab() {
 // Renders a human name with the short id in small, muted parentheses. When no
 // name resolved (deleted entity, or a target that isn't a workspace/user), it
 // falls back to just the short id so the cell is never blank.
-function NameWithId({ name, id }: { name?: string | null; id?: string | null }) {
+export function NameWithId({ name, id }: { name?: string | null; id?: string | null }) {
   if (!id) return <span className="text-base-content/45">—</span>;
   const shortId = id.slice(0, 8).toUpperCase();
   if (!name) {
@@ -924,7 +924,7 @@ function NameWithId({ name, id }: { name?: string | null; id?: string | null }) 
   );
 }
 
-function WebhookLogsTab() {
+export function WebhookLogsTab() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [provider, setProvider] = useState("");
   const [processed, setProcessed] = useState<"" | "true" | "false">("");
@@ -1041,7 +1041,7 @@ function WebhookLogsTab() {
   );
 }
 
-function UsageEventsTab() {
+export function UsageEventsTab() {
   const [workspaceId, setWorkspaceId] = useState("");
   const [eventType, setEventType] = useState("");
   const [offset, setOffset] = useState(0);
@@ -1138,7 +1138,7 @@ function UsageEventsTab() {
   );
 }
 
-function AuditLogsTab() {
+export function AuditLogsTab() {
   const [action, setAction] = useState("");
   const [targetType, setTargetType] = useState("");
   const [targetId, setTargetId] = useState("");
@@ -1265,7 +1265,7 @@ function AuditLogsTab() {
   );
 }
 
-function ChannelAccountsTab() {
+export function ChannelAccountsTab() {
   const list = useChannelAccounts();
   const assign = useAssignChannelAccount();
   const [workspaceMap, setWorkspaceMap] = useState<Record<string, string>>({});
@@ -1348,7 +1348,7 @@ function ChannelAccountsTab() {
   );
 }
 
-function ConnectedClientBusinessesTab() {
+export function ConnectedClientBusinessesTab() {
   const list = useConnectedClientBusinesses();
 
   return (
@@ -1389,7 +1389,7 @@ function ConnectedClientBusinessesTab() {
   );
 }
 
-function Pager({
+export function Pager({
   offset,
   limit,
   total,

@@ -13,12 +13,12 @@ import {
   RefreshCw,
   Rocket,
   Settings,
+  ShieldCheck,
   ShoppingBag,
-  Terminal,
   Users,
   Workflow,
 } from "lucide-react";
-import { canAccessPlatform, isSuperAdmin } from "@/lib/platform-access";
+import { canAccessPlatform } from "@/lib/platform-access";
 import {
   canAccessCampaigns,
   canAccessCommerce,
@@ -89,11 +89,9 @@ export function getAppNav(
   ];
 
   if (canAccessPlatform(platformRole)) {
-    items.push({ href: "/platform", label: "Platform", Icon: Terminal });
-    items.push({ href: "/ops", label: "Ops", Icon: Terminal });
-  }
-  if (isSuperAdmin(platformRole)) {
-    items.push({ href: "/onboarding", label: "Onboarding", Icon: Terminal });
+    // Single unified platform-owner console. Ops, Onboarding, logs, and the
+    // overview all live under /platform now (see platform/layout.tsx sub-nav).
+    items.push({ href: "/platform", label: "Platform", Icon: ShieldCheck });
   }
 
   const wr = workspaceRole;
@@ -149,6 +147,17 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/settings/webhooks")) return "Webhooks";
   if (pathname.startsWith("/settings/danger")) return "Danger zone";
   if (pathname.startsWith("/settings")) return "Settings";
+  if (pathname.startsWith("/platform/workspaces")) return "Workspaces";
+  if (pathname.startsWith("/platform/users")) return "Users";
+  if (pathname.startsWith("/platform/access-requests")) return "Access requests";
+  if (pathname.startsWith("/platform/logs/failed-sends")) return "Failed sends";
+  if (pathname.startsWith("/platform/logs/webhooks")) return "Webhook logs";
+  if (pathname.startsWith("/platform/logs/usage")) return "Usage events";
+  if (pathname.startsWith("/platform/logs/audit")) return "Audit log";
+  if (pathname.startsWith("/platform/channels")) return "Channel accounts";
+  if (pathname.startsWith("/platform/client-businesses")) return "Client businesses";
+  if (pathname.startsWith("/platform/onboarding")) return "Onboarding";
+  if (pathname.startsWith("/platform/ops")) return "Ops";
   if (pathname.startsWith("/platform")) return "Platform";
   if (pathname.startsWith("/onboarding")) return "Onboarding";
   if (pathname.startsWith("/notifications")) return "Notifications";

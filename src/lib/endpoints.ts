@@ -387,6 +387,8 @@ export const endpoints = {
     ensureSubscription: `${P}/whatsapp/ensure-subscription`,
   },
   platform: {
+    overview: `${P}/platform/overview`,
+    failedSends: `${P}/platform/failed-sends`,
     workspaces: `${P}/platform/workspaces`,
     workspaceById: (id: string) => `${P}/platform/workspaces/${id}`,
     suspendWorkspace: (id: string) => `${P}/platform/workspaces/${id}/suspend`,

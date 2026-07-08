@@ -3119,6 +3119,62 @@ export interface PlatformAuditLogsParams {
   offset?: number;
 }
 
+export interface PlatformFailedSendsParams {
+  workspaceId?: string;
+  errorCode?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export type PlatformFailedSend = {
+  id: string;
+  workspaceId: string;
+  channel: string;
+  errorCode: string | null;
+  errorMessage: string | null;
+  failedAt: string | null;
+  createdAt: string;
+  workspace?: { id: string; slug: string; name: string } | null;
+  contact?: { id: string; name: string | null; phone: string } | null;
+};
+
+export type PlatformOverview = {
+  workspaces: {
+    total: number;
+    active: number;
+    trial: number;
+    suspended: number;
+    cancelled: number;
+    deleted: number;
+  };
+  users: {
+    total: number;
+    active: number;
+    newLast7d: number;
+  };
+  messages: {
+    sentToday: number;
+    sent7d: number;
+    failed7d: number;
+    /** Fraction 0..1 of attempted outbound sends that failed over 7d. */
+    failureRate7d: number;
+  };
+  series: Array<{ day: string; sent: number; failed: number }>;
+  /** Plan-based SaaS revenue rollup across active tenants. Amounts in minor units (paise). */
+  revenue: {
+    currency: string;
+    mrrMinor: number;
+    arrMinor: number;
+    arpaMinor: number;
+    payingWorkspaces: number;
+    customPlanWorkspaces: number;
+    planMix: Record<string, number>;
+  };
+  generatedAt: string;
+};
+
 export type PlatformLoginHistoryEntry = {
   id?: string;
   userId?: string;
@@ -3137,6 +3193,19 @@ export type ConnectedClientBusiness = {
 };
 
 export const platformApi = {
+  getOverview: async (): Promise<PlatformOverview> => {
+    const response = await api.get<PlatformOverview>(endpoints.platform.overview);
+    return response.data;
+  },
+  listFailedSends: async (
+    params?: PlatformFailedSendsParams
+  ): Promise<OffsetPaginatedResponse<PlatformFailedSend>> => {
+    const response = await api.get<OffsetPaginatedResponse<PlatformFailedSend>>(
+      endpoints.platform.failedSends,
+      { params }
+    );
+    return response.data;
+  },
   listWorkspaces: async (
     params?: PlatformWorkspacesListParams
   ): Promise<OffsetPaginatedResponse<PlatformWorkspaceListItem>> => {

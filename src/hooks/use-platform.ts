@@ -8,6 +8,7 @@ import {
   type PlatformUsersListParams,
   type PlatformWorkspacesListParams,
   type PlatformAuditLogsParams,
+  type PlatformFailedSendsParams,
 } from "@/lib/api";
 import type {
   PlatformRole,
@@ -16,6 +17,9 @@ import type {
 
 export const platformKeys = {
   all: ["platform"] as const,
+  overview: () => [...platformKeys.all, "overview"] as const,
+  failedSends: (params: PlatformFailedSendsParams) =>
+    [...platformKeys.all, "failedSends", params] as const,
   workspaces: (params: PlatformWorkspacesListParams) =>
     [...platformKeys.all, "workspaces", params] as const,
   workspace: (id: string) => [...platformKeys.all, "workspace", id] as const,
@@ -38,6 +42,20 @@ export const platformKeys = {
   accessRequestsOpenCount: () =>
     [...platformKeys.all, "accessRequestsOpenCount"] as const,
 };
+
+export function usePlatformOverview() {
+  return useQuery({
+    queryKey: platformKeys.overview(),
+    queryFn: () => platformApi.getOverview(),
+  });
+}
+
+export function usePlatformFailedSends(params: PlatformFailedSendsParams) {
+  return useQuery({
+    queryKey: platformKeys.failedSends(params),
+    queryFn: () => platformApi.listFailedSends(params),
+  });
+}
 
 export function usePlatformWorkspaces(params: PlatformWorkspacesListParams) {
   return useQuery({
