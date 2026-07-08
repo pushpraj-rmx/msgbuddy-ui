@@ -139,6 +139,7 @@ export const endpoints = {
     unassign: (id: string) => `${P}/conversations/${id}/unassign`,
     claim: (id: string) => `${P}/conversations/${id}/claim`,
     release: (id: string) => `${P}/conversations/${id}/release`,
+    resetAi: (id: string) => `${P}/conversations/${id}/reset-ai`,
   },
   messages: {
     listByConversation: (conversationId: string) =>
@@ -194,6 +195,9 @@ export const endpoints = {
     notes: (id: string) => `${P}/contacts/${id}/notes`,
     noteById: (id: string, noteId: string) =>
       `${P}/contacts/${id}/notes/${noteId}`,
+    memory: (id: string) => `${P}/contacts/${id}/memory`,
+    memoryItem: (id: string, memoryId: string) =>
+      `${P}/contacts/${id}/memory/${memoryId}`,
     timeline: (id: string) => `${P}/contacts/${id}/timeline`,
   },
   tags: {

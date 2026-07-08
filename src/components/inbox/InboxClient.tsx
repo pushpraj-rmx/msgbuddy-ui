@@ -2113,7 +2113,8 @@ export function InboxClient({
         | "assign"
         | "unassign"
         | "claim"
-        | "release",
+        | "release"
+        | "resetAi",
       payload?: { userId?: string; conversationId?: string }
     ) => {
       const targetId = payload?.conversationId ?? selectedId;
@@ -2130,6 +2131,7 @@ export function InboxClient({
         if (operation === "unassign") await conversationsApi.unassign(targetId);
         if (operation === "claim") await conversationsApi.claim(targetId);
         if (operation === "release") await conversationsApi.release(targetId);
+        if (operation === "resetAi") await conversationsApi.resetAi(targetId);
         await refreshConversationById(targetId);
         await fetchConversations(status, null, false);
       } catch (error: unknown) {
@@ -3791,6 +3793,28 @@ export function InboxClient({
                             disabled={conversationActionBusy}
                           >
                             Unassign
+                          </button>
+                        </li>
+                        <li className="my-1 px-1" role="separator">
+                          <hr className="border-base-300" />
+                        </li>
+                        <li role="none">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="w-full justify-start text-left font-normal"
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "Reset the assistant's context for this conversation? The AI will ignore earlier messages when it replies. The transcript is kept."
+                                )
+                              ) {
+                                void runConversationAction("resetAi");
+                              }
+                            }}
+                            disabled={conversationActionBusy}
+                          >
+                            Reset AI context
                           </button>
                         </li>
                       </ul>

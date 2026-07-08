@@ -366,6 +366,10 @@ export const conversationsApi = {
     const response = await api.post(endpoints.conversations.release(id));
     return response.data;
   },
+  resetAi: async (id: string) => {
+    const response = await api.post(endpoints.conversations.resetAi(id));
+    return response.data;
+  },
   searchMessages: async (params: {
     q: string;
     conversationId: string;
@@ -869,6 +873,34 @@ export const contactsApi = {
       { params }
     );
     return response.data;
+  },
+};
+
+// ===== Contact AI memory (per-contact facts the chatbot remembers) =====
+
+export interface ContactMemory {
+  id: string;
+  contactId: string;
+  fact: string;
+  source: string;
+  createdAt: string;
+}
+
+export const contactMemoryApi = {
+  list: async (contactId: string): Promise<ContactMemory[]> => {
+    const res = await api.get<ContactMemory[]>(
+      endpoints.contacts.memory(contactId)
+    );
+    return res.data;
+  },
+  remove: async (contactId: string, memoryId: string): Promise<void> => {
+    await api.delete(endpoints.contacts.memoryItem(contactId, memoryId));
+  },
+  clear: async (contactId: string): Promise<{ deleted: number }> => {
+    const res = await api.delete<{ deleted: number }>(
+      endpoints.contacts.memory(contactId)
+    );
+    return res.data;
   },
 };
 

@@ -16,18 +16,20 @@ import { ActivityTimeline } from "./ActivityTimeline";
 import { ContactFormModal } from "./ContactFormModal";
 import { CustomFieldsSection } from "./CustomFieldsSection";
 import { NotesSection } from "./NotesSection";
+import { MemorySection } from "./MemorySection";
 import { InfoTip } from "@/components/ui/InfoTip";
 import { TagsPicker } from "./TagsPicker";
 
 const CONTACT_QUERY_KEY = (id: string) => ["contacts", id] as const;
 const TAGS_QUERY_KEY = ["tags"] as const;
 
-type TabKey = "details" | "tags" | "notes" | "activity";
+type TabKey = "details" | "tags" | "notes" | "memory" | "activity";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "details", label: "Details" },
   { key: "tags", label: "Tags" },
   { key: "notes", label: "Notes" },
+  { key: "memory", label: "Memory" },
   { key: "activity", label: "Activity" },
 ];
 
@@ -267,6 +269,12 @@ export function ContactDetailClient({
                 contactId={contact.id}
                 currentUserId={currentUserId}
               />
+            </section>
+          )}
+          {activeTab === "memory" && (
+            <section className="space-y-2">
+              <h2 className="op-section-title">Memory</h2>
+              <MemorySection contactId={contact.id} />
             </section>
           )}
           {activeTab === "activity" && (
