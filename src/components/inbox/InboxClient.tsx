@@ -225,6 +225,24 @@ function readInboxDraftsFromStorage(storageKey: string): Record<string, string> 
   return {};
 }
 
+/** The true owner of a conversation, from the embedded assignee + controlOwner. */
+function conversationOwnerInfo(conv: {
+  assignedUserId?: string | null;
+  controlOwner?: "NONE" | "AI" | "HUMAN" | null;
+  assignedUser?: { name?: string | null; email?: string } | null;
+}): { kind: "human" | "ai" | "unassigned"; label: string } {
+  if (conv.assignedUserId)
+    return {
+      kind: "human",
+      label:
+        conv.assignedUser?.name || conv.assignedUser?.email || "Assigned agent",
+    };
+  if (conv.controlOwner === "AI") return { kind: "ai", label: "AI" };
+  if (conv.controlOwner === "HUMAN")
+    return { kind: "human", label: "With an agent" };
+  return { kind: "unassigned", label: "Unassigned" };
+}
+
 export function InboxClient({
   initialConversations,
   workspaceId,
@@ -3494,6 +3512,29 @@ export function InboxClient({
                               <span className="truncate">{subtitle}</span>
                             </span>
                           </div>
+                          {(() => {
+                            const owner = conversationOwnerInfo(conversation);
+                            if (owner.kind === "unassigned") return null;
+                            return (
+                              <span
+                                className="ml-1 hidden shrink-0 items-center gap-1 rounded-full bg-base-200/70 px-1.5 py-0.5 text-[0.625rem] text-base-content/60 sm:flex"
+                                title={
+                                  owner.kind === "ai"
+                                    ? "Handled by AI"
+                                    : `Assigned to ${owner.label}`
+                                }
+                              >
+                                {owner.kind === "ai" ? (
+                                  <Bot className="h-3 w-3 shrink-0" />
+                                ) : (
+                                  <CircleUser className="h-3 w-3 shrink-0" />
+                                )}
+                                <span className="max-w-[64px] truncate">
+                                  {owner.kind === "ai" ? "AI" : owner.label}
+                                </span>
+                              </span>
+                            );
+                          })()}
                         </button>
                       </li>
                     );
