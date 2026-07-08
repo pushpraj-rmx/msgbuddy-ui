@@ -3194,10 +3194,11 @@ export const platformApi = {
     return response.data;
   },
   listConnectedClientBusinesses: async (): Promise<ConnectedClientBusiness[]> => {
-    const response = await api.get<ConnectedClientBusiness[]>(
+    // Backend returns a paged envelope ({ data, paging }); unwrap to the array.
+    const response = await api.get<{ data?: ConnectedClientBusiness[] }>(
       endpoints.platform.connectedClientBusinesses
     );
-    return response.data;
+    return response.data.data ?? [];
   },
   listChannelAccounts: async (): Promise<PlatformChannelAccount[]> => {
     const response = await api.get<PlatformChannelAccount[]>(

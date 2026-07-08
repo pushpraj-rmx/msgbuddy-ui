@@ -1,7 +1,9 @@
 "use client";
 
-import { useClientWabas, useOwnedWabas } from "@/hooks/use-onboarding";
+import { useClientWabas } from "@/hooks/use-onboarding";
+import { useConnectedClientBusinesses } from "@/hooks/use-platform";
 import { getApiError } from "@/lib/api-error";
+import type { ConnectedClientBusiness } from "@/lib/api";
 import { LoadingState, EmptyState } from "@/components/ui/states";
 
 function isMetaTokenMissingError(err: unknown): boolean {
@@ -10,10 +12,12 @@ function isMetaTokenMissingError(err: unknown): boolean {
 }
 
 export function OnboardingWabaClient() {
-  const owned = useOwnedWabas();
   const client = useClientWabas();
+  const businesses = useConnectedClientBusinesses();
 
-  const tokenMissing = isMetaTokenMissingError(owned.error) || isMetaTokenMissingError(client.error);
+  const tokenMissing =
+    isMetaTokenMissingError(client.error) ||
+    isMetaTokenMissingError(businesses.error);
 
   if (tokenMissing) {
     return (
@@ -29,27 +33,82 @@ export function OnboardingWabaClient() {
 
   return (
     <div className="space-y-4">
-      {owned.error && (
-        <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(owned.error)}</p></div>
-      )}
       {client.error && (
         <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(client.error)}</p></div>
       )}
 
       <WabaSection
-        title="Owned WABAs"
-        description="WABAs owned by the system business."
-        loading={owned.isLoading}
-        count={owned.data?.count ?? 0}
-        wabas={owned.data?.wabas ?? []}
-      />
-      <WabaSection
-        title="Client-shared WABAs"
-        description="WABAs shared by client businesses with current permissions/tasks."
+        title="Connected client WABAs"
+        description="WhatsApp Business Accounts from onboarded client accounts, hydrated live from Meta."
         loading={client.isLoading}
         count={client.data?.count ?? 0}
         wabas={client.data?.wabas ?? []}
       />
+
+      <ConnectedBusinessesSection
+        loading={businesses.isLoading}
+        error={businesses.error}
+        businesses={businesses.data ?? []}
+      />
+    </div>
+  );
+}
+
+function ConnectedBusinessesSection({
+  loading,
+  error,
+  businesses,
+}: {
+  loading: boolean;
+  error: unknown;
+  businesses: ConnectedClientBusiness[];
+}) {
+  return (
+    <div className="rounded-box border border-base-300 bg-base-200">
+      <div className="border-b border-base-300 px-4 py-3 sm:px-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">Connected client businesses</h2>
+            <span className="op-label">Businesses connected to the app via Embedded Signup. One without a WABA above hasn&apos;t finished onboarding.</span>
+          </div>
+          <span className="font-mono-op text-[0.6875rem] tabular-nums text-base-content/55">
+            count · {businesses.length}
+          </span>
+        </div>
+      </div>
+      <div className="space-y-3 p-4 sm:p-5">
+        {!!error && (
+          <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-100 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(error)}</p></div>
+        )}
+        {loading && <LoadingState label="Loading businesses…" />}
+        {!loading && !error && !businesses.length && (
+          <EmptyState title="No connected businesses" description="No client businesses are connected to the app." />
+        )}
+        {!!businesses.length && (
+          <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+            <table className="w-full text-[0.78125rem]">
+              <thead>
+                <tr className="border-b border-base-300 bg-base-200">
+                  <th className="op-label px-3 py-2.5 text-left font-medium">ID</th>
+                  <th className="op-label px-3 py-2.5 text-left font-medium">Name</th>
+                  <th className="op-label px-3 py-2.5 text-left font-medium">Verification</th>
+                  <th className="op-label px-3 py-2.5 text-left font-medium">Business status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {businesses.map((business) => (
+                  <tr key={business.id} className="border-b border-base-300 last:border-b-0">
+                    <td className="font-mono-op max-w-48 truncate px-3 py-3 text-[0.625rem] tracking-wider text-base-content/60">{business.id}</td>
+                    <td className="px-3 py-3 font-medium">{business.name}</td>
+                    <td className="px-3 py-3"><span className="op-tag">{business.verification_status || "—"}</span></td>
+                    <td className="px-3 py-3"><span className="op-tag">{business.business_status || "—"}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
