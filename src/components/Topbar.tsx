@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { X, PanelLeft, Bell, Search, Bug, ListChecks } from "lucide-react";
+import { X, PanelLeft, Bell, Search, Bug, ListChecks, Settings } from "lucide-react";
 import type { MeResponse, TaskCounts } from "@/lib/api";
 import { tasksApi, TASK_CHANGED_EVENT } from "@/lib/api";
 import { logoutAction } from "@/app/actions/auth";
@@ -11,6 +11,7 @@ import { clearToken } from "@/lib/auth";
 import { ThemeToggle } from "./ThemeToggle";
 import { useNotificationSSE, useNotifications } from "@/hooks/use-notifications";
 import { usePushSubscription } from "@/hooks/use-push-subscription";
+import { NotificationSettingsModal } from "@/components/NotificationSettingsModal";
 import { getPageTitle } from "@/lib/navigation";
 import { GlobalSearch } from "@/components/GlobalSearch";
 
@@ -29,13 +30,15 @@ export function Topbar({
   const router = useRouter();
   const pathname = usePathname();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
   const pageTitle = getPageTitle(pathname);
   const { listQuery, unreadCountQuery, markRead, markAllRead } = useNotifications({
     page: 1,
     limit: 8,
   });
   const { connectionState: sseState } = useNotificationSSE(workspaceId);
-  const { permission, enabled: pushEnabled } = usePushSubscription(workspaceId);
+  const { permission, enabled: pushEnabled, enable, disable } =
+    usePushSubscription(workspaceId);
 
   const handleLogout = async () => {
     clearToken();
@@ -232,34 +235,40 @@ export function Topbar({
             <div className="space-y-3 p-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold">Notifications</h3>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-xs"
-                  onClick={() => markAllRead.mutate()}
-                  disabled={markAllRead.isPending || unreadCount === 0}
-                >
-                  Mark all as read
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs btn-square"
+                    onClick={() => setNotifSettingsOpen(true)}
+                    aria-label="Notification settings"
+                    title="Notification settings"
+                  >
+                    <Settings className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs"
+                    onClick={() => markAllRead.mutate()}
+                    disabled={markAllRead.isPending || unreadCount === 0}
+                  >
+                    Mark all as read
+                  </button>
+                </div>
               </div>
               {!pushEnabled && permission !== "denied" && (
-                <Link
-                  href="/settings/notifications"
+                <button
+                  type="button"
                   className="flex w-full items-center gap-2 rounded-box border border-base-300 bg-base-200 px-3 py-2 text-left text-xs transition-colors hover:bg-base-300"
+                  onClick={() => setNotifSettingsOpen(true)}
                 >
                   <Bell className="h-4 w-4 shrink-0 text-primary" />
                   <span>
                     <span className="font-medium">Turn on browser notifications</span>
                     <span className="block text-base-content/60">
-                      Enable them in notification settings
+                      Get alerted even when the tab is closed
                     </span>
                   </span>
-                </Link>
-              )}
-              {permission === "denied" && (
-                <div className="rounded-box border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-content">
-                  Push notifications are blocked. Allow them in your browser
-                  settings to receive alerts.
-                </div>
+                </button>
               )}
               <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
                 {listQuery.isLoading ? (
@@ -378,6 +387,15 @@ export function Topbar({
           />
         </div>
       ) : null}
+
+      <NotificationSettingsModal
+        open={notifSettingsOpen}
+        onClose={() => setNotifSettingsOpen(false)}
+        permission={permission}
+        enabled={pushEnabled}
+        enable={enable}
+        disable={disable}
+      />
     </header>
   );
 }
