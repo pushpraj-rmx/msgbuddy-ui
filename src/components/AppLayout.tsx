@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { AppDock } from "./AppDock";
-import { PwaInstallPrompt } from "./PwaInstallPrompt";
 import { AppUpdateToast } from "./AppUpdateToast";
 import { BackgroundTasksBar } from "./BackgroundTasksBar";
 import { BackgroundTaskToast } from "./BackgroundTaskToast";
@@ -121,7 +120,6 @@ export function AppLayout({
       <SessionRefresh />
       <DesktopBridge />
       <AppShortcuts />
-      <PwaInstallPrompt />
       <AppUpdateToast />
       <BackgroundTasksBar tasks={bgTasks} />
       <BackgroundTaskToast notices={bgCompleted} onDismiss={dismissCompletion} />

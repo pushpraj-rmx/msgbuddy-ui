@@ -35,7 +35,7 @@ export function Topbar({
     limit: 8,
   });
   const { connectionState: sseState } = useNotificationSSE(workspaceId);
-  const { permission, requestAndSubscribe } = usePushSubscription(workspaceId);
+  const { permission, enabled: pushEnabled } = usePushSubscription(workspaceId);
 
   const handleLogout = async () => {
     clearToken();
@@ -241,20 +241,19 @@ export function Topbar({
                   Mark all as read
                 </button>
               </div>
-              {permission === "default" && (
-                <button
-                  type="button"
+              {!pushEnabled && permission !== "denied" && (
+                <Link
+                  href="/settings/notifications"
                   className="flex w-full items-center gap-2 rounded-box border border-base-300 bg-base-200 px-3 py-2 text-left text-xs transition-colors hover:bg-base-300"
-                  onClick={requestAndSubscribe}
                 >
                   <Bell className="h-4 w-4 shrink-0 text-primary" />
                   <span>
-                    <span className="font-medium">Enable push notifications</span>
+                    <span className="font-medium">Turn on browser notifications</span>
                     <span className="block text-base-content/60">
-                      Get alerted even when the tab is closed
+                      Enable them in notification settings
                     </span>
                   </span>
-                </button>
+                </Link>
               )}
               {permission === "denied" && (
                 <div className="rounded-box border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning-content">
