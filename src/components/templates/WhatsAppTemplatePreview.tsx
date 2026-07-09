@@ -46,6 +46,8 @@ export type WhatsAppTemplatePreviewProps = {
   headerType?: "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | "LOCATION" | null;
   headerContent?: string | null;
   headerPreviewUrl?: string | null;
+  /** Original filename for a media header — shown in the DOCUMENT preview instead of the opaque asset handle. */
+  headerMediaName?: string | null;
   body: string;
   footer?: string | null;
   buttons?: TemplateButton[] | null;
@@ -118,11 +120,12 @@ const BUTTON_DEFAULT_LABEL: Record<string, string> = {
 function HeaderMedia({
   type,
   previewUrl,
-  content,
+  name,
 }: {
   type: "IMAGE" | "VIDEO" | "DOCUMENT";
   previewUrl?: string | null;
-  content?: string | null;
+  /** Original filename, when known (freshly uploaded documents). */
+  name?: string | null;
 }) {
   const resolved = resolveMediaUrlForUi(previewUrl ?? undefined);
 
@@ -155,12 +158,12 @@ function HeaderMedia({
     );
   }
 
-  // DOCUMENT
+  // DOCUMENT — show a document icon + the filename (never the opaque asset handle).
   return (
     <div className="flex items-center gap-2 rounded-lg bg-base-300/60 px-3 py-2.5">
       <FileText className="h-5 w-5 shrink-0 text-base-content/40" />
       <span className="truncate text-xs text-base-content/60">
-        {content || "Document"}
+        {name || "Document"}
       </span>
     </div>
   );
@@ -182,6 +185,7 @@ function BubbleCard({
   headerType,
   headerContent,
   headerPreviewUrl,
+  headerMediaName,
   body,
   footer,
   buttons,
@@ -191,6 +195,7 @@ function BubbleCard({
   headerType?: string | null;
   headerContent?: string | null;
   headerPreviewUrl?: string | null;
+  headerMediaName?: string | null;
   body?: string;
   footer?: string | null;
   buttons?: TemplateButton[];
@@ -213,7 +218,7 @@ function BubbleCard({
         <HeaderMedia
           type={ht as "IMAGE" | "VIDEO" | "DOCUMENT"}
           previewUrl={headerPreviewUrl}
-          content={headerContent}
+          name={headerMediaName}
         />
       )}
       {ht === "LOCATION" && (
@@ -395,6 +400,7 @@ export function WhatsAppTemplatePreview({
   headerType,
   headerContent,
   headerPreviewUrl,
+  headerMediaName,
   body,
   footer,
   buttons,
@@ -460,6 +466,7 @@ export function WhatsAppTemplatePreview({
             headerType={headerType}
             headerContent={headerContent}
             headerPreviewUrl={headerPreviewUrl}
+            headerMediaName={headerMediaName}
             body={body}
             footer={footer}
             buttons={parsedButtons}

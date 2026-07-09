@@ -341,6 +341,8 @@ export const ChannelTemplateVersionEditor = forwardRef<
   >({});
   /** Blob URL for the just-picked header file — local-only, lets the right-panel preview render the actual image. */
   const [headerPreviewUrl, setHeaderPreviewUrl] = useState<string | null>(null);
+  /** Original filename of the just-picked header media — shown in the DOCUMENT preview instead of the opaque asset handle. */
+  const [headerMediaName, setHeaderMediaName] = useState<string>("");
   /** Same as above, per carousel card index. */
   const [carouselPreviewUrlsByIndex, setCarouselPreviewUrlsByIndex] = useState<
     Record<number, string>
@@ -362,13 +364,24 @@ export const ChannelTemplateVersionEditor = forwardRef<
   const autoSaveTimeoutRef = useRef<number | null>(null);
   const lastAutoSavedSignatureRef = useRef<string | null>(null);
 
-  // Re-sync when switching versions OR when server content changes (e.g. after PUT refetch).
-  // Do not depend only on version.id — that skips updates after save for the same row.
+  // Initialize the editable form state from the loaded version. Keyed on the
+  // version identity (and its editability) ONLY — NOT on every version.* value.
+  //
+  // The version query runs on a 10s background refetch, so depending on
+  // version.body / version.headerContent / etc. here would re-run this reset
+  // whenever ANY field changed on the server and clobber the author's unsaved,
+  // in-progress edits (e.g. the just-typed body being reset to the stale server
+  // value the moment a media upload's save round-trips, which then fails
+  // submit-for-approval with "Body is required"). While a draft is editable the
+  // local form is the source of truth; we only re-sync on a genuine version
+  // switch or when the version locks (editable -> false, showing final state).
   useEffect(() => {
     setFormError(null);
     setBody(version.body ?? "");
     setHeaderType((version.headerType as TemplateHeaderType) ?? "NONE");
     setHeaderContent(version.headerContent ?? "");
+    // Persisted versions only carry the asset handle, not the original filename.
+    setHeaderMediaName("");
     setFooter(version.footer ?? "");
     setLanguage(version.language ?? DEFAULT_WHATSAPP_TEMPLATE_LANGUAGE);
     setParameterFormat(
@@ -418,22 +431,11 @@ export const ChannelTemplateVersionEditor = forwardRef<
     setAuthAutofillText(ac?.autofillText ?? "Autofill");
     setAuthPackageName(ac?.packageName ?? "");
     setAuthSignatureHash(ac?.signatureHash ?? "");
-  }, [
-    version.id,
-    version.body,
-    version.footer,
-    version.headerContent,
-    version.headerType,
-    version.language,
-    version.parameterFormat,
-    version.layoutType,
-    version.buttons,
-    version.variables,
-    version.carouselCards,
-    version.allowCategoryChange,
-    version.authConfig,
-    version.limitedTimeOffer,
-  ]);
+    // Intentionally keyed on identity/editability only — see the comment above.
+    // The effect reads the current `version` snapshot when it runs; adding the
+    // individual version.* fields back would reintroduce the unsaved-edit clobber.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version.id, editable]);
 
   // Meta restriction: carousel templates cannot be UTILITY. Auto switch category to MARKETING.
   useEffect(() => {
@@ -553,6 +555,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
       try {
         const { assetHandle } = await mediaApi.uploadForTemplate(file);
         setHeaderContent(assetHandle);
+        setHeaderMediaName(file.name);
       } catch (err) {
         setFormError(getApiError(err));
       } finally {
@@ -867,6 +870,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
         headerType={headerType as "NONE" | "TEXT" | "IMAGE" | "VIDEO" | "DOCUMENT" | "LOCATION"}
         headerContent={headerContent}
         headerPreviewUrl={headerPreviewUrl}
+        headerMediaName={headerMediaName}
         body={body}
         footer={footer}
         buttons={standardButtons}
@@ -896,6 +900,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
     headerType,
     headerContent,
     headerPreviewUrl,
+    headerMediaName,
     body,
     footer,
     standardButtonRows,
@@ -1285,6 +1290,7 @@ export const ChannelTemplateVersionEditor = forwardRef<
                   const next = e.target.value as TemplateHeaderType;
                   if (next !== headerType) {
                     setHeaderContent("");
+                    setHeaderMediaName("");
                   }
                   setHeaderType(next);
                 }}
@@ -1329,14 +1335,15 @@ export const ChannelTemplateVersionEditor = forwardRef<
               <div className="space-y-2">
                 {headerContent ? (
                   <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2">
-                    <span className="op-label text-success">
-                      ✓ {headerType.toLowerCase()} uploaded · see preview
+                    <span className="op-label truncate text-success">
+                      ✓ {headerMediaName || `${headerType.toLowerCase()} uploaded`} · see preview
                     </span>
                     <button
                       type="button"
                       className="btn btn-ghost btn-xs text-error/70"
                       onClick={() => {
                         setHeaderContent("");
+                        setHeaderMediaName("");
                         setHeaderPreviewUrl((prev) => {
                           if (prev) URL.revokeObjectURL(prev);
                           return null;
