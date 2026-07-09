@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
-  Bell,
   BookOpen,
   Blocks,
   Clock,
@@ -53,7 +52,6 @@ function buildGroups(g: SettingsNavGating): NavGroup[] {
         { href: "/settings/account", label: "Profile & security", Icon: User, show: true },
         { href: "/settings/password", label: "Password", Icon: Lock, show: true },
         { href: "/settings/appearance", label: "Appearance", Icon: Monitor, show: true },
-        { href: "/settings/notifications", label: "Notifications", Icon: Bell, show: true },
       ],
     },
     {
