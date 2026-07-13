@@ -95,6 +95,17 @@ export function useReactivateWorkspace() {
   });
 }
 
+export function useRestoreWorkspace() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => platformApi.restoreWorkspace(id),
+    onSuccess: (workspace) => {
+      qc.invalidateQueries({ queryKey: platformKeys.all });
+      qc.setQueryData(platformKeys.workspace(workspace.id), workspace);
+    },
+  });
+}
+
 export function usePlatformUsers(params: PlatformUsersListParams) {
   return useQuery({
     queryKey: platformKeys.users(params),

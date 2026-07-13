@@ -395,6 +395,7 @@ export const endpoints = {
     suspendWorkspace: (id: string) => `${P}/platform/workspaces/${id}/suspend`,
     reactivateWorkspace: (id: string) =>
       `${P}/platform/workspaces/${id}/reactivate`,
+    restoreWorkspace: (id: string) => `${P}/platform/workspaces/${id}/restore`,
     users: `${P}/platform/users`,
     userById: (id: string) => `${P}/platform/users/${id}`,
     userLoginHistory: (id: string) => `${P}/platform/users/${id}/login-history`,

@@ -3241,6 +3241,12 @@ export const platformApi = {
     );
     return response.data;
   },
+  restoreWorkspace: async (id: string): Promise<PlatformWorkspaceDetail> => {
+    const response = await api.put<PlatformWorkspaceDetail>(
+      endpoints.platform.restoreWorkspace(id)
+    );
+    return response.data;
+  },
   listUsers: async (
     params?: PlatformUsersListParams
   ): Promise<OffsetPaginatedResponse<PlatformUserListItem>> => {

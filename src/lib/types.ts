@@ -614,6 +614,7 @@ export type PlatformWorkspaceListItem = {
   status: PlatformWorkspaceStatus;
   isSuspended: boolean;
   suspendedAt?: string | null;
+  deletedAt?: string | null;
   plan?: string | null;
   planExpiresAt?: string | null;
   billingEmail?: string | null;

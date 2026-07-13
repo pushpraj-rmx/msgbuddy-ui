@@ -16,6 +16,7 @@ import {
   usePlatformWorkspaces,
   useReactivateWorkspace,
   useSuspendWorkspace,
+  useRestoreWorkspace,
   useUpdatePlatformRole,
   usePlatformAccessRequests,
   usePlatformAccessRequestsOpenCount,
@@ -140,6 +141,7 @@ export function WorkspacesTab() {
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const [mutationError, setMutationError] = useState<string | null>(null);
   const [suspendWorkspaceId, setSuspendWorkspaceId] = useState<string | null>(null);
+  const [restoreWorkspaceId, setRestoreWorkspaceId] = useState<string | null>(null);
 
   const list = usePlatformWorkspaces({
     search: search.trim() || undefined,
@@ -151,6 +153,7 @@ export function WorkspacesTab() {
   const channelAccounts = useChannelAccounts();
   const suspend = useSuspendWorkspace();
   const reactivate = useReactivateWorkspace();
+  const restore = useRestoreWorkspace();
 
   const numbersByWorkspaceId = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -261,7 +264,7 @@ export function WorkspacesTab() {
                   </div>
                 </td>
                 <td className="px-3 py-3">
-                  <span className={`op-tag ${workspace.status === "ACTIVE" ? "op-tag-ok" : ""}`}>{workspace.status}</span>
+                  <span className={`op-tag ${workspace.status === "ACTIVE" ? "op-tag-ok" : workspace.status === "DELETED" ? "op-tag-danger" : ""}`}>{workspace.status}</span>
                 </td>
                 <td className="px-3 py-3">
                   {workspace.isSuspended ? <span className="op-tag op-tag-warn">Yes</span> : <span className="op-tag">No</span>}
@@ -276,7 +279,15 @@ export function WorkspacesTab() {
                     >
                       Inspect
                     </button>
-                    {workspace.isSuspended ? (
+                    {workspace.status === "DELETED" ? (
+                      <button
+                        className="btn btn-xs border-info/40 text-info hover:bg-info/10"
+                        disabled={restore.isPending}
+                        onClick={() => setRestoreWorkspaceId(workspace.id)}
+                      >
+                        Restore
+                      </button>
+                    ) : workspace.isSuspended ? (
                       <button
                         className="btn btn-xs"
                         disabled={reactivate.isPending}
@@ -424,6 +435,23 @@ export function WorkspacesTab() {
           );
         }}
         onClose={() => setSuspendWorkspaceId(null)}
+      />
+      <ConfirmDialog
+        open={restoreWorkspaceId !== null}
+        title="Restore workspace"
+        description="This clears the deletion and reactivates the workspace — its owner and members will be able to access it again."
+        confirmLabel="Restore"
+        tone="primary"
+        loading={restore.isPending}
+        onConfirm={() => {
+          if (!restoreWorkspaceId) return;
+          setMutationError(null);
+          restore.mutate(restoreWorkspaceId, {
+            onError: (error) => setMutationError(getApiError(error)),
+            onSettled: () => setRestoreWorkspaceId(null),
+          });
+        }}
+        onClose={() => setRestoreWorkspaceId(null)}
       />
     </div>
   );
