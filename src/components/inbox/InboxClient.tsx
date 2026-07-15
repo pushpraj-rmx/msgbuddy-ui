@@ -46,7 +46,12 @@ import {
   classifyWhatsAppMediaKind,
   useInboxWhatsAppMediaUpload,
 } from "@/hooks/use-inbox-whatsapp-media-upload";
-import { type InboxMessage, type MessageReactionWire, isFailedMessage } from "@/lib/messaging";
+import {
+  type InboxMessage,
+  type MessageReactionWire,
+  isFailedMessage,
+  collapseCampaignFailures,
+} from "@/lib/messaging";
 import { lastMessagePreview, reactionPreview } from "@/lib/inboxPreview";
 import type { ChannelTemplateVersion, Contact, Template } from "@/lib/types";
 import {
@@ -821,6 +826,35 @@ export function InboxClient({
     return groups;
   }, [sortedMessages]);
 
+  /**
+   * Per-group render items with campaign delivery failures collapsed into a
+   * single summary line (see collapseCampaignFailures). Keeps the bubble stream
+   * free of the red-failure spam a broad campaign otherwise leaves in every
+   * recipient's chat, while manual send failures still render inline.
+   */
+  const groupedTimeline = useMemo(
+    () =>
+      groupedMessages.map((group) => ({
+        dateKey: group.dateKey,
+        dateLabel: group.dateLabel,
+        items: collapseCampaignFailures(group.messages),
+      })),
+    [groupedMessages]
+  );
+
+  /** Campaign-failure summary lines the agent has expanded to inspect. */
+  const [expandedFailureGroups, setExpandedFailureGroups] = useState<Set<string>>(
+    () => new Set()
+  );
+  const toggleFailureGroup = useCallback((id: string) => {
+    setExpandedFailureGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
   const clearPendingMediaPreview = useCallback(() => {
     setPendingPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -1367,6 +1401,12 @@ export function InboxClient({
         const data = (await conversationsApi.messages(
           conversationId
         )) as InboxMessage[];
+        // The user may have switched conversations while this request was in
+        // flight. A late response must not render under the now-selected thread
+        // (wrong messages under the wrong header/composer).
+        if (conversationId !== selectedIdRef.current) {
+          return;
+        }
         setMessages((prev) => {
           if (
             silent &&
@@ -1380,7 +1420,7 @@ export function InboxClient({
           return data;
         });
       } catch (error: unknown) {
-        if (!silent) {
+        if (!silent && conversationId === selectedIdRef.current) {
           setMessageError(extractApiErrorMessage(error) || "Failed to load messages.");
         }
       } finally {
@@ -4034,26 +4074,91 @@ export function InboxClient({
                   ref={messagesScrollRef}
                   className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-y-contain pr-1"
                 >
-                  {groupedMessages.map((group) => (
+                  {groupedTimeline.map((group) => (
                     <div key={group.dateKey}>
                       {group.dateLabel && <DateSeparator label={group.dateLabel} />}
-                      {group.messages.map((message) => (
-                        <MessageBubble
-                          key={`${message.id}-${resolveMediaUrlForUi(message.mediaUrl ?? undefined) ?? ""}-${message.status ?? ""}`}
-                          message={message}
-                          onPin={handlePinMessage}
-                          onStar={handleStarMessage}
-                          onReact={handleReactToMessage}
-                          onUnreact={handleUnreactToMessage}
-                          onRetry={handleRetryFailedMessage}
-                          retrying={retryingMessageIds.has(message.id)}
-                          onDiscard={handleDiscardFailedMessage}
-                          discarding={discardingMessageIds.has(message.id)}
-                          onCreateTask={handleOpenCreateTaskForMessage}
-                          currentUserId={currentUserId}
-                          highlighted={highlightedMessageId === message.id}
-                        />
-                      ))}
+                      {group.items.map((item) => {
+                        if (item.kind === "message") {
+                          const message = item.message;
+                          return (
+                            <MessageBubble
+                              key={`${message.id}-${resolveMediaUrlForUi(message.mediaUrl ?? undefined) ?? ""}-${message.status ?? ""}`}
+                              message={message}
+                              onPin={handlePinMessage}
+                              onStar={handleStarMessage}
+                              onReact={handleReactToMessage}
+                              onUnreact={handleUnreactToMessage}
+                              onRetry={handleRetryFailedMessage}
+                              retrying={retryingMessageIds.has(message.id)}
+                              onDiscard={handleDiscardFailedMessage}
+                              discarding={discardingMessageIds.has(message.id)}
+                              onCreateTask={handleOpenCreateTaskForMessage}
+                              currentUserId={currentUserId}
+                              highlighted={highlightedMessageId === message.id}
+                            />
+                          );
+                        }
+
+                        // Collapsed run of campaign delivery failures. Their
+                        // failure is already reported in the campaign; keep the
+                        // chat clean and offer an expand-to-inspect affordance.
+                        const count = item.messages.length;
+                        const campaignIds = Array.from(
+                          new Set(
+                            item.messages
+                              .map((m) => m.campaignId)
+                              .filter((id): id is string => !!id)
+                          )
+                        );
+                        const campaignHref =
+                          campaignIds.length === 1
+                            ? `/campaigns?id=${campaignIds[0]}`
+                            : "/campaigns";
+                        const expanded = expandedFailureGroups.has(item.id);
+                        return (
+                          <div key={item.id} className="my-3 flex flex-col items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-base-300 bg-base-200 px-3 py-1 text-xs text-base-content/60">
+                              <span>
+                                ⚠ {count} campaign {count === 1 ? "message" : "messages"} failed to deliver
+                              </span>
+                              <a
+                                href={campaignHref}
+                                className="text-primary underline-offset-2 hover:underline"
+                              >
+                                View campaign →
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => toggleFailureGroup(item.id)}
+                                className="text-base-content/50 hover:text-base-content"
+                              >
+                                {expanded ? "Hide" : "Show"}
+                              </button>
+                            </div>
+                            {expanded && (
+                              <div className="w-full space-y-4">
+                                {item.messages.map((message) => (
+                                  <MessageBubble
+                                    key={`${message.id}-${resolveMediaUrlForUi(message.mediaUrl ?? undefined) ?? ""}-${message.status ?? ""}`}
+                                    message={message}
+                                    onPin={handlePinMessage}
+                                    onStar={handleStarMessage}
+                                    onReact={handleReactToMessage}
+                                    onUnreact={handleUnreactToMessage}
+                                    onRetry={handleRetryFailedMessage}
+                                    retrying={retryingMessageIds.has(message.id)}
+                                    onDiscard={handleDiscardFailedMessage}
+                                    discarding={discardingMessageIds.has(message.id)}
+                                    onCreateTask={handleOpenCreateTaskForMessage}
+                                    currentUserId={currentUserId}
+                                    highlighted={highlightedMessageId === message.id}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
                   <div aria-hidden className="h-px w-full shrink-0" />
