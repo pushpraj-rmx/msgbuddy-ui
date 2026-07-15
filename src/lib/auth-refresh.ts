@@ -15,61 +15,74 @@ type RefreshPayload = {
 /**
  * Single-flight refresh: the API rotates refresh tokens (one DB row per refresh),
  * so concurrent POST /auth/refresh with the same cookie invalidates the loser and
- * forces re-login. All server-side refresh entry points must share this mutex.
+ * forces re-login.
+ *
+ * The map is a module-level singleton shared across every request in this Next.js
+ * server process, so it MUST be keyed by the caller's refresh token. Keying by
+ * nothing (a single shared promise) would hand one user the rotated tokens minted
+ * for a different user whose refresh happened to be in flight — a cross-account
+ * session leak. Same refresh token → same in-flight promise (real single-flight);
+ * different users → independent promises.
  */
-let refreshInFlight: Promise<RefreshPayload | null> | null = null;
+const refreshInFlightByToken = new Map<
+  string,
+  Promise<RefreshPayload | null>
+>();
 
 export async function refreshAuthTokensOnce(): Promise<RefreshPayload | null> {
-  if (!refreshInFlight) {
-    refreshInFlight = (async () => {
-      try {
-        const cookieStore = await cookies();
-        const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
-        if (!refreshToken) return null;
+  const cookieStore = await cookies();
+  const refreshToken = cookieStore.get(REFRESH_TOKEN_COOKIE)?.value;
+  if (!refreshToken) return null;
 
-        const response = await fetch(`${API_BASE_URL}${endpoints.auth.refresh}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refreshToken }),
-          credentials: "include",
+  const existing = refreshInFlightByToken.get(refreshToken);
+  if (existing) return existing;
+
+  const inFlight = (async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}${endpoints.auth.refresh}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refreshToken }),
+        credentials: "include",
+      });
+
+      if (!response.ok) return null;
+
+      const payload = (await response.json()) as Partial<RefreshPayload>;
+      if (!payload.accessToken) return null;
+
+      const maxAge = payload.expiresIn ?? DEFAULT_ACCESS_TOKEN_TTL_SEC;
+      if (typeof cookieStore.set === "function") {
+        cookieStore.set(ACCESS_TOKEN_COOKIE, payload.accessToken, {
+          path: "/",
+          sameSite: "lax",
+          httpOnly: false,
+          secure: process.env.NODE_ENV === "production",
+          maxAge,
         });
-
-        if (!response.ok) return null;
-
-        const payload = (await response.json()) as Partial<RefreshPayload>;
-        if (!payload.accessToken) return null;
-
-        const maxAge = payload.expiresIn ?? DEFAULT_ACCESS_TOKEN_TTL_SEC;
-        if (typeof cookieStore.set === "function") {
-          cookieStore.set(ACCESS_TOKEN_COOKIE, payload.accessToken, {
+        if (payload.refreshToken) {
+          cookieStore.set(REFRESH_TOKEN_COOKIE, payload.refreshToken, {
             path: "/",
             sameSite: "lax",
-            httpOnly: false,
+            httpOnly: true,
             secure: process.env.NODE_ENV === "production",
-            maxAge,
+            maxAge: 30 * 24 * 60 * 60,
           });
-          if (payload.refreshToken) {
-            cookieStore.set(REFRESH_TOKEN_COOKIE, payload.refreshToken, {
-              path: "/",
-              sameSite: "lax",
-              httpOnly: true,
-              secure: process.env.NODE_ENV === "production",
-              maxAge: 30 * 24 * 60 * 60,
-            });
-          }
         }
-
-        return {
-          accessToken: payload.accessToken,
-          refreshToken: payload.refreshToken ?? "",
-          expiresIn: payload.expiresIn,
-        };
-      } catch {
-        return null;
       }
-    })().finally(() => {
-      refreshInFlight = null;
-    });
-  }
-  return refreshInFlight;
+
+      return {
+        accessToken: payload.accessToken,
+        refreshToken: payload.refreshToken ?? "",
+        expiresIn: payload.expiresIn,
+      };
+    } catch {
+      return null;
+    }
+  })().finally(() => {
+    refreshInFlightByToken.delete(refreshToken);
+  });
+
+  refreshInFlightByToken.set(refreshToken, inFlight);
+  return inFlight;
 }

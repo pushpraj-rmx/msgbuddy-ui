@@ -204,8 +204,15 @@ export function CampaignsClient({
     setRunsLoading(true);
     try {
       const data = (await campaignsApi.runs(selectedCampaign.id)) as CampaignRun[];
-      setRuns(Array.isArray(data) ? data : []);
-      setSelectedRunId((prev) => prev ?? data?.[0]?.id ?? null);
+      const list = Array.isArray(data) ? data : [];
+      setRuns(list);
+      // Keep the current selection only if it belongs to THIS campaign's runs;
+      // otherwise (e.g. the user just switched campaigns) fall back to the first
+      // run. `prev ?? …` was retaining the previous campaign's run id, so run
+      // actions/job fetches hit another campaign's run.
+      setSelectedRunId((prev) =>
+        prev && list.some((r) => r.id === prev) ? prev : list[0]?.id ?? null,
+      );
     } catch {
       setRuns([]);
       setSelectedRunId(null);

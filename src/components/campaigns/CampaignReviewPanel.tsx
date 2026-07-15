@@ -35,7 +35,10 @@ type Preview = {
 type ReviewTab = "audience" | "message";
 
 const DEFAULT_CHUNK = 100;
-const DEFAULT_THROTTLE = 60;
+// Must match the backend default applied when throttlePerMin is omitted
+// (campaigns.service.ts: `throttlePerMin = 4200`). A 60 fallback here made the
+// ETA disagree with what the queue actually does when the field is left blank.
+const DEFAULT_THROTTLE = 4200;
 
 /**
  * Read-only "Review before send" view shared by:

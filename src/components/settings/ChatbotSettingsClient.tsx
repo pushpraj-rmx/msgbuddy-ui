@@ -33,6 +33,31 @@ export function ChatbotSettingsClient({
   const [chatbotError, setChatbotError] = useState<string | null>(null);
   const [chatbotSaved, setChatbotSaved] = useState(false);
 
+  // Master auto-reply switch. Independent of the chatbot mode below: when off,
+  // NO automated responder (flows, automation rules, or the LLM chatbot) replies.
+  // Defaults on (undefined => on) so existing workspaces keep replying.
+  const [botsEnabled, setBotsEnabled] = useState(settings.botsEnabled !== false);
+  const [savingBots, setSavingBots] = useState(false);
+  const [botsError, setBotsError] = useState<string | null>(null);
+
+  const onToggleBots = async (next: boolean) => {
+    setSavingBots(true);
+    setBotsError(null);
+    const previous = botsEnabled;
+    setBotsEnabled(next); // optimistic
+    try {
+      await workspaceApi.updateSettings(workspaceId, { botsEnabled: next });
+      router.refresh();
+    } catch (e) {
+      setBotsEnabled(previous); // revert on failure
+      setBotsError(
+        e instanceof Error ? e.message : "Failed to update auto-replies",
+      );
+    } finally {
+      setSavingBots(false);
+    }
+  };
+
   const onSaveChatbot = async () => {
     setSavingChatbot(true);
     setChatbotError(null);
@@ -72,7 +97,42 @@ export function ChatbotSettingsClient({
   };
 
   return (
-    <section className="space-y-3">
+    <section className="space-y-6">
+      <div className="space-y-3">
+        <span className="op-section-title">Automated replies</span>
+        <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[0.875rem] font-semibold">
+                  Automated replies
+                </span>
+                <span className={botsEnabled ? "op-tag op-tag-ok" : "op-tag"}>
+                  {botsEnabled ? "On" : "Paused"}
+                </span>
+              </div>
+              <p className="text-[0.75rem] text-base-content/55">
+                Master switch for every bot. When paused, no flow, automation
+                rule, or chatbot will reply — messages still arrive and your team
+                can answer manually. Leave on for normal operation.
+              </p>
+              {botsError ? (
+                <p className="text-[0.75rem] text-error">{botsError}</p>
+              ) : null}
+            </div>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary"
+              checked={botsEnabled}
+              disabled={savingBots}
+              onChange={(e) => onToggleBots(e.target.checked)}
+              aria-label="Toggle automated replies"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
       <span className="op-section-title">Chatbot</span>
       <div className="rounded-box border border-base-300 bg-base-200 p-4 sm:p-5 space-y-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -252,6 +312,7 @@ export function ChatbotSettingsClient({
             )}
           </button>
         </div>
+      </div>
       </div>
     </section>
   );

@@ -2314,6 +2314,9 @@ export type VerificationCodeMethod = "SMS" | "VOICE";
 export interface WorkspaceSettingsPayload {
   timezone?: string;
   locale?: string;
+  // Master auto-reply switch. When false, no flow, automation rule, or chatbot
+  // replies — the workspace goes fully manual. Defaults true.
+  botsEnabled?: boolean;
   // Chatbot
   chatbotEnabled?: boolean;
   chatbotSystemPrompt?: string;
