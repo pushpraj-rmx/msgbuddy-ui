@@ -192,6 +192,57 @@ export function isProcessingMessage(message: InboxMessage): boolean {
   return message.status?.toUpperCase() === "PROCESSING";
 }
 
+/**
+ * An outbound message that (a) failed to deliver AND (b) originated from a
+ * campaign. Their failure is already surfaced in the campaign report, so the
+ * conversation timeline collapses them into a single summary line rather than
+ * rendering one red bubble each. Manual/hand-typed send failures (no
+ * campaignId) are NOT collapsed — the agent still needs to see and retry them.
+ */
+export function isCampaignFailure(message: InboxMessage): boolean {
+  return (
+    message.direction === "OUTBOUND" &&
+    !!message.campaignId &&
+    isFailedMessage(message)
+  );
+}
+
+/** A rendered timeline entry: either a normal message bubble, or a collapsed
+ *  run of consecutive campaign delivery failures. */
+export type TimelineItem =
+  | { kind: "message"; message: InboxMessage }
+  | { kind: "campaignFailures"; id: string; messages: InboxMessage[] };
+
+/**
+ * Collapse consecutive campaign-send failures into a single summary item so
+ * they don't spam the conversation. Everything else (including manual send
+ * failures and successfully-sent campaign messages) passes through untouched,
+ * preserving chronological order. The summary item's id is derived from the
+ * first collapsed message so React keys stay stable across re-renders.
+ */
+export function collapseCampaignFailures(
+  messages: InboxMessage[]
+): TimelineItem[] {
+  const items: TimelineItem[] = [];
+  for (const message of messages) {
+    if (isCampaignFailure(message)) {
+      const last = items[items.length - 1];
+      if (last && last.kind === "campaignFailures") {
+        last.messages.push(message);
+      } else {
+        items.push({
+          kind: "campaignFailures",
+          id: `cf-${message.id}`,
+          messages: [message],
+        });
+      }
+    } else {
+      items.push({ kind: "message", message });
+    }
+  }
+  return items;
+}
+
 /** Footer label for delivery pipeline — avoids showing "Sent" when status is explicit. */
 /**
  * Human-readable absolute time for a future schedule. Pegs the relative
