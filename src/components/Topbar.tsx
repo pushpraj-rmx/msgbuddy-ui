@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { X, PanelLeft, Bell, Search, Bug, ListChecks, Settings } from "lucide-react";
 import type { MeResponse, TaskCounts } from "@/lib/api";
@@ -28,6 +29,7 @@ export function Topbar({
   workspaceId: string;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [notifSettingsOpen, setNotifSettingsOpen] = useState(false);
@@ -42,6 +44,10 @@ export function Topbar({
 
   const handleLogout = async () => {
     clearToken();
+    // Drop all cached query data so a different user logging in on the same tab
+    // never sees the previous session's workspace-agnostic caches (workspaces,
+    // tags, segments, search, notifications). Mirrors WorkspaceSwitcher.
+    queryClient.clear();
     await logoutAction();
     router.replace("/login");
   };
