@@ -52,7 +52,7 @@ import {
   isFailedMessage,
   collapseCampaignFailures,
 } from "@/lib/messaging";
-import { lastMessagePreview, reactionPreview } from "@/lib/inboxPreview";
+import { lastMessagePreview, reactionPreview, dbOrderBoundaryId } from "@/lib/inboxPreview";
 import type { ChannelTemplateVersion, Contact, Template } from "@/lib/types";
 import {
   carouselCardFileAccept,
@@ -1329,7 +1329,11 @@ export function InboxClient({
       // the last page. Setting a cursor whenever data.length > 0 left the button
       // enabled for any small result set (e.g. the Awaiting/Unread/Snoozed
       // filters), where clicking it just fetched an empty next page.
-      setCursor(data.length === LIMIT ? (data.at(-1)?.id ?? null) : null);
+      //
+      // Use the page's true DB-order boundary (not data.at(-1)): under the
+      // oldestUnreadFirst sort the server re-sorts the page for display, so the
+      // last array item is a mid-order row and paging from it skips/repeats.
+      setCursor(data.length === LIMIT ? dbOrderBoundaryId(data) : null);
       if (!append && data.length) {
         setSelectedId((current) => {
           if (current) return current;
