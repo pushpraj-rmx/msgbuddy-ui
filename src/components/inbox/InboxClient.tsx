@@ -1325,7 +1325,11 @@ export function InboxClient({
         }
         return data;
       });
-      setCursor(data.length ? data.at(-1)?.id ?? null : null);
+      // Only offer "Load more" when a FULL page came back — a partial page is
+      // the last page. Setting a cursor whenever data.length > 0 left the button
+      // enabled for any small result set (e.g. the Awaiting/Unread/Snoozed
+      // filters), where clicking it just fetched an empty next page.
+      setCursor(data.length === LIMIT ? (data.at(-1)?.id ?? null) : null);
       if (!append && data.length) {
         setSelectedId((current) => {
           if (current) return current;
