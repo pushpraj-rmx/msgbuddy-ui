@@ -373,13 +373,20 @@ export function CampaignReport({ campaignId }: { campaignId: string }) {
         <SectionHeader title="Summary" description="Overall campaign performance" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Total contacts" value={summary?.totalContacts.toLocaleString() ?? 0} hint="Total recipients targeted by this campaign" />
-          <Stat label="Sent" value={summary?.sent.toLocaleString() ?? 0} hint="Messages submitted to the channel provider" />
-          <Stat label="Delivered" value={summary?.delivered.toLocaleString() ?? 0} accent="success" hint="Accepted and delivered to the recipient's device" />
+          <Stat label="Sent" value={summary?.sent.toLocaleString() ?? 0} hint="Accepted by WhatsApp. This is an acceptance, not a delivery — the Delivered/Read numbers below confirm the real outcome and keep rising after sending finishes." />
+          <Stat label="Delivered" value={summary?.delivered.toLocaleString() ?? 0} accent="success" hint="Confirmed delivered to the recipient's device (via WhatsApp receipts)." />
           <Stat label="Read" value={summary?.read.toLocaleString() ?? 0} accent="info" hint="Opened by the recipient (WhatsApp read receipts)" />
-          <Stat label="Failed" value={summary?.failed.toLocaleString() ?? 0} accent={summary && summary.failed > 0 ? "error" : undefined} hint="Messages that could not be delivered" />
-          <Stat label="Skipped" value={summary?.skipped.toLocaleString() ?? 0} accent={summary && summary.skipped > 0 ? "warning" : undefined} hint="Contacts excluded by policy or opt-out" />
+          <Stat label="Failed to deliver" value={summary?.failed.toLocaleString() ?? 0} accent={summary && summary.failed > 0 ? "error" : undefined} hint="WhatsApp accepted the message but a delivery receipt reported a failure. Different from 'failed to send' (never accepted) shown on the Runs table." />
+          <Stat label="Skipped" value={summary?.skipped.toLocaleString() ?? 0} accent={summary && summary.skipped > 0 ? "warning" : undefined} hint="Contacts excluded before sending — opted out, blocked, or outside the messaging window." />
           <Stat label="Replied" value={summary?.replied.toLocaleString() ?? 0} accent="success" hint="Recipients who sent a response" />
         </div>
+        <p className="text-[0.6875rem] leading-relaxed text-base-content/55">
+          WhatsApp is asynchronous: a message counts as <span className="font-medium">Sent</span> the
+          moment WhatsApp accepts it, then <span className="font-medium">Delivered</span> and{" "}
+          <span className="font-medium">Read</span> confirmations arrive later by receipt — so these
+          numbers keep moving after the campaign finishes sending. A delivery can still fail after
+          being sent (<span className="font-medium">Failed to deliver</span>).
+        </p>
       </section>
 
       <div className="divider my-0" />
