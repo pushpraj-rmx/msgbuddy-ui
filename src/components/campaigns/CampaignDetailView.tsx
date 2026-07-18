@@ -146,9 +146,9 @@ function RunsTable({ runs }: { runs: Record<string, unknown>[] }) {
             <th>Run</th>
             <th>Status</th>
             <th className="text-right">Total</th>
-            <th className="text-right">Done</th>
-            <th className="text-right">Failed</th>
-            <th className="text-right">Skipped</th>
+            <th className="text-right" title="Messages accepted by WhatsApp for delivery. Delivery is confirmed separately — see the report's Delivered/Read.">Sent</th>
+            <th className="text-right" title="Failed to send — WhatsApp never accepted the message (e.g. invalid number, template error). Distinct from 'failed to deliver' in the report.">Failed to send</th>
+            <th className="text-right" title="Excluded before sending — opted out, blocked, or outside the messaging window.">Skipped</th>
             <th className="text-right">Rate</th>
             <th className="text-right">Duration</th>
           </tr>
@@ -689,7 +689,7 @@ export function CampaignDetailView({
                       className="btn btn-secondary btn-outline gap-1"
                       onClick={() => void handleRetryFailed()}
                       disabled={loading}
-                      title={`Re-queue failed job${(mergedMetrics.failed ?? 0) === 1 ? "" : "s"} from this run. Run counters reconcile.`}
+                      title={`Re-queues messages that failed to send (WhatsApp never accepted them) from this run. Note: delivery failures — accepted then rejected by a receipt — are not retried here yet.`}
                     >
                       <span aria-hidden>↻</span> Retry failed (
                       {mergedMetrics.failed})
