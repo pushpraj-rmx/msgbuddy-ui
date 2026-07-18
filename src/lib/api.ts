@@ -1299,6 +1299,42 @@ export const channelTemplatesApi = {
   },
 };
 
+/** How a stored failure classifies for retry purposes (mirrors the backend). */
+export type CampaignFailureClass =
+  | "PERMANENT"
+  | "TRANSIENT"
+  | "TIME_GATED"
+  | "UNKNOWN";
+
+export interface CampaignFailedRecipient {
+  contactId: string;
+  name: string | null;
+  phone: string | null;
+  /** "send" = never accepted by the provider; "delivery" = accepted then failed. */
+  failureStage: "send" | "delivery";
+  messageId: string | null;
+  attempts: number;
+  kind: string;
+  failureClass: CampaignFailureClass;
+  autoRetryable: boolean;
+  manualRetryable: boolean;
+  reason: string;
+}
+
+export interface CampaignFailures {
+  runId: string;
+  counts: {
+    total: number;
+    permanent: number;
+    transient: number;
+    timeGated: number;
+    unknown: number;
+    autoRetryable: number;
+    manualRetryable: number;
+  };
+  recipients: CampaignFailedRecipient[];
+}
+
 export const campaignsApi = {
   list: async (params?: {
     status?: string;
@@ -1382,10 +1418,10 @@ export const campaignsApi = {
     };
   },
   /**
-   * Re-run every FAILED job in a run. Flips the rows back to PENDING,
-   * decrements `failedJobs` and increments `pendingJobs`, revives a
-   * COMPLETED/FAILED run to RUNNING, and re-enqueues to the campaign queue.
-   * `runId` defaults to the latest run when omitted.
+   * Re-attempt a run's failures. Covers BOTH stages — send failures (job never
+   * accepted) and delivery failures (accepted, then a receipt reported failure)
+   * — and skips permanent ones (invalid number, template rejected, opted out)
+   * that would only fail again. `runId` defaults to the latest run when omitted.
    */
   retryFailed: async (id: string, runId?: string) => {
     const response = await api.post(
@@ -1395,9 +1431,23 @@ export const campaignsApi = {
     return response.data as {
       runId: string;
       retriedCount: number;
+      retriedSend: number;
+      retriedDelivery: number;
+      skippedPermanent: number;
       enqueuedCount: number;
       runStatus: string;
     };
+  },
+  /**
+   * The failed recipients of a run, unified across send + delivery failures and
+   * each classified (PERMANENT / TRANSIENT / TIME_GATED / UNKNOWN) with a
+   * friendly reason and retry disposition. `runId` defaults to the latest run.
+   */
+  failures: async (id: string, runId?: string) => {
+    const response = await api.get(endpoints.campaigns.failures(id), {
+      params: runId ? { runId } : undefined,
+    });
+    return response.data as CampaignFailures;
   },
   duplicate: async (id: string) => {
     const response = await api.post(endpoints.campaigns.duplicate(id));
