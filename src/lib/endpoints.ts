@@ -423,6 +423,7 @@ export const endpoints = {
   onboarding: {
     wabaOwned: `${P}/onboarding/waba/owned`,
     wabaClient: `${P}/onboarding/waba/client`,
+    sharingInfo: `${P}/onboarding/sharing-info`,
   },
   billing: {
     current: (workspaceId: string) =>

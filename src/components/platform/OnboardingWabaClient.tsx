@@ -1,6 +1,11 @@
 "use client";
 
-import { useClientWabas } from "@/hooks/use-onboarding";
+import { useState } from "react";
+import {
+  useClientWabas,
+  useSharingInfo,
+  useRecheckOnboarding,
+} from "@/hooks/use-onboarding";
 import { useConnectedClientBusinesses } from "@/hooks/use-platform";
 import { getApiError } from "@/lib/api-error";
 import type { ConnectedClientBusiness } from "@/lib/api";
@@ -14,6 +19,8 @@ function isMetaTokenMissingError(err: unknown): boolean {
 export function OnboardingWabaClient() {
   const client = useClientWabas();
   const businesses = useConnectedClientBusinesses();
+  const sharing = useSharingInfo();
+  const recheck = useRecheckOnboarding();
 
   const tokenMissing =
     isMetaTokenMissingError(client.error) ||
@@ -31,11 +38,28 @@ export function OnboardingWabaClient() {
     );
   }
 
+  const wabas = client.data?.wabas ?? [];
+  const wabaBusinessIds = new Set(
+    wabas.map((w) => w.businessId).filter(Boolean),
+  );
+  // Businesses that connected via Embedded Signup but whose WABA we can't see —
+  // the customer needs to share / partner-assign it to us.
+  const unmatchedBusinesses = (businesses.data ?? []).filter(
+    (b) => !wabaBusinessIds.has(b.id),
+  );
+
   return (
     <div className="space-y-4">
       {client.error && (
         <div role="alert" className="rounded-box border border-error/30 border-l-2 border-l-error bg-base-200 px-4 py-3"><span className="op-label mb-1 block text-error">error</span><p className="text-[0.8125rem] text-base-content">{getApiError(client.error)}</p></div>
       )}
+
+      <ShareWabaGuidance
+        partnerBusinessId={sharing.data?.partnerBusinessId ?? null}
+        unmatchedBusinesses={unmatchedBusinesses}
+        onRecheck={recheck}
+        rechecking={client.isFetching || businesses.isFetching}
+      />
 
       <WabaSection
         title="Connected client WABAs"
@@ -50,6 +74,127 @@ export function OnboardingWabaClient() {
         error={businesses.error}
         businesses={businesses.data ?? []}
       />
+    </div>
+  );
+}
+
+function ShareWabaGuidance({
+  partnerBusinessId,
+  unmatchedBusinesses,
+  onRecheck,
+  rechecking,
+}: {
+  partnerBusinessId: string | null;
+  unmatchedBusinesses: ConnectedClientBusiness[];
+  onRecheck: () => void;
+  rechecking: boolean;
+}) {
+  const [copied, setCopied] = useState(false);
+  const hasGap = unmatchedBusinesses.length > 0;
+
+  const copyId = async () => {
+    if (!partnerBusinessId) return;
+    try {
+      await navigator.clipboard.writeText(partnerBusinessId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Clipboard unavailable — the id is still shown for manual copy.
+    }
+  };
+
+  return (
+    <div
+      className={`rounded-box border bg-base-200 ${
+        hasGap
+          ? "border-warning/40 border-l-2 border-l-warning"
+          : "border-base-300"
+      }`}
+    >
+      <div className="border-b border-base-300 px-4 py-3 sm:px-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-[0.8125rem] font-semibold tracking-[-0.01em]">
+              WABA not showing up? Share it with us
+            </h2>
+            <span className="op-label">
+              A WABA only appears once the customer shares it with our business.
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={onRecheck}
+            disabled={rechecking}
+          >
+            {rechecking ? "Re-checking…" : "Re-check"}
+          </button>
+        </div>
+      </div>
+      <div className="space-y-3 p-4 sm:p-5">
+        {hasGap && (
+          <div
+            role="alert"
+            className="rounded-box border border-warning/30 bg-base-100 px-3 py-2 text-[0.78125rem]"
+          >
+            <span className="op-label mb-1 block text-warning">
+              {unmatchedBusinesses.length} connected{" "}
+              {unmatchedBusinesses.length === 1 ? "business" : "businesses"}{" "}
+              without a shared WABA
+            </span>
+            <ul className="space-y-0.5">
+              {unmatchedBusinesses.map((b) => (
+                <li
+                  key={b.id}
+                  className="flex items-center justify-between gap-2"
+                >
+                  <span className="font-medium">{b.name}</span>
+                  <span className="font-mono-op text-[0.625rem] text-base-content/55">
+                    {b.id}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <ol className="list-decimal space-y-1.5 pl-5 text-[0.8125rem] text-base-content">
+          <li>
+            In <span className="font-medium">Meta Business Manager</span>, open{" "}
+            <span className="font-medium">
+              Business settings → Accounts → WhatsApp accounts
+            </span>{" "}
+            and select the WABA.
+          </li>
+          <li>
+            Click <span className="font-medium">Add partner</span> and enter our
+            partner business ID:{" "}
+            {partnerBusinessId ? (
+              <button
+                type="button"
+                onClick={copyId}
+                className="op-tag font-mono-op cursor-pointer"
+                title="Copy to clipboard"
+              >
+                {partnerBusinessId}
+                {copied ? " ✓" : ""}
+              </button>
+            ) : (
+              <span className="text-warning">
+                not configured (set META_BUSINESS_ID)
+              </span>
+            )}
+          </li>
+          <li>
+            Grant the <span className="font-medium">Manage</span> permission on
+            the account, then save.
+          </li>
+          <li>
+            Return here and click <span className="font-medium">Re-check</span> —
+            the WABA should now appear below.
+          </li>
+        </ol>
+      </div>
     </div>
   );
 }
