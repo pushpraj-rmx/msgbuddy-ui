@@ -44,6 +44,7 @@ import type {
   AccountAccessRequestStatus,
   ResetLinkResponse,
   OnboardingWabaListResponse,
+  OnboardingSharingInfo,
   NotificationItem,
   NotificationsListResponse,
   FeedbackReport,
@@ -3384,6 +3385,12 @@ export const onboardingApi = {
   listClientWabas: async (): Promise<OnboardingWabaListResponse> => {
     const response = await api.get<OnboardingWabaListResponse>(
       endpoints.onboarding.wabaClient
+    );
+    return response.data;
+  },
+  getSharingInfo: async (): Promise<OnboardingSharingInfo> => {
+    const response = await api.get<OnboardingSharingInfo>(
+      endpoints.onboarding.sharingInfo
     );
     return response.data;
   },

@@ -808,6 +808,12 @@ export type OnboardingWabaListResponse = {
   count: number;
 };
 
+export type OnboardingSharingInfo = {
+  /** Our partner business id customers add in Business Manager; null if unset. */
+  partnerBusinessId: string | null;
+  graphApiVersion: string;
+};
+
 export type FeedbackType = "BUG" | "FEATURE_REQUEST";
 export type FeedbackPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type FeedbackStatus =
