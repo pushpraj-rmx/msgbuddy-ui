@@ -109,6 +109,8 @@ export function CampaignsClient({
   const [runJobs, setRunJobs] = useState<CampaignRunJob[]>([]);
   const [runJobsLoading, setRunJobsLoading] = useState(false);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  /** Bumped after a retry so the failures drill-down refetches. */
+  const [failuresReloadToken, setFailuresReloadToken] = useState(0);
 
   const selectedCampaign = useMemo(
     () => campaigns.find((campaign) => campaign.id === selectedId) ?? null,
@@ -377,12 +379,25 @@ export function CampaignsClient({
         selectedRunId ?? undefined,
       );
       if (result.retriedCount === 0) {
-        window.alert("No failed jobs to retry in this run.");
-      } else {
         window.alert(
-          `Re-queued ${result.retriedCount} failed job${result.retriedCount === 1 ? "" : "s"}.`,
+          result.skippedPermanent > 0
+            ? `Nothing to retry — ${result.skippedPermanent} permanent failure${result.skippedPermanent === 1 ? "" : "s"} skipped (they would fail again).`
+            : "No failures to retry in this run.",
+        );
+      } else {
+        const parts: string[] = [];
+        if (result.retriedSend > 0) parts.push(`${result.retriedSend} to re-send`);
+        if (result.retriedDelivery > 0)
+          parts.push(`${result.retriedDelivery} to re-deliver`);
+        window.alert(
+          `Re-queued ${result.retriedCount} recipient${result.retriedCount === 1 ? "" : "s"}` +
+            (parts.length ? ` (${parts.join(", ")})` : "") +
+            (result.skippedPermanent > 0
+              ? `. Skipped ${result.skippedPermanent} permanent — they would fail again.`
+              : "."),
         );
       }
+      setFailuresReloadToken((t) => t + 1);
       await refresh();
       await loadProgress();
       await fetchReport();
@@ -573,6 +588,7 @@ export function CampaignsClient({
         runJobsLoading={runJobsLoading}
         selectedRunId={selectedRunId}
         setSelectedRunId={setSelectedRunId}
+        failuresReloadToken={failuresReloadToken}
         loadRuns={loadRuns}
         loadRunJobs={loadRunJobs}
         reportLoading={reportLoading}
@@ -616,6 +632,7 @@ export function CampaignsClient({
     runJobsLoading,
     selectedRunId,
     setSelectedRunId,
+    failuresReloadToken,
     loadRuns,
     loadRunJobs,
     reportLoading,

@@ -268,6 +268,7 @@ export const endpoints = {
     drainQueue: (id: string) => `${P}/campaigns/${id}/drain-queue`,
     recoverStuck: (id: string) => `${P}/campaigns/${id}/recover-stuck`,
     retryFailed: (id: string) => `${P}/campaigns/${id}/retry-failed`,
+    failures: (id: string) => `${P}/campaigns/${id}/failures`,
     duplicate: (id: string) => `${P}/campaigns/${id}/duplicate`,
     progress: (id: string) => `${P}/campaigns/${id}/progress`,
     runs: (id: string) => `${P}/campaigns/${id}/runs`,

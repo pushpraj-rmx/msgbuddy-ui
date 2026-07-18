@@ -17,6 +17,7 @@ import {
   statusHeroClasses,
 } from "@/lib/campaignUi";
 import { CampaignReport } from "./CampaignReport";
+import { CampaignFailuresPanel } from "./CampaignFailuresPanel";
 import { CampaignReviewDialog } from "./CampaignReviewDialog";
 import { StatusTag } from "@/components/ui/StatusTag";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -359,6 +360,7 @@ export type CampaignDetailViewProps = {
   runJobsLoading: boolean;
   selectedRunId: string | null;
   setSelectedRunId: (id: string | null) => void;
+  failuresReloadToken: number;
   loadRuns: () => void;
   loadRunJobs: () => void;
   reportLoading: boolean;
@@ -397,6 +399,7 @@ export function CampaignDetailView({
   runJobsLoading,
   selectedRunId,
   setSelectedRunId,
+  failuresReloadToken,
   loadRuns,
   loadRunJobs,
   reportLoading,
@@ -689,7 +692,7 @@ export function CampaignDetailView({
                       className="btn btn-secondary btn-outline gap-1"
                       onClick={() => void handleRetryFailed()}
                       disabled={loading}
-                      title={`Re-queues messages that failed to send (WhatsApp never accepted them) from this run. Note: delivery failures — accepted then rejected by a receipt — are not retried here yet.`}
+                      title={`Re-attempts this run's failures — both failed to send (never accepted) and failed to deliver (accepted, then a receipt reported failure). Permanent failures (invalid number, opted out, template rejected) are skipped because they'd fail again. See "Failed recipients" below for the breakdown.`}
                     >
                       <span aria-hidden>↻</span> Retry failed (
                       {mergedMetrics.failed})
@@ -762,6 +765,16 @@ export function CampaignDetailView({
                   Sync state
                 </button>
               </div>
+
+              {(progress?.totalJobs ?? 0) > 0 || runs.length > 0 ? (
+                <CampaignFailuresPanel
+                  campaignId={selectedCampaign.id}
+                  runId={selectedRunId}
+                  reloadToken={failuresReloadToken}
+                  onRetry={handleRetryFailed}
+                  canRetry={!showResume(selectedCampaign.status)}
+                />
+              ) : null}
 
               {showStopCampaign(selectedCampaign.status) ||
               showDrainQueue(selectedCampaign.status) ? (
