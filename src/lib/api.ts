@@ -1299,6 +1299,38 @@ export const channelTemplatesApi = {
   },
 };
 
+/** One workspace audit-log row (GET /audit-log). */
+export interface AuditLogRow {
+  id: string;
+  /** Public resource enum (campaign, message, contact, … or "other"). */
+  resource: string;
+  resourceId: string | null;
+  /** "POST /campaigns/:id/retry-failed" or "SYSTEM campaign.autoretry.executed". */
+  action: string;
+  method: string;
+  route: string;
+  /** "user:<id>" | "key:<id>" | "system" */
+  actor: string;
+  actorUserId: string | null;
+  actorApiKeyId: string | null;
+  statusCode: number;
+  after: unknown;
+  createdAt: string;
+}
+
+export const auditLogApi = {
+  list: async (params?: {
+    actor?: string;
+    resource?: string;
+    resourceId?: string;
+    cursor?: string;
+    limit?: number;
+  }) => {
+    const response = await api.get(endpoints.auditLog.list, { params });
+    return response.data as { items: AuditLogRow[]; nextCursor: string | null };
+  },
+};
+
 /** How a stored failure classifies for retry purposes (mirrors the backend). */
 export type CampaignFailureClass =
   | "PERMANENT"

@@ -389,6 +389,9 @@ export const endpoints = {
       `${P}/whatsapp/onboarding-status/${encodeURIComponent(phoneNumberId)}`,
     ensureSubscription: `${P}/whatsapp/ensure-subscription`,
   },
+  auditLog: {
+    list: `${P}/audit-log`,
+  },
   platform: {
     overview: `${P}/platform/overview`,
     failedSends: `${P}/platform/failed-sends`,
