@@ -152,6 +152,79 @@ export function describeActivity(row: AuditLogRow): ActivitySummary {
     };
   }
 
+  // ——— other system decisions ———
+  if (a === "SYSTEM campaign.scheduled_start") {
+    const name = str(after?.name);
+    return {
+      title: `Campaign started as scheduled${name ? ` — “${name}”` : ""}`,
+      detail: null,
+      tone: "default",
+    };
+  }
+  if (a === "SYSTEM conversation.assignment_expired") {
+    const count = num(after?.count);
+    return {
+      title: `Auto-unassigned ${count != null ? plural(count, "conversation") : "conversations"} after inactivity`,
+      detail: "Waiting customers were returned to the unassigned queue",
+      tone: "warning",
+    };
+  }
+  if (a === "SYSTEM template.status_changed") {
+    const to = str(after?.to) ?? "";
+    const from = str(after?.from);
+    const reason = str(after?.rejectionReason);
+    const pretty = to.replace(/^PROVIDER_/, "").toLowerCase();
+    const bad = /REJECTED|DISABLED|PAUSED/.test(to);
+    return {
+      title: `Template ${pretty || "status changed"} by Meta`,
+      detail:
+        (from ? `${from.replace(/^PROVIDER_/, "")} → ${to.replace(/^PROVIDER_/, "")}` : null) +
+        (reason ? ` · Reason: ${reason}` : ""),
+      tone: bad ? "error" : "info",
+    };
+  }
+  if (a === "SYSTEM channel.phone_quality_changed") {
+    const from = str(after?.from) ?? "unknown";
+    const to = str(after?.to) ?? "unknown";
+    const bad = to === "RED" || to === "FLAGGED" || to === "YELLOW";
+    return {
+      title: `WhatsApp number quality changed: ${from} → ${to}`,
+      detail: bad
+        ? "Lower quality can reduce your messaging limits — slow down sends and review recent templates"
+        : null,
+      tone: to === "GREEN" ? "info" : bad ? "error" : "default",
+    };
+  }
+  if (a === "SYSTEM channel.utility_restriction_changed") {
+    const to = str(after?.to);
+    return {
+      title: to
+        ? `WhatsApp account restriction: ${to}`
+        : "WhatsApp account restriction cleared",
+      detail: to
+        ? "Meta flagged utility-template usage — review recent utility sends"
+        : null,
+      tone: to ? "error" : "info",
+    };
+  }
+  if (a === "SYSTEM workspace.trial_expired") {
+    return {
+      title: "Trial ended — downgraded to the Free plan",
+      detail: "Upgrade any time to restore your previous limits",
+      tone: "warning",
+    };
+  }
+  if (a === "SYSTEM webhook_endpoint.auto_disabled") {
+    const url = str(after?.url);
+    const failures = num(after?.consecutiveFailures);
+    return {
+      title: "Webhook endpoint auto-disabled",
+      detail:
+        `${url ?? "Endpoint"} kept failing${failures != null ? ` (${failures} consecutive failures)` : ""} — fix the receiver and re-enable it in Settings → Developers`,
+      tone: "error",
+    };
+  }
+
   // ——— generic fallback ———
   if (a.startsWith("SYSTEM ")) {
     return { title: a.replace(/^SYSTEM /, "System: "), detail: null, tone: "default" };
