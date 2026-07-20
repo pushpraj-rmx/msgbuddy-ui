@@ -1,5 +1,6 @@
 import { AccessDenied } from "@/components/platform/AccessDenied";
 import { WorkspacesTab } from "@/components/platform/PlatformConsoleClient";
+import { ProvisionWorkspaceDialog } from "@/components/platform/ProvisionWorkspaceDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
@@ -14,6 +15,11 @@ export default async function PlatformWorkspacesPage() {
   return (
     <>
       <PageHeader title="Workspaces" description="Every tenant workspace on the platform." />
+      {me.platformRole === "SUPERADMIN" ? (
+        <div className="mb-3">
+          <ProvisionWorkspaceDialog />
+        </div>
+      ) : null}
       <WorkspacesTab />
     </>
   );

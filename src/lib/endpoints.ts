@@ -394,6 +394,7 @@ export const endpoints = {
   },
   platform: {
     overview: `${P}/platform/overview`,
+    provisionWorkspace: `${P}/platform/provision-workspace`,
     failedSends: `${P}/platform/failed-sends`,
     workspaces: `${P}/platform/workspaces`,
     workspaceById: (id: string) => `${P}/platform/workspaces/${id}`,
