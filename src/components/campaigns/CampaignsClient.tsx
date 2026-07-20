@@ -419,6 +419,35 @@ export function CampaignsClient({
   ]);
 
   /**
+   * Create a DRAFT follow-up campaign seeded with this run's failed contacts
+   * (retryable-only), then select it so the user can review/edit/start it.
+   */
+  const handleCreateFollowUp = useCallback(async () => {
+    if (!selectedCampaign) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await campaignsApi.createFollowUp(selectedCampaign.id, {
+        runId: selectedRunId ?? undefined,
+      });
+      window.alert(
+        `Draft "${result.campaign.name}" created with ${result.seededContacts} contact${result.seededContacts === 1 ? "" : "s"}` +
+          (result.skippedPermanent > 0
+            ? ` (${result.skippedPermanent} permanent failure${result.skippedPermanent === 1 ? "" : "s"} left out).`
+            : ".") +
+          " Review and start it when ready.",
+      );
+      await refresh();
+      setSelectedId(result.campaign.id);
+      setSelectedRunId(null);
+    } catch (err: unknown) {
+      setError(getApiError(err) || "Failed to create the follow-up campaign.");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedCampaign, selectedRunId, refresh]);
+
+  /**
    * Recover CampaignJob rows stranded in PROCESSING. Hits the backend
    * recover-stuck endpoint, surfaces the count, refreshes UI state.
    */
@@ -578,6 +607,7 @@ export function CampaignsClient({
         loading={loading}
         handleAction={handleAction}
         handleRetryFailed={handleRetryFailed}
+        handleCreateFollowUp={handleCreateFollowUp}
         handleRecoverStuck={handleRecoverStuck}
         onSaveSchedule={handleSaveSchedule}
         handleRename={handleRename}
@@ -622,6 +652,7 @@ export function CampaignsClient({
     loading,
     handleAction,
     handleRetryFailed,
+    handleCreateFollowUp,
     handleRecoverStuck,
     handleSaveSchedule,
     handleRename,
