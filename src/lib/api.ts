@@ -3305,6 +3305,27 @@ export type ConnectedClientBusiness = {
 };
 
 export const platformApi = {
+  /** SUPERADMIN: create a client workspace + ownership-transferring invite. */
+  provisionWorkspace: async (body: {
+    name: string;
+    clientEmail: string;
+    role?: "ADMIN" | "SUPERVISOR" | "AGENT";
+    transferOwnershipOnAccept?: boolean;
+    expiresInDays?: number;
+  }) => {
+    const response = await api.post(endpoints.platform.provisionWorkspace, body);
+    return response.data as {
+      workspace: { id: string; name: string; slug: string };
+      invitation: {
+        id: string;
+        token: string;
+        email: string | null;
+        role: string;
+        expiresAt: string;
+        transferOwnershipOnAccept: boolean;
+      };
+    };
+  },
   getOverview: async (): Promise<PlatformOverview> => {
     const response = await api.get<PlatformOverview>(endpoints.platform.overview);
     return response.data;

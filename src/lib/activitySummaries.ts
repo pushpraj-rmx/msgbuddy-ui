@@ -225,6 +225,22 @@ export function describeActivity(row: AuditLogRow): ActivitySummary {
     };
   }
 
+  if (a === "SYSTEM workspace.provisioned") {
+    const email = str(after?.clientEmail);
+    return {
+      title: "Workspace provisioned for a client",
+      detail: email ? `Invite sent to ${email} — ownership transfers when they accept` : null,
+      tone: "info",
+    };
+  }
+  if (a === "SYSTEM workspace.ownership_transferred") {
+    return {
+      title: "Workspace ownership transferred to the client",
+      detail: "They accepted their invitation and are now the OWNER",
+      tone: "info",
+    };
+  }
+
   // ——— generic fallback ———
   if (a.startsWith("SYSTEM ")) {
     return { title: a.replace(/^SYSTEM /, "System: "), detail: null, tone: "default" };
