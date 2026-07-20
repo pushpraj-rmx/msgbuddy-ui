@@ -18,6 +18,7 @@ import {
 } from "@/lib/campaignUi";
 import { CampaignReport } from "./CampaignReport";
 import { CampaignFailuresPanel } from "./CampaignFailuresPanel";
+import { ActivityFeed } from "@/components/activity/ActivityFeed";
 import { CampaignReviewDialog } from "./CampaignReviewDialog";
 import { StatusTag } from "@/components/ui/StatusTag";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -368,6 +369,8 @@ export type CampaignDetailViewProps = {
   selectedRunId: string | null;
   setSelectedRunId: (id: string | null) => void;
   failuresReloadToken: number;
+  workspaceId?: string;
+  meUserId?: string;
   loadRuns: () => void;
   loadRunJobs: () => void;
   reportLoading: boolean;
@@ -408,6 +411,8 @@ export function CampaignDetailView({
   selectedRunId,
   setSelectedRunId,
   failuresReloadToken,
+  workspaceId,
+  meUserId,
   loadRuns,
   loadRunJobs,
   reportLoading,
@@ -808,6 +813,21 @@ export function CampaignDetailView({
                     })(),
                   }}
                 />
+              ) : null}
+
+              {(progress?.totalJobs ?? 0) > 0 || runs.length > 0 ? (
+                <div className="card bg-base-100 border border-base-300 p-4">
+                  <p className="mb-2 text-sm font-medium">Activity</p>
+                  <ActivityFeed
+                    resource="campaign"
+                    resourceId={selectedCampaign.id}
+                    workspaceId={workspaceId}
+                    meUserId={meUserId}
+                    pageSize={15}
+                    compact
+                    reloadToken={failuresReloadToken}
+                  />
+                </div>
               ) : null}
 
               {showStopCampaign(selectedCampaign.status) ||

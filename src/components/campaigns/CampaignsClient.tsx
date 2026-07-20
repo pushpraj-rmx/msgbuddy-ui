@@ -93,9 +93,11 @@ type CampaignRunJob = {
 export function CampaignsClient({
   initialCampaigns,
   workspaceId,
+  meUserId,
 }: {
   initialCampaigns: Campaign[];
   workspaceId: string;
+  meUserId?: string;
 }) {
   const searchParams = useSearchParams();
   const [campaigns, setCampaigns] = useState<Campaign[]>(initialCampaigns);
@@ -632,6 +634,8 @@ export function CampaignsClient({
         selectedRunId={selectedRunId}
         setSelectedRunId={setSelectedRunId}
         failuresReloadToken={failuresReloadToken}
+        workspaceId={workspaceId}
+        meUserId={meUserId}
         loadRuns={loadRuns}
         loadRunJobs={loadRunJobs}
         reportLoading={reportLoading}
@@ -677,6 +681,8 @@ export function CampaignsClient({
     selectedRunId,
     setSelectedRunId,
     failuresReloadToken,
+    workspaceId,
+    meUserId,
     loadRuns,
     loadRunJobs,
     reportLoading,
