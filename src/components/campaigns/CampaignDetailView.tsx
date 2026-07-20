@@ -347,7 +347,7 @@ export type CampaignDetailViewProps = {
    * counter-reconciling endpoint, then refreshes progress + runs + report.
    */
   handleRetryFailed: () => void | Promise<void>;
-  handleCreateFollowUp: () => void | Promise<void>;
+  handleCreateFollowUp: (includeAll?: boolean) => void | Promise<void>;
   /**
    * Recover CampaignJob rows stranded in PROCESSING — the failure mode
    * where the DB and BullMQ have drifted and pause/resume can't unstick the
@@ -704,6 +704,17 @@ export function CampaignDetailView({
                     >
                       <span aria-hidden>↻</span> Retry failed (
                       {mergedMetrics.failed})
+                    </button>
+                  ) : null}
+                  {(mergedMetrics.failed ?? 0) > 0 ? (
+                    <button
+                      type="button"
+                      className="btn btn-outline gap-1"
+                      onClick={() => void handleCreateFollowUp()}
+                      disabled={loading}
+                      title="Stage the failed contacts into a new DRAFT campaign with the same message — edit the audience/message freely, nothing is sent until you start it. Permanent failures are left out (see the Failed recipients panel to include them)."
+                    >
+                      <span aria-hidden>⎘</span> Follow-up campaign
                     </button>
                   ) : null}
                   {tone === "running" && (progress?.processingJobs ?? 0) > 0 ? (

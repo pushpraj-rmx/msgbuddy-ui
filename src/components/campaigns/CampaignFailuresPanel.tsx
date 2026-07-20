@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   campaignsApi,
   type CampaignFailures,
@@ -99,8 +99,9 @@ export function CampaignFailuresPanel({
   /** Parent's retry handler; when omitted the retry action is hidden. */
   onRetry?: () => void | Promise<void>;
   canRetry?: boolean;
-  /** Creates a draft follow-up campaign for the retryable failed contacts. */
-  onCreateFollowUp?: () => void | Promise<void>;
+  /** Creates a draft follow-up campaign for the failed contacts (retryable-only
+   *  by default; `includeAll` stages permanent failures too). */
+  onCreateFollowUp?: (includeAll?: boolean) => void | Promise<void>;
   /** Auto-retry state for the shown run (campaign setting + run bookkeeping). */
   autoRetry?: {
     setting: "MANUAL" | "AUTO_RETRY" | null;
@@ -117,6 +118,8 @@ export function CampaignFailuresPanel({
   const [open, setOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
   const [creatingFollowUp, setCreatingFollowUp] = useState(false);
+  /** Run id we last auto-expanded for — auto-expand once per run, then respect the user's collapse. */
+  const autoExpandedForRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -130,10 +133,20 @@ export function CampaignFailuresPanel({
     }
   }, [campaignId, runId]);
 
-  // Load lazily on first expand, and refetch on run change / parent reload.
+  // Eager-load so the collapsed header can show real counts (a campaign with
+  // 200 failures must not look identical to one with none); refetch on run
+  // change / parent reload.
   useEffect(() => {
-    if (open) void load();
-  }, [open, load, reloadToken]);
+    void load();
+  }, [load, reloadToken]);
+
+  // Surface failures unprompted: expand once per run when there are any.
+  useEffect(() => {
+    if (!data || data.counts.total === 0) return;
+    if (autoExpandedForRef.current === data.runId) return;
+    autoExpandedForRef.current = data.runId;
+    setOpen(true);
+  }, [data]);
 
   const grouped = useMemo(() => {
     const map = new Map<
@@ -183,15 +196,18 @@ export function CampaignFailuresPanel({
     }
   }, [onRetry, load]);
 
-  const handleFollowUp = useCallback(async () => {
-    if (!onCreateFollowUp) return;
-    setCreatingFollowUp(true);
-    try {
-      await onCreateFollowUp();
-    } finally {
-      setCreatingFollowUp(false);
-    }
-  }, [onCreateFollowUp]);
+  const handleFollowUp = useCallback(
+    async (includeAll?: boolean) => {
+      if (!onCreateFollowUp) return;
+      setCreatingFollowUp(true);
+      try {
+        await onCreateFollowUp(includeAll);
+      } finally {
+        setCreatingFollowUp(false);
+      }
+    },
+    [onCreateFollowUp],
+  );
 
   return (
     <div className="card bg-base-100 border border-base-300 p-4">
@@ -203,6 +219,15 @@ export function CampaignFailuresPanel({
       >
         <span className="text-sm font-medium">
           Failed recipients{data ? ` (${total})` : ""}
+          {counts && counts.manualRetryable > 0 ? (
+            <span className="ml-2 font-normal text-base-content/60">
+              — {counts.manualRetryable} retryable
+            </span>
+          ) : counts && total > 0 ? (
+            <span className="ml-2 font-normal text-base-content/60">
+              — all permanent
+            </span>
+          ) : null}
         </span>
         <span className="text-xs text-base-content/60">{open ? "Hide" : "View"}</span>
       </button>
@@ -322,6 +347,24 @@ export function CampaignFailuresPanel({
                       <span aria-hidden>⎘</span>
                     )}{" "}
                     Follow-up campaign ({counts!.manualRetryable})
+                  </button>
+                ) : null}
+                {onCreateFollowUp &&
+                counts!.manualRetryable === 0 &&
+                total > 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost gap-1"
+                    onClick={() => void handleFollowUp(true)}
+                    disabled={creatingFollowUp}
+                    title="Every failure here is permanent (invalid number, opted out, template rejected) — resending as-is will fail again. This stages them into a DRAFT campaign anyway, e.g. to send after fixing the contacts or with a different template. Nothing is sent until you start it."
+                  >
+                    {creatingFollowUp ? (
+                      <span className="loading loading-spinner loading-xs" />
+                    ) : (
+                      <span aria-hidden>⎘</span>
+                    )}{" "}
+                    Stage anyway ({total} permanent)
                   </button>
                 ) : null}
                 <button
