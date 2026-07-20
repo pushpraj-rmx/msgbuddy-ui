@@ -1449,6 +1449,26 @@ export const campaignsApi = {
     });
     return response.data as CampaignFailures;
   },
+  /**
+   * Create a DRAFT follow-up campaign targeting a run's failed recipients —
+   * copies the parent's message/settings, audience = the failed contacts
+   * (retryable-only unless `includeAll`). Nothing sends until it's started.
+   */
+  createFollowUp: async (
+    id: string,
+    opts?: { runId?: string; includeAll?: boolean },
+  ) => {
+    const response = await api.post(endpoints.campaigns.followUp(id), {
+      ...(opts?.runId ? { runId: opts.runId } : {}),
+      ...(opts?.includeAll ? { includeAll: true } : {}),
+    });
+    return response.data as {
+      campaign: { id: string; name: string };
+      sourceRunId: string;
+      seededContacts: number;
+      skippedPermanent: number;
+    };
+  },
   duplicate: async (id: string) => {
     const response = await api.post(endpoints.campaigns.duplicate(id));
     return response.data;

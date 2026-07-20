@@ -341,6 +341,7 @@ export type CampaignDetailViewProps = {
    * counter-reconciling endpoint, then refreshes progress + runs + report.
    */
   handleRetryFailed: () => void | Promise<void>;
+  handleCreateFollowUp: () => void | Promise<void>;
   /**
    * Recover CampaignJob rows stranded in PROCESSING — the failure mode
    * where the DB and BullMQ have drifted and pause/resume can't unstick the
@@ -389,6 +390,7 @@ export function CampaignDetailView({
   loading,
   handleAction,
   handleRetryFailed,
+  handleCreateFollowUp,
   handleRecoverStuck,
   onSaveSchedule,
   handleRename,
@@ -773,6 +775,7 @@ export function CampaignDetailView({
                   reloadToken={failuresReloadToken}
                   onRetry={handleRetryFailed}
                   canRetry={!showResume(selectedCampaign.status)}
+                  onCreateFollowUp={handleCreateFollowUp}
                 />
               ) : null}
 

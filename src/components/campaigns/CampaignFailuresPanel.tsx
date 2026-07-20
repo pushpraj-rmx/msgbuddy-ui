@@ -89,6 +89,7 @@ export function CampaignFailuresPanel({
   reloadToken = 0,
   onRetry,
   canRetry = false,
+  onCreateFollowUp,
 }: {
   campaignId: string;
   runId?: string | null;
@@ -97,12 +98,15 @@ export function CampaignFailuresPanel({
   /** Parent's retry handler; when omitted the retry action is hidden. */
   onRetry?: () => void | Promise<void>;
   canRetry?: boolean;
+  /** Creates a draft follow-up campaign for the retryable failed contacts. */
+  onCreateFollowUp?: () => void | Promise<void>;
 }) {
   const [data, setData] = useState<CampaignFailures | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [creatingFollowUp, setCreatingFollowUp] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -169,6 +173,16 @@ export function CampaignFailuresPanel({
     }
   }, [onRetry, load]);
 
+  const handleFollowUp = useCallback(async () => {
+    if (!onCreateFollowUp) return;
+    setCreatingFollowUp(true);
+    try {
+      await onCreateFollowUp();
+    } finally {
+      setCreatingFollowUp(false);
+    }
+  }, [onCreateFollowUp]);
+
   return (
     <div className="card bg-base-100 border border-base-300 p-4">
       <button
@@ -229,10 +243,26 @@ export function CampaignFailuresPanel({
                     type="button"
                     className="btn btn-sm btn-secondary btn-outline gap-1"
                     onClick={() => void handleRetry()}
-                    disabled={retrying}
+                    disabled={retrying || creatingFollowUp}
                   >
                     <span aria-hidden>↻</span> Retry {counts!.manualRetryable}{" "}
                     retryable
+                  </button>
+                ) : null}
+                {onCreateFollowUp && counts!.manualRetryable > 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost gap-1"
+                    onClick={() => void handleFollowUp()}
+                    disabled={retrying || creatingFollowUp}
+                    title="Creates a DRAFT campaign with the same message, targeting only these retryable failed contacts. You can edit it before starting — nothing is sent until you start it."
+                  >
+                    {creatingFollowUp ? (
+                      <span className="loading loading-spinner loading-xs" />
+                    ) : (
+                      <span aria-hidden>⎘</span>
+                    )}{" "}
+                    Follow-up campaign ({counts!.manualRetryable})
                   </button>
                 ) : null}
                 <button
