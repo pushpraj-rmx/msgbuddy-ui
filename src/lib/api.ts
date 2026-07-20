@@ -3440,6 +3440,23 @@ export const platformApi = {
     );
     return response.data.data ?? [];
   },
+  /** SUPERADMIN: move a connected number (CloudApiAccount + ChannelAccounts) to another workspace. */
+  reassignCloudApiAccount: async (
+    cloudApiAccountId: string,
+    body: { targetWorkspaceId: string; force?: boolean },
+  ) => {
+    const response = await api.post(
+      endpoints.platform.reassignCloudApiAccount(cloudApiAccountId),
+      body,
+    );
+    return response.data as {
+      moved: boolean;
+      fromWorkspaceId: string;
+      toWorkspaceId: string;
+      channelAccountsMoved: number;
+      leftBehind: { conversationCount: number; messageCount: number };
+    };
+  },
   listChannelAccounts: async (): Promise<PlatformChannelAccount[]> => {
     const response = await api.get<PlatformChannelAccount[]>(
       endpoints.platform.channelAccounts

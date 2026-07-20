@@ -241,6 +241,23 @@ export function describeActivity(row: AuditLogRow): ActivitySummary {
     };
   }
 
+  if (a === "SYSTEM channel.number_moved_out") {
+    const n = str(after?.number);
+    return {
+      title: `WhatsApp number ${n ?? ""} moved out of this workspace`.replace("  ", " "),
+      detail: "Inbound messages for it now route to its new workspace; existing conversations stay here",
+      tone: "warning",
+    };
+  }
+  if (a === "SYSTEM channel.number_moved_in") {
+    const n = str(after?.number);
+    return {
+      title: `WhatsApp number ${n ?? ""} moved into this workspace`.replace("  ", " "),
+      detail: "Inbound messages for it now arrive here",
+      tone: "info",
+    };
+  }
+
   // ——— generic fallback ———
   if (a.startsWith("SYSTEM ")) {
     return { title: a.replace(/^SYSTEM /, "System: "), detail: null, tone: "default" };
