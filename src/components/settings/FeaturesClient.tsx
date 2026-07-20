@@ -2,22 +2,31 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw, ShoppingBag } from "lucide-react";
+import { RefreshCw, RotateCcw, ShoppingBag } from "lucide-react";
 import { type UpdateWorkspaceDto, workspaceApi } from "@/lib/api";
 
-type FeatureKey = "commerceEnabled" | "recurringEnabled";
+type FeatureKey =
+  | "commerceEnabled"
+  | "recurringEnabled"
+  | "campaignAutoRetryDefault";
 
 export function FeaturesClient({
   workspaceId,
   commerceEnabled,
   recurringEnabled,
+  campaignAutoRetryDefault,
 }: {
   workspaceId: string;
   commerceEnabled: boolean;
   recurringEnabled: boolean;
+  campaignAutoRetryDefault: boolean;
 }) {
   const router = useRouter();
-  const [state, setState] = useState({ commerceEnabled, recurringEnabled });
+  const [state, setState] = useState({
+    commerceEnabled,
+    recurringEnabled,
+    campaignAutoRetryDefault,
+  });
   const [savingKey, setSavingKey] = useState<FeatureKey | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +36,15 @@ export function FeaturesClient({
     // Optimistic — revert on failure.
     setState((s) => ({ ...s, [key]: next }));
     try {
-      const payload: UpdateWorkspaceDto = { [key]: next };
-      await workspaceApi.updateWorkspace(workspaceId, payload);
+      if (key === "campaignAutoRetryDefault") {
+        // Lives on WorkspaceSettings, not the Workspace row.
+        await workspaceApi.updateSettings(workspaceId, {
+          campaignAutoRetryDefault: next,
+        });
+      } else {
+        const payload: UpdateWorkspaceDto = { [key]: next };
+        await workspaceApi.updateWorkspace(workspaceId, payload);
+      }
       // Re-run server components so the sidebar nav reflects the change.
       router.refresh();
     } catch (e) {
@@ -69,6 +85,14 @@ export function FeaturesClient({
           checked={state.recurringEnabled}
           saving={savingKey === "recurringEnabled"}
           onChange={(next) => toggle("recurringEnabled", next)}
+        />
+        <FeatureRow
+          Icon={RotateCcw}
+          title="Auto-retry failed campaign sends"
+          description="Default for new campaigns: re-attempt temporary failures (rate limits, frequency caps) after a run settles — marketing 6h then 24h, utility 3h twice, authentication never. Permanent failures are skipped; max 3 sends per contact. Each campaign can override this."
+          checked={state.campaignAutoRetryDefault}
+          saving={savingKey === "campaignAutoRetryDefault"}
+          onChange={(next) => toggle("campaignAutoRetryDefault", next)}
         />
       </div>
 

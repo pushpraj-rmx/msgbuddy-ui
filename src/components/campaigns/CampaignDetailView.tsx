@@ -33,6 +33,8 @@ export type Campaign = {
   scheduledAt?: string | null;
   timezone?: string;
   throttlePerMin?: number;
+  /** null = inherit the workspace default. */
+  failureHandling?: "MANUAL" | "AUTO_RETRY" | null;
 };
 
 type CampaignProgress = {
@@ -55,6 +57,10 @@ type CampaignRun = {
   totalJobs?: number;
   completedJobs?: number;
   failedJobs?: number;
+  /** Auto-retry bookkeeping (campaign-retry-policy). */
+  failureRound?: number;
+  failureHandledAt?: string | null;
+  nextRetryAt?: string | null;
 };
 
 type CampaignRunJob = {
@@ -776,6 +782,20 @@ export function CampaignDetailView({
                   onRetry={handleRetryFailed}
                   canRetry={!showResume(selectedCampaign.status)}
                   onCreateFollowUp={handleCreateFollowUp}
+                  autoRetry={{
+                    setting: selectedCampaign.failureHandling ?? null,
+                    run: (() => {
+                      const r =
+                        runs.find((x) => x.id === selectedRunId) ?? runs[0];
+                      return r
+                        ? {
+                            failureRound: r.failureRound ?? 0,
+                            nextRetryAt: r.nextRetryAt ?? null,
+                            failureHandledAt: r.failureHandledAt ?? null,
+                          }
+                        : null;
+                    })(),
+                  }}
                 />
               ) : null}
 

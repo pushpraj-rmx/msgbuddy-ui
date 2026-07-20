@@ -92,6 +92,8 @@ export type CampaignDraftSeed = {
   contactIds?: string[];
   chunkSize?: number | null;
   throttlePerMin?: number | null;
+  /** null/undefined = inherit the workspace default. */
+  failureHandling?: "MANUAL" | "AUTO_RETRY" | null;
 };
 
 export function CreateCampaignForm({
@@ -196,6 +198,10 @@ export function CreateCampaignForm({
       ? String(initialCampaign.throttlePerMin)
       : "",
   );
+  /** "" = inherit the workspace default. */
+  const [failureHandling, setFailureHandling] = useState<
+    "" | "MANUAL" | "AUTO_RETRY"
+  >(initialCampaign?.failureHandling ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -661,6 +667,8 @@ export function CreateCampaignForm({
       ...(parsedThrottlePerMin !== undefined && !isNaN(parsedThrottlePerMin)
         ? { throttlePerMin: parsedThrottlePerMin }
         : {}),
+      // "" (inherit) is persisted as null so editing back to inherit works.
+      failureHandling: failureHandling === "" ? null : failureHandling,
     };
   };
 
@@ -1383,6 +1391,29 @@ export function CreateCampaignForm({
               </div>
               <p className="text-xs text-base-content/50">
                 Leave blank to use defaults (chunk: 100, throttle: 60/min).
+              </p>
+              <label className="form-control">
+                <span className="label-text text-xs">If messages fail</span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={failureHandling}
+                  onChange={(e) =>
+                    setFailureHandling(
+                      e.target.value as "" | "MANUAL" | "AUTO_RETRY",
+                    )
+                  }
+                >
+                  <option value="">Workspace default</option>
+                  <option value="MANUAL">Manual only — I&apos;ll retry myself</option>
+                  <option value="AUTO_RETRY">Auto-retry temporary failures</option>
+                </select>
+              </label>
+              <p className="text-xs text-base-content/50">
+                Auto-retry re-attempts only temporary failures (rate limits,
+                frequency caps) after the run settles — marketing waits 6h then
+                24h, utility 3h twice, authentication is never auto-retried.
+                Permanently failed numbers are skipped. Max 3 total sends per
+                contact.
               </p>
             </div>
           )}

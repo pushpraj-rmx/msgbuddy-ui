@@ -9,6 +9,11 @@ import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
 export default async function FeaturesPage() {
   const me = await serverFetch<MeResponse>(endpoints.auth.me);
   const allowed = roleHasWorkspacePermission(String(me.role), "settings.manage");
+  const settings = allowed
+    ? await serverFetch<{ campaignAutoRetryDefault?: boolean }>(
+        endpoints.workspaces.settings(me.workspace.id),
+      ).catch(() => null)
+    : null;
 
   if (!allowed) {
     return (
@@ -34,6 +39,7 @@ export default async function FeaturesPage() {
         workspaceId={me.workspace.id}
         commerceEnabled={Boolean(me.workspace.commerceEnabled)}
         recurringEnabled={Boolean(me.workspace.recurringEnabled)}
+        campaignAutoRetryDefault={Boolean(settings?.campaignAutoRetryDefault)}
       />
     </PageContainer>
   );
