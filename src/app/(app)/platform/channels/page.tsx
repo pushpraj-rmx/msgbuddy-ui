@@ -1,5 +1,6 @@
 import { AccessDenied } from "@/components/platform/AccessDenied";
 import { ChannelAccountsTab } from "@/components/platform/PlatformConsoleClient";
+import { MoveNumberDialog } from "@/components/platform/MoveNumberDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import type { MeResponse } from "@/lib/api";
 import { serverFetch } from "@/lib/server-fetch";
@@ -14,6 +15,9 @@ export default async function PlatformChannelsPage() {
   return (
     <>
       <PageHeader title="Channel accounts" description="Global pool of channel accounts and workspace assignments." />
+      <div className="mb-3">
+        <MoveNumberDialog />
+      </div>
       <ChannelAccountsTab />
     </>
   );
