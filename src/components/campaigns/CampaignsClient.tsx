@@ -198,12 +198,23 @@ export function CampaignsClient({
         setReport({ value: data });
       }
     } catch (err: unknown) {
+      // 404 = the campaign no longer resolves in THIS workspace (stale tab
+      // after a workspace switch, or a cross-workspace deep link). Drop the
+      // selection and resync the list instead of re-polling a dead id.
+      const status = (err as { response?: { status?: number } })?.response
+        ?.status;
+      if (status === 404) {
+        setSelectedId(null);
+        setReport(null);
+        void refresh();
+        return;
+      }
       setReportError(getApiError(err) || "Failed to load campaign report.");
       setReport(null);
     } finally {
       setReportLoading(false);
     }
-  }, [selectedCampaign]);
+  }, [selectedCampaign, refresh]);
 
   const loadRuns = useCallback(async () => {
     if (!selectedCampaign) {
