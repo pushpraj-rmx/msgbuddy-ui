@@ -200,6 +200,8 @@ const CHANNEL_OPTIONS: Array<{ value: ChannelFilter; label: string }> = [
 ];
 
 const LIMIT = 50;
+/** Depth cap for live refreshes — beyond 4 loaded pages we refresh only this many. */
+const MAX_REFRESH_DEPTH = 200;
 
 type TemplateVariableRow = {
   id: string;
@@ -530,6 +532,9 @@ export function InboxClient({
   draftRef.current = draft;
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
+  /** Rows currently loaded — lets live refreshes preserve "Load more" depth. */
+  const conversationsCountRef = useRef(conversations.length);
+  conversationsCountRef.current = conversations.length;
   /** Mirrors `draftsByConversation` for synchronous merge when `selectedId` changes (avoids stale functional updater `prevMap`). */
   const draftsByConversationRef = useRef(draftsByConversation);
   draftsByConversationRef.current = draftsByConversation;
@@ -1273,8 +1278,11 @@ export function InboxClient({
   const fetchConversations = useCallback(async (
     nextStatus = status,
     nextCursor?: string | null,
-    append = false
+    append = false,
+    /** Refetch this many rows instead of one page (depth-preserving refresh). */
+    overrideLimit?: number
   ) => {
+    const requestedLimit = overrideLimit ?? LIMIT;
     setListLoading(true);
     setListError(null);
     try {
@@ -1298,7 +1306,7 @@ export function InboxClient({
         mode === "contactsQueue"
           ? {
             status: "OPEN" as const,
-            limit: LIMIT,
+            limit: requestedLimit,
             cursor: nextCursor || undefined,
             ...queueFilterParams,
             ...extraFilters,
@@ -1306,7 +1314,7 @@ export function InboxClient({
           }
           : {
             status: nextStatus,
-            limit: LIMIT,
+            limit: requestedLimit,
             cursor: nextCursor || undefined,
             ...queueFilterParams,
             ...extraFilters,
@@ -1333,7 +1341,7 @@ export function InboxClient({
       // Use the page's true DB-order boundary (not data.at(-1)): under the
       // oldestUnreadFirst sort the server re-sorts the page for display, so the
       // last array item is a mid-order row and paging from it skips/repeats.
-      setCursor(data.length === LIMIT ? dbOrderBoundaryId(data) : null);
+      setCursor(data.length === requestedLimit ? dbOrderBoundaryId(data) : null);
       if (!append && data.length) {
         setSelectedId((current) => {
           if (current) return current;
@@ -1350,6 +1358,41 @@ export function InboxClient({
       setListLoading(false);
     }
   }, [mode, queueFilter, status, channelFilter, assigneeFilter, tagFilter, listSearch, sortMode]);
+
+  /**
+   * Depth-preserving list refresh for live (SSE) and post-action updates.
+   * Refetches as many rows as are currently loaded (whole pages, capped) so a
+   * workspace event doesn't collapse "Load more" progress back to page 1 —
+   * that reset made Awaiting-tab paging look broken: every message/receipt in
+   * the workspace threw away the loaded pages and the cursor seconds after
+   * each click.
+   */
+  const refreshConversations = useCallback(async () => {
+    const depth = Math.min(
+      Math.max(Math.ceil(conversationsCountRef.current / LIMIT), 1) * LIMIT,
+      MAX_REFRESH_DEPTH,
+    );
+    await fetchConversations(status, null, false, depth);
+  }, [fetchConversations, status]);
+
+  /** Debounced refresh for SSE bursts (a webhook batch fires many events at once). */
+  const listRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleListRefresh = useCallback(() => {
+    if (listRefreshTimerRef.current) clearTimeout(listRefreshTimerRef.current);
+    listRefreshTimerRef.current = setTimeout(() => {
+      listRefreshTimerRef.current = null;
+      void refreshConversations();
+    }, 400);
+  }, [refreshConversations]);
+  // Cancel any pending refresh when the list identity (filter/status/sort)
+  // changes — a stale timer would refetch with the OLD filter and clobber the
+  // fresh page-1 the filter-change effect just loaded. Also covers unmount.
+  useEffect(() => () => {
+    if (listRefreshTimerRef.current) {
+      clearTimeout(listRefreshTimerRef.current);
+      listRefreshTimerRef.current = null;
+    }
+  }, [scheduleListRefresh]);
 
   const fetchStarredMessages = useCallback(async (nextCursor?: string | null, append = false) => {
     setStarredLoading(true);
@@ -1833,7 +1876,7 @@ export function InboxClient({
         if (!ev) return;
 
         if (isMessageCreated(ev.type)) {
-          fetchConversations(status, null, false);
+          scheduleListRefresh();
           const convId =
             typeof ev.data.conversationId === "string" ? ev.data.conversationId : "";
           if (selectedId && convId === selectedId) {
@@ -1971,7 +2014,7 @@ export function InboxClient({
         }
 
         if (isConversationUpdated(ev.type)) {
-          fetchConversations(status, null, false);
+          scheduleListRefresh();
           const updatedId = typeof ev.data?.conversationId === "string" ? ev.data.conversationId : "";
           if (updatedId && updatedId === selectedIdRef.current) {
             void refreshConversationById(updatedId);
@@ -2008,7 +2051,7 @@ export function InboxClient({
         }
 
         if (isContactUpdated(ev.type) || isContactBulkUpdated(ev.type)) {
-          fetchConversations(status, null, false);
+          scheduleListRefresh();
         }
       };
       source.onerror = () => {
@@ -2032,7 +2075,7 @@ export function InboxClient({
       source?.close();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: refreshConversationById excluded to prevent SSE re-subscribe on every conversation change
-  }, [fetchConversations, fetchMessages, selectedId, status, workspaceId]);
+  }, [scheduleListRefresh, fetchMessages, selectedId, status, workspaceId]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -2165,16 +2208,23 @@ export function InboxClient({
   const refreshThreadAfterSend = useCallback(
     async (contactId: string, channel: Conversation["channel"]) => {
       scrollThreadIntentRef.current = "smooth";
+      // Unfiltered OPEN page only to FIND the (possibly new) conversation —
+      // the visible list refresh must keep the active filters and loaded depth.
       const refreshed = (await conversationsApi.list({
         status: "OPEN",
         limit: LIMIT,
       })) as Conversation[];
-      setConversations(refreshed);
       const created =
         refreshed.find(
           (c) => c.contactId === contactId && c.channel === channel
         ) ?? null;
+      await refreshConversations();
       if (created) {
+        // Active filter may exclude the just-sent thread (e.g. Awaiting after a
+        // reply) — keep it visible at the top so selection doesn't dead-end.
+        setConversations((prev) =>
+          prev.some((c) => c.id === created.id) ? prev : [created, ...prev]
+        );
         preserveStartContactSelectionRef.current = false;
         clearDraftForConversation(created.id);
         setDraft("");
@@ -2183,7 +2233,7 @@ export function InboxClient({
         await fetchMessages(created.id, { silent: true });
       }
     },
-    [clearDraftForConversation, fetchMessages]
+    [clearDraftForConversation, fetchMessages, refreshConversations]
   );
 
   const runConversationAction = useCallback(
@@ -2218,7 +2268,7 @@ export function InboxClient({
         if (operation === "resetAi") await conversationsApi.resetAi(targetId);
         if (operation === "handoffAi") await conversationsApi.handoffAi(targetId);
         await refreshConversationById(targetId);
-        await fetchConversations(status, null, false);
+        await refreshConversations();
       } catch (error: unknown) {
         setMessageError(
           extractApiErrorMessage(error) || "Failed to update conversation."
@@ -2229,10 +2279,9 @@ export function InboxClient({
     },
     [
       conversationActionBusy,
-      fetchConversations,
+      refreshConversations,
       refreshConversationById,
       selectedId,
-      status,
     ]
   );
 
@@ -2250,7 +2299,7 @@ export function InboxClient({
         await conversationsApi.snooze(selectedConversation.id, until);
       }
       await refreshConversationById(selectedConversation.id);
-      await fetchConversations(status, null, false);
+      await refreshConversations();
     } catch (error: unknown) {
       setMessageError(
         extractApiErrorMessage(error) || "Failed to update snooze state."
@@ -2260,10 +2309,9 @@ export function InboxClient({
     }
   }, [
     conversationActionBusy,
-    fetchConversations,
+    refreshConversations,
     refreshConversationById,
     selectedConversation,
-    status,
   ]);
 
   const runMessageSearch = useCallback(async () => {
@@ -2502,7 +2550,7 @@ export function InboxClient({
             typeof crypto !== "undefined" ? crypto.randomUUID() : undefined,
           channel: conversation.channel,
         });
-        await fetchConversations(status, null, false);
+        await refreshConversations();
         if (selectedId === conversation.id) {
           await fetchMessages(conversation.id, { silent: true });
         }
@@ -2510,7 +2558,7 @@ export function InboxClient({
         setMessageError(extractApiErrorMessage(error) || "Failed to retry message.");
       }
     },
-    [fetchConversations, fetchMessages, selectedId, status]
+    [refreshConversations, fetchMessages, selectedId]
   );
 
   const handleMediaFileChange = async (
