@@ -2388,6 +2388,8 @@ export interface WorkspaceSettingsPayload {
   // Master auto-reply switch. When false, no flow, automation rule, or chatbot
   // replies — the workspace goes fully manual. Defaults true.
   botsEnabled?: boolean;
+  /** Default for campaigns without an explicit failureHandling: auto-retry temporary send failures. Opt-in. */
+  campaignAutoRetryDefault?: boolean;
   // Chatbot
   chatbotEnabled?: boolean;
   chatbotSystemPrompt?: string;

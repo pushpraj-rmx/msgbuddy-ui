@@ -90,6 +90,7 @@ export function CampaignFailuresPanel({
   onRetry,
   canRetry = false,
   onCreateFollowUp,
+  autoRetry,
 }: {
   campaignId: string;
   runId?: string | null;
@@ -100,6 +101,15 @@ export function CampaignFailuresPanel({
   canRetry?: boolean;
   /** Creates a draft follow-up campaign for the retryable failed contacts. */
   onCreateFollowUp?: () => void | Promise<void>;
+  /** Auto-retry state for the shown run (campaign setting + run bookkeeping). */
+  autoRetry?: {
+    setting: "MANUAL" | "AUTO_RETRY" | null;
+    run: {
+      failureRound: number;
+      nextRetryAt: string | null;
+      failureHandledAt: string | null;
+    } | null;
+  };
 }) {
   const [data, setData] = useState<CampaignFailures | null>(null);
   const [loading, setLoading] = useState(false);
@@ -209,9 +219,58 @@ export function CampaignFailuresPanel({
               </button>
             </div>
           ) : total === 0 ? (
-            <p className="text-sm text-base-content/60">No failures in this run. 🎉</p>
+            <p className="text-sm text-base-content/60">
+              No failures in this run.
+              {(autoRetry?.run?.failureRound ?? 0) > 0
+                ? ` Auto-retry recovered them after ${autoRetry!.run!.failureRound} round${autoRetry!.run!.failureRound === 1 ? "" : "s"}. 🎉`
+                : " 🎉"}
+            </p>
           ) : (
             <>
+              {(() => {
+                // "What's happening" line for auto-retry, from run bookkeeping
+                // (ground truth) + the campaign's setting.
+                const run = autoRetry?.run;
+                const nextAt = run?.nextRetryAt ? new Date(run.nextRetryAt) : null;
+                if (nextAt && nextAt.getTime() > Date.now()) {
+                  return (
+                    <p className="rounded-box border border-info/30 bg-info/5 px-3 py-2 text-xs">
+                      ⏱ <span className="font-medium">Auto-retry scheduled:</span>{" "}
+                      round {(run!.failureRound ?? 0) + 1} at{" "}
+                      {nextAt.toLocaleString()}. Only temporary failures (rate
+                      limits, frequency caps) will be re-attempted — permanent
+                      ones are skipped.
+                    </p>
+                  );
+                }
+                if (run && run.failureRound > 0) {
+                  return (
+                    <p className="rounded-box border border-base-300 bg-base-200/40 px-3 py-2 text-xs">
+                      <span className="font-medium">
+                        Auto-retry ran {run.failureRound} round
+                        {run.failureRound === 1 ? "" : "s"}
+                      </span>{" "}
+                      and these recipients still failed. You can retry manually
+                      or create a follow-up campaign below.
+                    </p>
+                  );
+                }
+                if (
+                  autoRetry?.setting === "AUTO_RETRY" &&
+                  run &&
+                  !run.failureHandledAt
+                ) {
+                  return (
+                    <p className="rounded-box border border-base-300 bg-base-200/40 px-3 py-2 text-xs">
+                      <span className="font-medium">Auto-retry is on:</span>{" "}
+                      failures are evaluated ~30 minutes after the run finishes
+                      (letting delivery receipts settle), then temporary ones
+                      are re-attempted on a schedule.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
               <div className="flex flex-wrap gap-2 text-xs">
                 {counts!.manualRetryable > 0 ? (
                   <span className="rounded border border-info/40 bg-info/10 px-2 py-1 text-info">

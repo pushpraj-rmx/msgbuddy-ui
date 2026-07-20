@@ -42,6 +42,8 @@ export type Campaign = {
   scheduledAt?: string | null;
   timezone?: string;
   throttlePerMin?: number;
+  /** null = inherit the workspace default. */
+  failureHandling?: "MANUAL" | "AUTO_RETRY" | null;
   updatedAt?: string;
   runs?: { totalJobs?: number; completedJobs?: number; failedJobs?: number; skippedJobs?: number; successRate?: number }[];
 };
@@ -66,6 +68,10 @@ type CampaignRun = {
   totalJobs?: number;
   completedJobs?: number;
   failedJobs?: number;
+  /** Auto-retry bookkeeping (campaign-retry-policy). */
+  failureRound?: number;
+  failureHandledAt?: string | null;
+  nextRetryAt?: string | null;
 };
 
 type CampaignRunJob = {
