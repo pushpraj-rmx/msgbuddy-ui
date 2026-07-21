@@ -141,6 +141,7 @@ export const endpoints = {
     release: (id: string) => `${P}/conversations/${id}/release`,
     resetAi: (id: string) => `${P}/conversations/${id}/reset-ai`,
     handoffAi: (id: string) => `${P}/conversations/${id}/handoff-ai`,
+    sendingNumber: (id: string) => `${P}/conversations/${id}/sending-number`,
   },
   messages: {
     listByConversation: (conversationId: string) =>

@@ -152,6 +152,15 @@ export function describeActivity(row: AuditLogRow): ActivitySummary {
     };
   }
 
+  if (matches(a, "PUT", "/sending-number")) {
+    const n = str(after?.sendingNumber);
+    return {
+      title: "Changed a conversation's sending number",
+      detail: n ? `Now sends from ${n}` : null,
+      tone: "default",
+    };
+  }
+
   // ——— other system decisions ———
   if (a === "SYSTEM campaign.scheduled_start") {
     const name = str(after?.name);
