@@ -382,6 +382,8 @@ export const endpoints = {
     connections: `${P}/whatsapp/connections`,
     disconnect: (cloudApiAccountId: string) =>
       `${P}/whatsapp/disconnect/${encodeURIComponent(cloudApiAccountId)}`,
+    setDefault: (cloudApiAccountId: string) =>
+      `${P}/whatsapp/set-default/${encodeURIComponent(cloudApiAccountId)}`,
     registerNumber: `${P}/whatsapp/register-number`,
     requestVerificationCode: `${P}/whatsapp/request-verification-code`,
     verifyNumber: `${P}/whatsapp/verify-number`,

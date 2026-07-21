@@ -32,10 +32,14 @@ function ConnectionRow({
   connection,
   onDisconnect,
   disconnecting,
+  onSetDefault,
+  settingDefault,
 }: {
   connection: WhatsAppConnection;
   onDisconnect: () => void;
   disconnecting: boolean;
+  onSetDefault: () => void;
+  settingDefault: boolean;
 }) {
   const phoneStatusQuery = useQuery({
     queryKey: ["whatsapp", "phone-status", connection.phoneNumberId],
@@ -83,6 +87,21 @@ function ConnectionRow({
         </div>
 
         <div className="flex items-center gap-1.5">
+          {!connection.isDefault && connection.status === "ACTIVE" && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={onSetDefault}
+              disabled={settingDefault}
+              title="Send from this number by default (inbox replies + campaigns without a specific number)"
+            >
+              {settingDefault ? (
+                <span className="loading loading-spinner loading-xs" />
+              ) : (
+                "Set as default"
+              )}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-ghost btn-xs"
@@ -217,6 +236,13 @@ export function WhatsAppSettingsClient({
     },
   });
 
+  const setDefaultMutation = useMutation({
+    mutationFn: (cloudApiAccountId: string) => whatsappApi.setDefault(cloudApiAccountId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["whatsapp", "connections"] });
+    },
+  });
+
   const handleCloudSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCloudError(null);
@@ -345,6 +371,11 @@ export function WhatsAppSettingsClient({
                 connection={conn}
                 onDisconnect={() => disconnectMutation.mutate(conn.id)}
                 disconnecting={disconnectMutation.isPending}
+                onSetDefault={() => setDefaultMutation.mutate(conn.id)}
+                settingDefault={
+                  setDefaultMutation.isPending &&
+                  setDefaultMutation.variables === conn.id
+                }
               />
             ))}
           </div>

@@ -3031,6 +3031,11 @@ export const whatsappApi = {
     await api.post(endpoints.whatsapp.disconnect(cloudApiAccountId));
   },
 
+  /** Make a connected number the workspace's default sender (must be ACTIVE). */
+  setDefault: async (cloudApiAccountId: string): Promise<void> => {
+    await api.post(endpoints.whatsapp.setDefault(cloudApiAccountId));
+  },
+
   getOnboardingStatus: async (
     phoneNumberId: string
   ): Promise<WhatsAppOnboardingStatus> => {
