@@ -53,6 +53,7 @@ import {
   collapseCampaignFailures,
 } from "@/lib/messaging";
 import { lastMessagePreview, reactionPreview, dbOrderBoundaryId } from "@/lib/inboxPreview";
+import { ConversationSenderPicker } from "./ConversationSenderPicker";
 import type { ChannelTemplateVersion, Contact, Template } from "@/lib/types";
 import {
   carouselCardFileAccept,
@@ -90,6 +91,8 @@ export type Conversation = {
   snoozedUntil?: string | null;
   assignedUserId?: string | null;
   controlOwner?: "NONE" | "AI" | "HUMAN" | null;
+  /** ChannelAccount the conversation currently sends from (WhatsApp). */
+  channelAccountId?: string | null;
   unreadCount?: number;
   lastMessageAt?: string;
   /** When the OLDEST unanswered inbound landed in the current streak. Drives
@@ -2929,6 +2932,14 @@ export function InboxClient({
                 {contactForDetails.phone || "—"}
               </p>
             </div>
+            {selectedConversation?.id ? (
+              <ConversationSenderPicker
+                conversationId={selectedConversation.id}
+                currentChannelAccountId={selectedConversation.channelAccountId}
+                channel={selectedConversation.channel}
+                onChanged={() => void refreshConversations()}
+              />
+            ) : null}
             {contactForDetails.email ? (
               <div className="flex items-start gap-3 py-1.5">
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
@@ -3068,6 +3079,10 @@ export function InboxClient({
     [
       contactForDetails,
       selectedConversation?.contactId,
+      selectedConversation?.id,
+      selectedConversation?.channel,
+      selectedConversation?.channelAccountId,
+      refreshConversations,
       consentError,
       lifecycleBusy,
       lifecycleError,

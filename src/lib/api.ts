@@ -375,6 +375,13 @@ export const conversationsApi = {
     const response = await api.post(endpoints.conversations.handoffAi(id));
     return response.data;
   },
+  /** Change which WhatsApp number this conversation sends from. */
+  setSendingNumber: async (id: string, cloudApiAccountId: string) => {
+    const response = await api.put(endpoints.conversations.sendingNumber(id), {
+      cloudApiAccountId,
+    });
+    return response.data as { id: string; channelAccountId?: string | null; sendingNumber?: string | null };
+  },
   searchMessages: async (params: {
     q: string;
     conversationId: string;
@@ -2482,6 +2489,8 @@ export type WhatsAppConnection = {
   wabaId?: string;
   displayPhoneNumber?: string | null;
   isDefault?: boolean;
+  /** Active ChannelAccount id — matches conversation.channelAccountId. */
+  channelAccountId?: string | null;
   status?: CloudApiAccountStatus;
   tokenExpiresAt?: string | null;
   createdAt?: string;
