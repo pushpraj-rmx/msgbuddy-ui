@@ -156,8 +156,14 @@ export function MoveNumberDialog() {
                       <option value="">Select a connected number…</option>
                       {accounts.map((a) => (
                         <option key={a.id} value={a.id}>
-                          {String(a.externalRef ?? a.externalId ?? a.id)} — currently:{" "}
-                          {a.workspace?.name ?? "unassigned"}
+                          {String(
+                            (a.cloudApiAccount as { displayPhoneNumber?: string | null } | undefined)
+                              ?.displayPhoneNumber ??
+                              a.externalRef ??
+                              a.externalId ??
+                              a.id,
+                          )}{" "}
+                          — currently: {a.workspace?.name ?? "unassigned"}
                         </option>
                       ))}
                     </select>

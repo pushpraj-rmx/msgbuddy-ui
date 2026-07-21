@@ -772,6 +772,10 @@ export type PlatformChannelAccount = {
   provider?: string;
   displayName?: string;
   externalId?: string;
+  externalRef?: string;
+  cloudApiAccountId?: string | null;
+  /** Human-readable number resolved from the linked CloudApiAccount. */
+  cloudApiAccount?: { displayPhoneNumber?: string | null; wabaId?: string } | null;
   workspaceId?: string | null;
   workspace?: {
     id: string;
