@@ -270,6 +270,15 @@ export function describeActivity(row: AuditLogRow): ActivitySummary {
     };
   }
 
+  if (a === "SYSTEM channel.default_number_changed") {
+    const n = str(after?.number);
+    return {
+      title: `Default sending number changed${n ? ` to ${n}` : ""}`,
+      detail: "Inbox replies and campaigns without a specific number now send from it",
+      tone: "default",
+    };
+  }
+
   // ——— generic fallback ———
   if (a.startsWith("SYSTEM ")) {
     return { title: a.replace(/^SYSTEM /, "System: "), detail: null, tone: "default" };
