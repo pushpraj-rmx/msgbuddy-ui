@@ -365,6 +365,18 @@ export function WhatsAppSettingsClient({
           />
         ) : (
           <div className="space-y-3">
+            {new Set(
+              connectionsQuery.data.map((c) => c.wabaId).filter(Boolean),
+            ).size > 1 ? (
+              <div className="rounded-box border border-warning/30 bg-warning/5 px-3 py-2 text-[0.75rem] text-base-content/70">
+                ⚠ Your numbers are on <strong>different WhatsApp Business
+                Accounts</strong>. Message templates are approved per-WABA and
+                don&apos;t transfer between them — a template approved on one
+                number won&apos;t send from another. Campaigns and the default
+                sender only work with templates approved on that number&apos;s
+                WABA. For a cleaner setup, keep each WABA in its own workspace.
+              </div>
+            ) : null}
             {connectionsQuery.data.map((conn) => (
               <ConnectionRow
                 key={conn.id}

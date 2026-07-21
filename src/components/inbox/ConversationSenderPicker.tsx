@@ -65,6 +65,9 @@ export function ConversationSenderPicker({
   const current = activeNumbers.find(
     (c) => c.channelAccountId === currentChannelAccountId,
   );
+  // Templates and 24h sessions are per-WABA; warn when switching across WABAs.
+  const wabas = new Set(activeNumbers.map((n) => n.wabaId).filter(Boolean));
+  const crossWaba = wabas.size > 1;
 
   return (
     <div className="flex items-start gap-3 py-1.5">
@@ -95,6 +98,13 @@ export function ConversationSenderPicker({
           <p className="mt-1 text-[0.625rem] text-base-content/40">Updating…</p>
         ) : error ? (
           <p className="mt-1 text-[0.625rem] text-error">{error}</p>
+        ) : crossWaba ? (
+          <p className="mt-1 text-[0.625rem] text-warning">
+            ⚠ These numbers are on different WhatsApp Business Accounts.
+            Templates approved on one WABA don&apos;t exist on another, and the
+            24h reply window doesn&apos;t carry over — after switching, only
+            templates approved on the chosen number&apos;s WABA will send.
+          </p>
         ) : (
           <p className="mt-1 text-[0.625rem] text-base-content/40">
             Replies + new sends use this number. If the customer&apos;s 24h
