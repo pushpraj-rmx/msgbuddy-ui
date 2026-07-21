@@ -3440,6 +3440,27 @@ export const platformApi = {
     );
     return response.data.data ?? [];
   },
+  /** SUPERADMIN: manually connect a number Embedded Signup won't list (system-token connect). */
+  manualConnectNumber: async (body: {
+    workspaceId: string;
+    wabaId: string;
+    phoneNumberId: string;
+    businessId?: string;
+  }) => {
+    const response = await api.post(endpoints.platform.manualConnectNumber, body);
+    return response.data as {
+      cloudApiAccountId: string;
+      workspaceId: string;
+      phoneNumberId: string;
+      wabaId: string;
+      displayPhoneNumber: string | null;
+      verifiedName: string | null;
+      qualityRating: string | null;
+      isDefault: boolean;
+      subscribed: boolean;
+      subscribeError: string | null;
+    };
+  },
   /** SUPERADMIN: move a connected number (CloudApiAccount + ChannelAccounts) to another workspace. */
   reassignCloudApiAccount: async (
     cloudApiAccountId: string,

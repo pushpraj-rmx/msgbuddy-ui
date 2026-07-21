@@ -415,6 +415,7 @@ export const endpoints = {
     channelAccounts: `${P}/platform/channel-accounts`,
     reassignCloudApiAccount: (id: string) =>
       `${P}/platform/cloud-api-accounts/${id}/reassign`,
+    manualConnectNumber: `${P}/platform/cloud-api-accounts/manual-connect`,
     assignChannelAccount: (id: string) =>
       `${P}/platform/channel-accounts/${id}/assign`,
     userResetLink: (id: string) => `${P}/platform/users/${id}/reset-link`,

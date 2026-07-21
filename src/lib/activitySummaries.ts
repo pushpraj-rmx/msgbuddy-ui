@@ -258,6 +258,18 @@ export function describeActivity(row: AuditLogRow): ActivitySummary {
     };
   }
 
+  if (a === "SYSTEM channel.number_connected_manually") {
+    const n = str(after?.number);
+    const sub = after && (after as Record<string, unknown>).subscribed === true;
+    return {
+      title: `WhatsApp number ${n ?? ""} connected manually`.replace("  ", " "),
+      detail: sub
+        ? "Connected by the platform team — webhooks subscribed, inbound messages will flow"
+        : "Connected by the platform team — webhook subscription pending",
+      tone: "info",
+    };
+  }
+
   // ——— generic fallback ———
   if (a.startsWith("SYSTEM ")) {
     return { title: a.replace(/^SYSTEM /, "System: "), detail: null, tone: "default" };
