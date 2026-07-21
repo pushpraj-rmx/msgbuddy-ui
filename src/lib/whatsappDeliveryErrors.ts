@@ -46,7 +46,7 @@ export const WHATSAPP_DELIVERY_ERROR_HINTS: Record<
     hint: "Template parameter count mismatch — the number of variables you passed doesn't match the approved template's placeholder count. Re-check the template definition.",
   },
   "132001": {
-    hint: "Template not found. It may have been deleted, renamed, or not yet replicated by Meta. Re-pick a template from the list.",
+    hint: "Template not found on the number you're sending from. Either Meta archived it, or the conversation was moved to a number on a different WhatsApp Business Account (templates don't cross WABAs). Re-pick a template approved on this number's WABA, or switch the conversation back to the original number.",
   },
   "132005": {
     hint: "Template hydration failure — one of the variable values broke validation (often a URL/phone format inside a button variable).",
