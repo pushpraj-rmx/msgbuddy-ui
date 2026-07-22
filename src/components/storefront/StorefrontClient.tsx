@@ -767,7 +767,6 @@ function ManageView({
         handle={handle}
         existingToken={null}
         busy={false}
-        demoMode={catalog.demoMode}
         onBack={onGoSubscribe}
         onVerified={(t) => {
           onToken(t);
