@@ -304,6 +304,18 @@ export const endpoints = {
   metrics: {
     queues: `${P}/metrics/queues`,
   },
+  /** Developer Observability console (staff-only, SUPERADMIN/SUPPORT). */
+  observability: {
+    webhooks: `${P}/observability/webhooks`,
+    webhookById: (id: string) => `${P}/observability/webhooks/${id}`,
+    webhookRetry: (id: string) => `${P}/observability/webhooks/${id}/retry`,
+    providerRequests: `${P}/observability/provider-requests`,
+    providerRequestById: (id: string) => `${P}/observability/provider-requests/${id}`,
+    messageTimeline: (id: string) => `${P}/observability/messages/${id}/timeline`,
+    messageRetry: (id: string) => `${P}/observability/messages/${id}/retry`,
+    failures: `${P}/observability/failures`,
+    search: `${P}/observability/search`,
+  },
   analytics: {
     summary: `${P}/analytics/summary`,
     delivery: `${P}/analytics/delivery`,

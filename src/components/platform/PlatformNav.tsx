@@ -17,6 +17,9 @@ import {
   Briefcase,
   Rocket,
   ServerCog,
+  Search,
+  SatelliteDish,
+  AlertTriangle,
 } from "lucide-react";
 import { isActivePath } from "@/lib/navigation";
 import { isSuperAdmin } from "@/lib/platform-access";
@@ -65,6 +68,15 @@ function buildGroups(superAdmin: boolean): NavGroup[] {
         { href: "/platform/logs/webhooks", label: "Webhook logs", Icon: Webhook, show: true },
         { href: "/platform/logs/usage", label: "Usage events", Icon: Activity, show: true },
         { href: "/platform/logs/audit", label: "Audit log", Icon: ScrollText, show: true },
+      ],
+    },
+    {
+      label: "Observability",
+      items: [
+        { href: "/platform/observability", label: "Search / trace", Icon: Search, show: true, exact: true },
+        { href: "/platform/observability/webhooks", label: "Webhook inspector", Icon: Webhook, show: true },
+        { href: "/platform/observability/provider-requests", label: "Provider calls", Icon: SatelliteDish, show: true },
+        { href: "/platform/observability/failures", label: "Failure center", Icon: AlertTriangle, show: true },
       ],
     },
     {
