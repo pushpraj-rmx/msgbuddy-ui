@@ -1027,6 +1027,8 @@ export const templatesApi = {
     q?: string;
     isActive?: boolean;
     hasWhatsAppSendableVersion?: boolean;
+    /** Filter by WhatsApp category — one value or comma-separated ("MARKETING,UTILITY"). */
+    category?: string;
     page?: number;
     limit?: number;
     sortBy?: string;
@@ -1035,6 +1037,34 @@ export const templatesApi = {
     const response = await api.get<TemplatesListResponse>(
       endpoints.templates.list,
       { params }
+    );
+    return response.data;
+  },
+  /** Templates the current user most recently sent — inbox picker "Recent" tab. */
+  recent: async (): Promise<{ items: Template[] }> => {
+    const response = await api.get<{ items: Template[] }>(
+      endpoints.templates.recent
+    );
+    return response.data;
+  },
+  /** Templates the current user has starred — inbox picker "Starred" tab. */
+  starred: async (): Promise<{ items: Template[] }> => {
+    const response = await api.get<{ items: Template[] }>(
+      endpoints.templates.starred
+    );
+    return response.data;
+  },
+  /** Star (favourite) a template for the current user. Idempotent. */
+  star: async (id: string): Promise<{ starred: boolean }> => {
+    const response = await api.post<{ starred: boolean }>(
+      endpoints.templates.star(id)
+    );
+    return response.data;
+  },
+  /** Unstar a template for the current user. Idempotent. */
+  unstar: async (id: string): Promise<{ starred: boolean }> => {
+    const response = await api.delete<{ starred: boolean }>(
+      endpoints.templates.star(id)
     );
     return response.data;
   },

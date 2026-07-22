@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { FileText, X as XIcon } from "lucide-react";
 import { templatesApi, channelTemplatesApi } from "@/lib/api";
 import type { ChannelTemplateVersion, Template } from "@/lib/types";
 import { getWaCategory } from "@/lib/templateCategory";
@@ -19,6 +20,11 @@ import {
 import { extractApiErrorMessage } from "@/lib/messageApiErrors";
 import { TemplateValueField } from "@/components/templates/TemplateValueField";
 import { variableKeyLabel, variableInputKind } from "@/lib/template-variables";
+import {
+  WhatsAppTemplatePreview,
+  type WhatsAppTemplatePreviewProps,
+} from "@/components/templates/WhatsAppTemplatePreview";
+import { TemplatePickerModal } from "@/components/inbox/TemplatePickerModal";
 
 type TemplateVariableRow = {
   id: string;
@@ -50,15 +56,32 @@ interface Props {
   /** Parent only mounts for WHATSAPP; still guarded here. */
   channel: string | null;
   workspaceId: string;
-  /** = templateOnlyMode; affects only minor layout (max-h scroll container). */
+  /** = templateOnlyMode; outside the 24h window, so the composer leads into the picker. */
   templateOnly: boolean;
   /** Fires when the "can send a template" predicate flips. */
   onReadyChange: (ready: boolean) => void;
+  /**
+   * Parent's send handler (InboxClient.handleSend). The modal's Send button
+   * calls this so the modal drives the SAME send as the parent's Send button —
+   * the payload still comes from this component's `getSendPayload()` ref.
+   */
+  onSend?: () => void;
+  /** Parent send-in-flight flag — disables the modal's Send while a send runs. */
+  sending?: boolean;
 }
 
 export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
   function TemplateComposer(
-    { active, contactId, channel, workspaceId, templateOnly, onReadyChange },
+    {
+      active,
+      contactId,
+      channel,
+      workspaceId,
+      templateOnly,
+      onReadyChange,
+      onSend,
+      sending,
+    },
     ref
   ) {
     const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -66,17 +89,16 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
     const [templateListFetched, setTemplateListFetched] = useState(false);
     const [templatesError, setTemplatesError] = useState<string | null>(null);
     const [templateOptions, setTemplateOptions] = useState<Template[]>([]);
-    // Manual send may only use MARKETING + UTILITY templates; hide AUTHENTICATION
-    // (OTP/auth templates aren't for manual sends — Meta usage alignment).
-    const visibleTemplateOptions = useMemo(
-      () =>
-        templateOptions.filter((t) => {
-          const c = getWaCategory(t.channelTemplates);
-          return c === "MARKETING" || c === "UTILITY";
-        }),
-      [templateOptions]
-    );
     const [selectedTemplateId, setSelectedTemplateId] = useState("");
+    // The chosen Template object. The modal's tabs (Recent/Utility/Marketing/
+    // Starred) can surface templates that aren't in this composer's own list
+    // fetch, so we keep the picked Template here; the version/media effects
+    // resolve the WhatsApp channel template from it (falling back to the list).
+    const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(
+      null
+    );
+    /** Whether the template-picker modal is open. */
+    const [pickerOpen, setPickerOpen] = useState(false);
     const [selectedTemplateVersion, setSelectedTemplateVersion] = useState<{
       id: string;
       version: number;
@@ -105,14 +127,22 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       string | null
     >(null);
 
+    // Prefer the Template picked in the modal; fall back to the composer's own
+    // list fetch so the original resolution path still works.
+    const selectedTemplateObj = useMemo(() => {
+      if (selectedTemplate && selectedTemplate.id === selectedTemplateId) {
+        return selectedTemplate;
+      }
+      return templateOptions.find((t) => t.id === selectedTemplateId) ?? null;
+    }, [selectedTemplate, selectedTemplateId, templateOptions]);
+
     const waChannelTemplateId = useMemo(() => {
       if (!selectedTemplateId) return null;
-      const tpl = templateOptions.find((t) => t.id === selectedTemplateId);
-      const wa = (tpl?.channelTemplates ?? []).find(
+      const wa = (selectedTemplateObj?.channelTemplates ?? []).find(
         (ct) => ct.channel === "WHATSAPP"
       );
       return wa?.id ?? null;
-    }, [selectedTemplateId, templateOptions]);
+    }, [selectedTemplateId, selectedTemplateObj]);
 
     const needsTemplateHeaderMedia = useMemo(
       () =>
@@ -256,9 +286,18 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
 
     const reset = useCallback(() => {
       setSelectedTemplateId("");
+      setSelectedTemplate(null);
       setSelectedTemplateVersion(null);
       setTemplateVariables([]);
       setTemplatesError(null);
+      setPickerOpen(false);
+    }, []);
+
+    /** Select a template from the modal — stores the object + id so the version
+     * effect can resolve it even when it's not in the composer's own list. */
+    const handleSelectTemplate = useCallback((tpl: Template) => {
+      setSelectedTemplate(tpl);
+      setSelectedTemplateId(tpl.id);
     }, []);
 
     // Reload the workspace-scoped template list when the workspace changes.
@@ -288,8 +327,9 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       }
       let cancelled = false;
       setTemplateVersionLoading(true);
-      const tpl = templateOptions.find((t) => t.id === selectedTemplateId);
-      const wa = (tpl?.channelTemplates ?? []).find((ct) => ct.channel === "WHATSAPP");
+      const wa = (selectedTemplateObj?.channelTemplates ?? []).find(
+        (ct) => ct.channel === "WHATSAPP"
+      );
       if (!wa?.id) {
         setSelectedTemplateVersion(null);
         setRequiredVariableKeys([]);
@@ -321,7 +361,7 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       return () => {
         cancelled = true;
       };
-    }, [selectedTemplateId, templateOptions]);
+    }, [selectedTemplateId, selectedTemplateObj]);
 
     useEffect(() => {
       setTemplateHeaderMediaId(null);
@@ -435,77 +475,91 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       [getSendPayload, reset]
     );
 
+    // WhatsApp category of the selected template (for the preview badge).
+    const selectedCategory = useMemo(() => {
+      const c = getWaCategory(selectedTemplateObj?.channelTemplates);
+      return c === "MARKETING" || c === "UTILITY" || c === "AUTHENTICATION"
+        ? c
+        : null;
+    }, [selectedTemplateObj]);
+
+    // Live-preview substitutions keyed by variable token, so the bubble
+    // re-renders as the agent types values.
+    const previewSampleValues = useMemo(() => {
+      const out: Record<string, string> = {};
+      for (const row of templateVariables) {
+        const k = row.key.trim();
+        if (k) out[k] = row.value;
+      }
+      return out;
+    }, [templateVariables]);
+
+    const previewButtons = useMemo<WhatsAppTemplatePreviewProps["buttons"]>(
+      () =>
+        Array.isArray(inboxTemplateVersionDetail?.buttons)
+          ? (inboxTemplateVersionDetail?.buttons as WhatsAppTemplatePreviewProps["buttons"])
+          : null,
+      [inboxTemplateVersionDetail]
+    );
+
+    const previewCards = useMemo<WhatsAppTemplatePreviewProps["carouselCards"]>(
+      () =>
+        Array.isArray(inboxTemplateVersionDetail?.carouselCards)
+          ? (inboxTemplateVersionDetail?.carouselCards as WhatsAppTemplatePreviewProps["carouselCards"])
+          : null,
+      [inboxTemplateVersionDetail]
+    );
+
     if (!active || channel !== "WHATSAPP") return null;
 
-    return (
-      <div
-        className={`space-y-2 ${!templateOnly ? "rounded-none bg-base-100 p-3" : ""}`}
-      >
-        {templatesError ? (
-          <div role="alert" className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm">
-            {templatesError}
+    const detailPane = !selectedTemplateId ? (
+      <div className="flex h-full min-h-40 items-center justify-center rounded-box border border-dashed border-base-300 p-6 text-center text-sm text-base-content/50">
+        Pick a template on the left to preview it and fill in its values.
+      </div>
+    ) : (
+      <div className="space-y-3">
+        <p className="text-xs text-base-content/60">
+          {templateVersionLoading
+            ? "Loading latest approved version…"
+            : selectedTemplateVersion
+              ? `Version ${selectedTemplateVersion.version} · ${
+                  selectedTemplateVersion.status === "PROVIDER_APPROVED"
+                    ? "Approved"
+                    : selectedTemplateVersion.status
+                }`
+              : "No approved version available for this template."}
+        </p>
+        {inboxTemplateVersionDetailLoading ? (
+          <div className="flex items-center gap-2 text-sm text-base-content/70">
+            <span className="loading loading-spinner loading-sm" />
+            Loading template details…
+          </div>
+        ) : inboxTemplateVersionDetail ? (
+          <WhatsAppTemplatePreview
+            headerType={inboxTemplateVersionDetail.headerType}
+            headerContent={inboxTemplateVersionDetail.headerContent}
+            headerPreviewUrl={inboxTemplateVersionDetail.headerPreviewUrl}
+            body={inboxTemplateVersionDetail.body ?? ""}
+            footer={inboxTemplateVersionDetail.footer}
+            buttons={previewButtons}
+            layoutType={inboxTemplateVersionDetail.layoutType}
+            carouselCards={previewCards}
+            category={selectedCategory}
+            language={inboxTemplateVersionDetail.language}
+            limitedTimeOffer={inboxTemplateVersionDetail.limitedTimeOffer}
+            sampleValues={previewSampleValues}
+            className="w-full space-y-2 rounded-box border border-base-300 border-l-2 border-l-success bg-base-100 p-3"
+          />
+        ) : selectedTemplateVersion?.id ? (
+          <div
+            role="alert"
+            className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm"
+          >
+            Could not load template details. Try re-selecting the template.
           </div>
         ) : null}
-        {!templateOnly ? (
-          <>
-            <label className="floating-label">
-              <select
-                className="select select-bordered w-full"
-                value={selectedTemplateId}
-                onChange={(event) => setSelectedTemplateId(event.target.value)}
-                disabled={templatesLoading}
-              >
-                <option value="">Select template</option>
-                {visibleTemplateOptions.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.name}
-                  </option>
-                ))}
-              </select>
-              <span>Template</span>
-            </label>
-            <label className="floating-label">
-              <input
-                type="text"
-                className="input input-bordered w-full"
-                value={
-                  templateVersionLoading
-                    ? "Loading latest approved version..."
-                    : selectedTemplateVersion != null
-                      ? String(selectedTemplateVersion.version)
-                      : ""
-                }
-                readOnly
-                placeholder="Approved version"
-              />
-              <span>Version</span>
-            </label>
-          </>
-        ) : null}
-        <div
-          className={
-            templateOnly
-              ? "max-h-36 space-y-2 overflow-y-auto rounded-box border border-base-300/60 bg-base-200/25 p-2"
-              : "space-y-2"
-          }
-        >
-          {selectedTemplateId && selectedTemplateVersion?.id ? (
-            <>
-              {inboxTemplateVersionDetailLoading ? (
-                <div className="flex items-center gap-2 text-sm text-base-content/70">
-                  <span className="loading loading-spinner loading-sm" />
-                  Loading template details…
-                </div>
-              ) : !inboxTemplateVersionDetail ? (
-                <div
-                  role="alert"
-                  className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm"
-                >
-                  Could not load template details. Try re-selecting the
-                  template.
-                </div>
-              ) : (
-                <>
+          {selectedTemplateVersion?.id && inboxTemplateVersionDetail ? (
+            <div className="space-y-2">
                   {needsTemplateHeaderMedia &&
                     inboxTemplateVersionDetail.headerType ? (
                     <div className="rounded-none bg-base-200/40 p-3">
@@ -561,12 +615,7 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
                         )}
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-xs text-base-content/55">
-                      This template has no media header (text or none
-                      only).
-                    </p>
-                  )}
+                  ) : null}
 
                   {templateCarouselCardCount > 0 ? (
                     <div className="space-y-2">
@@ -646,9 +695,7 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
                       {templateBindingError}
                     </div>
                   ) : null}
-                </>
-              )}
-            </>
+            </div>
           ) : null}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
@@ -734,6 +781,79 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
             )}
           </div>
         </div>
+    );
+
+    return (
+      <div className="space-y-2">
+        {templatesError ? (
+          <div
+            role="alert"
+            className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm"
+          >
+            {templatesError}
+          </div>
+        ) : null}
+
+        {!selectedTemplateId ? (
+          <button
+            type="button"
+            className="btn btn-primary btn-sm w-full justify-center gap-2"
+            onClick={() => setPickerOpen(true)}
+          >
+            <FileText className="h-4 w-4" />
+            Use a template
+          </button>
+        ) : (
+          <div className="flex items-center justify-between gap-2 rounded-box border border-base-300 bg-base-100 px-3 py-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <FileText className="h-4 w-4 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <p className="text-[0.625rem] uppercase tracking-wide text-base-content/50">
+                  Template
+                </p>
+                <p className="truncate text-sm font-medium text-base-content">
+                  {selectedTemplateObj?.name ?? "Selected template"}
+                </p>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs"
+                onClick={() => setPickerOpen(true)}
+              >
+                Change
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs btn-square"
+                aria-label="Clear template"
+                onClick={reset}
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {templateOnly ? (
+          <p className="text-[0.625rem] text-base-content/50">
+            Outside the 24-hour window — only approved templates can be sent.
+          </p>
+        ) : null}
+
+        <TemplatePickerModal
+          open={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          workspaceId={workspaceId}
+          selectedTemplateId={selectedTemplateId}
+          onSelectTemplate={handleSelectTemplate}
+          ready={ready}
+          sending={sending}
+          onSend={onSend}
+        >
+          {detailPane}
+        </TemplatePickerModal>
       </div>
     );
   }

@@ -3994,6 +3994,8 @@ export function InboxClient({
                         workspaceId={workspaceId}
                         templateOnly={templateOnlyMode}
                         onReadyChange={setTemplateReady}
+                        onSend={handleSend}
+                        sending={sending}
                       />
                     </div>
                   ) : null}

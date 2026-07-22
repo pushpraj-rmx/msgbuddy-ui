@@ -221,6 +221,12 @@ export const endpoints = {
   templates: {
     list: `${P}/templates`,
     limits: `${P}/templates/limits`,
+    /** Per-user recently-sent templates (inbox picker "Recent" tab). */
+    recent: `${P}/templates/recent`,
+    /** Per-user starred templates (inbox picker "Starred" tab). */
+    starred: `${P}/templates/starred`,
+    /** POST to star, DELETE to unstar, for the current user. */
+    star: (id: string) => `${P}/templates/${id}/star`,
     create: `${P}/templates`,
     byId: (id: string) => `${P}/templates/${id}`,
     update: (id: string) => `${P}/templates/${id}`,
