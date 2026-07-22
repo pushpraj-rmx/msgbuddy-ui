@@ -8,7 +8,7 @@
  * media paths (e.g. `/uploads/...` → `.../v2/uploads/...`).
  */
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "https://api.msgbuddy.com";
+  process.env.NEXT_PUBLIC_API_URL ?? "https://api.msgbuddy.com";
 
 const P = "/v2";
 
