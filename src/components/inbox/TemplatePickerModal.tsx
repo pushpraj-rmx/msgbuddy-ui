@@ -95,6 +95,11 @@ export function TemplatePickerModal({
   /** Starred ids across all tabs (seeded from starred() on open, optimistic on toggle). */
   const [starredIds, setStarredIds] = useState<Set<string>>(() => new Set());
   const [starBusy, setStarBusy] = useState<Set<string>>(() => new Set());
+  /** Server-side search results for the category tabs — null when not searching.
+   * The per-tab load caps at 50, so a query on a large Marketing/Utility catalog
+   * must hit the API to find matches beyond the first page. */
+  const [searchResults, setSearchResults] = useState<Template[] | null>(null);
+  const [searching, setSearching] = useState(false);
 
   // Sync the native <dialog> with the `open` prop.
   useEffect(() => {
@@ -214,23 +219,57 @@ export function TemplatePickerModal({
     [starBusy, starredIds]
   );
 
+  // Server-side search for the category tabs — the client-side filter below only
+  // sees the loaded ~50, so a query on a big Marketing/Utility catalog must query
+  // the API to find matches beyond the first page. Recent/Starred are small and
+  // fully loaded, so they filter client-side.
+  useEffect(() => {
+    const q = search.trim();
+    if ((tab !== "utility" && tab !== "marketing") || !q) {
+      setSearchResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const category = tab === "utility" ? "UTILITY" : "MARKETING";
+    const handle = window.setTimeout(async () => {
+      try {
+        const res = await templatesApi.list({
+          q,
+          category,
+          hasWhatsAppSendableVersion: true,
+          limit: 50,
+          sortBy: "updatedAt",
+          sortOrder: "desc",
+        });
+        setSearchResults(res.items ?? []);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => window.clearTimeout(handle);
+  }, [search, tab]);
+
   const rows = useMemo(() => {
-    // Keep AUTHENTICATION templates out of the manual-send picker (Meta usage
-    // alignment). Matters for the Starred tab, which isn't category-filtered
-    // server-side; a no-op for Recent/Utility/Marketing.
-    const list = (lists[tab] ?? []).filter(
+    const q = search.trim().toLowerCase();
+    // Category tab + query → server results (whole catalog, name-matched);
+    // otherwise the tab's loaded list. Always drop AUTHENTICATION (Meta usage
+    // alignment; matters for the un-category-filtered Starred tab).
+    const base = searchResults != null ? searchResults : lists[tab] ?? [];
+    const list = base.filter(
       (t) => getWaCategory(t.channelTemplates) !== "AUTHENTICATION"
     );
-    const q = search.trim().toLowerCase();
-    if (!q) return list;
+    if (searchResults != null || !q) return list;
     return list.filter(
       (t) =>
         (t.name ?? "").toLowerCase().includes(q) ||
         (t.description ?? "").toLowerCase().includes(q)
     );
-  }, [lists, tab, search]);
+  }, [lists, tab, search, searchResults]);
 
-  const isLoading = loading[tab];
+  const isLoading = loading[tab] || searching;
   const tabError = errors[tab];
 
   return (
