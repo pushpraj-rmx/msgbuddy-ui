@@ -1,6 +1,19 @@
 import api, { fetchWithAuthRefresh } from "./axios";
 import { API_BASE_URL, endpoints } from "./endpoints";
 import type {
+  ObsPage,
+  ObsWebhookListItem,
+  ObsWebhookDetail,
+  ObsProviderRequestListItem,
+  ObsProviderRequestDetail,
+  ObsFailureItem,
+  ObsMessageTimeline,
+  ObsSearchResult,
+  ObsWebhooksParams,
+  ObsProviderRequestsParams,
+  ObsFailuresParams,
+} from "./observability-types";
+import type {
   InboxMessage,
   MediaItem,
   MessageReactionWire,
@@ -1889,6 +1902,73 @@ export const uploadsApi = {
 export const opsApi = {
   queueMetrics: async () => {
     const response = await api.get(endpoints.metrics.queues);
+    return response.data;
+  },
+};
+
+export const observabilityApi = {
+  listWebhooks: async (
+    params?: ObsWebhooksParams
+  ): Promise<ObsPage<ObsWebhookListItem>> => {
+    const response = await api.get<ObsPage<ObsWebhookListItem>>(
+      endpoints.observability.webhooks,
+      { params }
+    );
+    return response.data;
+  },
+  getWebhook: async (id: string): Promise<ObsWebhookDetail> => {
+    const response = await api.get<ObsWebhookDetail>(
+      endpoints.observability.webhookById(id)
+    );
+    return response.data;
+  },
+  retryWebhook: async (id: string): Promise<ObsWebhookListItem> => {
+    const response = await api.post<ObsWebhookListItem>(
+      endpoints.observability.webhookRetry(id)
+    );
+    return response.data;
+  },
+  listProviderRequests: async (
+    params?: ObsProviderRequestsParams
+  ): Promise<ObsPage<ObsProviderRequestListItem>> => {
+    const response = await api.get<ObsPage<ObsProviderRequestListItem>>(
+      endpoints.observability.providerRequests,
+      { params }
+    );
+    return response.data;
+  },
+  getProviderRequest: async (
+    id: string
+  ): Promise<ObsProviderRequestDetail> => {
+    const response = await api.get<ObsProviderRequestDetail>(
+      endpoints.observability.providerRequestById(id)
+    );
+    return response.data;
+  },
+  messageTimeline: async (id: string): Promise<ObsMessageTimeline> => {
+    const response = await api.get<ObsMessageTimeline>(
+      endpoints.observability.messageTimeline(id)
+    );
+    return response.data;
+  },
+  retryMessage: async (id: string): Promise<{ id: string; status: string }> => {
+    const response = await api.post(endpoints.observability.messageRetry(id));
+    return response.data;
+  },
+  listFailures: async (
+    params?: ObsFailuresParams
+  ): Promise<ObsPage<ObsFailureItem>> => {
+    const response = await api.get<ObsPage<ObsFailureItem>>(
+      endpoints.observability.failures,
+      { params }
+    );
+    return response.data;
+  },
+  search: async (q: string): Promise<ObsSearchResult> => {
+    const response = await api.get<ObsSearchResult>(
+      endpoints.observability.search,
+      { params: { q } }
+    );
     return response.data;
   },
 };
