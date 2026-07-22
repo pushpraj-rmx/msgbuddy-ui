@@ -163,7 +163,14 @@ export default function StorefrontClient({ handle }: { handle: string }) {
 
   return (
     <div style={brandStyle} className="space-y-6">
-      <Header brand={brand} />
+      {catalog.demoMode ? (
+        <div className="overflow-hidden rounded-2xl border border-base-300 shadow-sm">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/hero.jpg" alt="Wholesome Bar Co." className="block w-full" />
+        </div>
+      ) : (
+        <Header brand={brand} />
+      )}
 
       <div
         role="tablist"
@@ -220,8 +227,8 @@ function WhatsAppReminderPreview({ brandName }: { brandName: string }) {
       <div className="rounded-2xl rounded-tl-sm border border-base-300 bg-[#dcf8c6] p-3 text-[0.8125rem] text-neutral-800 shadow-sm">
         <p className="font-semibold">{brandName}</p>
         <p className="mt-1">
-          🥖 Your delivery for tomorrow is scheduled — Daily Bread Box (₹215).
-          Reply to confirm, skip or pause.
+          🥖 Your fresh bread delivery for tomorrow is on its way. Reply to
+          confirm, skip or pause.
         </p>
         <div className="mt-2 grid grid-cols-3 gap-1">
           {["Confirm", "Skip tomorrow", "Pause"].map((b) => (
@@ -371,7 +378,7 @@ function SubscribeFlow({
           View my deliveries
         </button>
         {catalog.demoMode && (
-          <WhatsAppReminderPreview brandName={brandFromHandle(handle).name} />
+          <WhatsAppReminderPreview brandName="Wholesome Bar Co." />
         )}
       </div>
     );
