@@ -547,7 +547,6 @@ function SubscribeFlow({
           handle={handle}
           existingToken={token}
           busy={busy}
-          demoMode={catalog.demoMode}
           onBack={() => setStep("configure")}
           onVerified={(t) => {
             onToken(t);
@@ -603,19 +602,17 @@ function AuthStep({
   handle,
   existingToken,
   busy,
-  demoMode,
   onBack,
   onVerified,
 }: {
   handle: string;
   existingToken: string | null;
   busy: boolean;
-  demoMode?: boolean;
   onBack: () => void;
   onVerified: (token: string) => void;
 }) {
   const [phase, setPhase] = useState<"phone" | "code">("phone");
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState("+91");
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -630,9 +627,7 @@ function AuthStep({
     setSending(true);
     setError(null);
     try {
-      const res = await storefrontApi.requestOtp(handle, phone.trim());
-      // DEMO-ONLY: no real WhatsApp — auto-fill the returned code.
-      if (res.demoCode) setCode(res.demoCode);
+      await storefrontApi.requestOtp(handle, phone.replace(/\s+/g, ""));
       setPhase("code");
     } catch (e) {
       setError(errMsg(e));
@@ -645,7 +640,7 @@ function AuthStep({
     setSending(true);
     setError(null);
     try {
-      const { token } = await storefrontApi.verifyOtp(handle, phone.trim(), code.trim());
+      const { token } = await storefrontApi.verifyOtp(handle, phone.replace(/\s+/g, ""), code.trim());
       onVerified(token);
     } catch (e) {
       setError(errMsg(e));
@@ -673,12 +668,6 @@ function AuthStep({
           <p className="text-xs text-base-content/50">
             We&apos;ll send a verification code to this number on WhatsApp.
           </p>
-          {demoMode && (
-            <p className="rounded-md bg-warning/10 px-2 py-1 text-xs text-warning">
-              Demo mode — no real WhatsApp is sent. The code auto-fills as{" "}
-              <span className="font-mono font-semibold">000000</span>.
-            </p>
-          )}
           <button
             className="btn btn-primary btn-block"
             disabled={sending || phone.trim().length < 8}
