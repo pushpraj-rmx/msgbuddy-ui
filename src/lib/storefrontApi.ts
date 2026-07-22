@@ -64,6 +64,8 @@ export interface StorefrontCatalog {
   deliveryFee: string;
   plans: StorefrontPlan[];
   windows: StorefrontWindow[];
+  /** DEMO-ONLY: storefront runs without real WhatsApp (OTP + reminders faked). */
+  demoMode?: boolean;
 }
 
 export interface CustomerSubscription {
@@ -104,7 +106,8 @@ export const storefrontApi = {
   catalog: (handle: string) => call<StorefrontCatalog>(endpoints.recurring.public.catalog(handle)),
 
   requestOtp: (handle: string, phone: string) =>
-    call<{ sent: true; expiresInSec: number }>(endpoints.recurring.public.otpRequest(handle), {
+    // DEMO-ONLY: in demo mode the response carries `demoCode` (no real WhatsApp).
+    call<{ sent: true; expiresInSec: number; demoCode?: string }>(endpoints.recurring.public.otpRequest(handle), {
       method: "POST",
       body: JSON.stringify({ phone }),
     }),

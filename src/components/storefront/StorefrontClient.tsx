@@ -207,6 +207,41 @@ export default function StorefrontClient({ handle }: { handle: string }) {
   );
 }
 
+/**
+ * DEMO-ONLY: a mock of the daily WhatsApp reminder so a viewer sees the
+ * "updates" part of the flow without a verified WABA / approved template.
+ */
+function WhatsAppReminderPreview({ brandName }: { brandName: string }) {
+  return (
+    <div className="mt-2 space-y-1.5 text-left">
+      <p className="text-center text-[0.6875rem] uppercase tracking-wide text-base-content/40">
+        Preview · the daily WhatsApp your customers get
+      </p>
+      <div className="rounded-2xl rounded-tl-sm border border-base-300 bg-[#dcf8c6] p-3 text-[0.8125rem] text-neutral-800 shadow-sm">
+        <p className="font-semibold">{brandName}</p>
+        <p className="mt-1">
+          🥖 Your delivery for tomorrow is scheduled — Daily Bread Box (₹215).
+          Reply to confirm, skip or pause.
+        </p>
+        <div className="mt-2 grid grid-cols-3 gap-1">
+          {["Confirm", "Skip tomorrow", "Pause"].map((b) => (
+            <span
+              key={b}
+              className="rounded-md bg-white/70 px-1.5 py-1 text-center text-[0.6875rem] font-medium text-sky-700"
+            >
+              {b}
+            </span>
+          ))}
+        </div>
+      </div>
+      <p className="text-center text-[0.625rem] text-base-content/40">
+        In production these taps update the subscription automatically — try
+        Skip/Pause live under “My deliveries”.
+      </p>
+    </div>
+  );
+}
+
 function Header({ brand }: { brand: ReturnType<typeof brandFromHandle> }) {
   return (
     <div className="op-grain relative overflow-hidden rounded-2xl border border-base-300 bg-base-200 p-6">
@@ -335,6 +370,9 @@ function SubscribeFlow({
         <button className="btn btn-primary btn-block" onClick={onManage}>
           View my deliveries
         </button>
+        {catalog.demoMode && (
+          <WhatsAppReminderPreview brandName={brandFromHandle(handle).name} />
+        )}
       </div>
     );
   }
@@ -509,6 +547,7 @@ function SubscribeFlow({
           handle={handle}
           existingToken={token}
           busy={busy}
+          demoMode={catalog.demoMode}
           onBack={() => setStep("configure")}
           onVerified={(t) => {
             onToken(t);
@@ -564,12 +603,14 @@ function AuthStep({
   handle,
   existingToken,
   busy,
+  demoMode,
   onBack,
   onVerified,
 }: {
   handle: string;
   existingToken: string | null;
   busy: boolean;
+  demoMode?: boolean;
   onBack: () => void;
   onVerified: (token: string) => void;
 }) {
@@ -589,7 +630,9 @@ function AuthStep({
     setSending(true);
     setError(null);
     try {
-      await storefrontApi.requestOtp(handle, phone.trim());
+      const res = await storefrontApi.requestOtp(handle, phone.trim());
+      // DEMO-ONLY: no real WhatsApp — auto-fill the returned code.
+      if (res.demoCode) setCode(res.demoCode);
       setPhase("code");
     } catch (e) {
       setError(errMsg(e));
@@ -630,6 +673,12 @@ function AuthStep({
           <p className="text-xs text-base-content/50">
             We&apos;ll send a verification code to this number on WhatsApp.
           </p>
+          {demoMode && (
+            <p className="rounded-md bg-warning/10 px-2 py-1 text-xs text-warning">
+              Demo mode — no real WhatsApp is sent. The code auto-fills as{" "}
+              <span className="font-mono font-semibold">000000</span>.
+            </p>
+          )}
           <button
             className="btn btn-primary btn-block"
             disabled={sending || phone.trim().length < 8}
@@ -729,6 +778,7 @@ function ManageView({
         handle={handle}
         existingToken={null}
         busy={false}
+        demoMode={catalog.demoMode}
         onBack={onGoSubscribe}
         onVerified={(t) => {
           onToken(t);
