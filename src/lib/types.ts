@@ -332,6 +332,8 @@ export type Template = {
   createdAt: string;
   updatedAt: string;
   channelTemplates?: ChannelTemplate[];
+  /** Lifetime number of times this template has been sent (from TemplateSendLog). */
+  sendCount?: number;
 };
 
 /** Meta's template quality rating, surfaced once a template has been live and received feedback. */

@@ -355,6 +355,18 @@ export function TemplatesClient({ meRole }: { meRole: string }) {
         cell: ({ row }) => <WhatsAppStatusCell template={row.original} />,
       },
       {
+        id: "sends",
+        header: "Sends",
+        cell: ({ row }) => (
+          <span
+            className="font-mono-op tabular-nums text-base-content/70"
+            title="Total times this template has been sent"
+          >
+            {(row.original.sendCount ?? 0).toLocaleString()}
+          </span>
+        ),
+      },
+      {
         accessorKey: "updatedAt",
         header: "Updated",
         cell: ({ row }) =>
