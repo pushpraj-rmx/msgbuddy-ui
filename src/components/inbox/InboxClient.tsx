@@ -51,7 +51,7 @@ import {
   isFailedMessage,
   collapseCampaignFailures,
 } from "@/lib/messaging";
-import { lastMessagePreview, reactionPreview, dbOrderBoundaryId } from "@/lib/inboxPreview";
+import { lastMessagePreview, reactionPreview, dbOrderBoundaryId, sortsAfterInDbOrder } from "@/lib/inboxPreview";
 import { ConversationSenderPicker } from "./ConversationSenderPicker";
 import type { Contact } from "@/lib/types";
 import { extractApiErrorMessage } from "@/lib/messageApiErrors";
@@ -482,6 +482,9 @@ export function InboxClient({
   /** Rows currently loaded — lets live refreshes preserve "Load more" depth. */
   const conversationsCountRef = useRef(conversations.length);
   conversationsCountRef.current = conversations.length;
+  /** Latest loaded rows — read by the depth-preserving refresh merge. */
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
   /** Mirrors `draftsByConversation` for synchronous merge when `selectedId` changes (avoids stale functional updater `prevMap`). */
   const draftsByConversationRef = useRef(draftsByConversation);
   draftsByConversationRef.current = draftsByConversation;
@@ -1066,7 +1069,13 @@ export function InboxClient({
     nextCursor?: string | null,
     append = false,
     /** Refetch this many rows instead of one page (depth-preserving refresh). */
-    overrideLimit?: number
+    overrideLimit?: number,
+    /**
+     * Refresh mode: merge the refetched window into the loaded list instead of
+     * replacing it, so rows already loaded *past* the window survive. Without
+     * this a refresh truncates to the window and "Load more" progress is lost.
+     */
+    merge = false
   ) => {
     const requestedLimit = overrideLimit ?? LIMIT;
     setListLoading(true);
@@ -1108,8 +1117,25 @@ export function InboxClient({
           };
 
       const data = (await conversationsApi.list(params)) as Conversation[];
+
+      // Depth-preserving refresh: the refetched window is authoritative for the
+      // rows it covers, but anything already loaded BEYOND it is kept (in its
+      // existing order) so a workspace event can't collapse "Load more"
+      // progress. Bounds refresh cost at the window while never truncating.
+      let deeperTail: Conversation[] = [];
+      if (merge && data.length) {
+        const windowBoundary = data.reduce((acc, c) =>
+          !acc || sortsAfterInDbOrder(c, acc) ? c : acc,
+        );
+        const fetchedIds = new Set(data.map((c) => c.id));
+        deeperTail = conversationsRef.current.filter(
+          (c) => !fetchedIds.has(c.id) && sortsAfterInDbOrder(c, windowBoundary),
+        );
+      }
+
       setConversations((prev) => {
         if (append) return [...prev, ...data];
+        if (merge) return [...data, ...deeperTail];
         // Preserve the handoff conversation (added by applyHandoff) if it's
         // currently selected but not present in the fresh page of results.
         const currentSelectedId = selectedIdRef.current;
@@ -1127,7 +1153,22 @@ export function InboxClient({
       // Use the page's true DB-order boundary (not data.at(-1)): under the
       // oldestUnreadFirst sort the server re-sorts the page for display, so the
       // last array item is a mid-order row and paging from it skips/repeats.
-      setCursor(data.length === requestedLimit ? dbOrderBoundaryId(data) : null);
+      // On a merge the next page must continue from the DEEPEST row we still
+      // hold (tail included) — paging from the refreshed window's boundary
+      // would re-fetch rows the user already has. "More" remains available when
+      // the window came back full or we retained rows past it.
+      if (merge) {
+        const merged = [...data, ...deeperTail];
+        setCursor(
+          data.length === requestedLimit || deeperTail.length
+            ? dbOrderBoundaryId(merged)
+            : null,
+        );
+      } else {
+        setCursor(
+          data.length === requestedLimit ? dbOrderBoundaryId(data) : null,
+        );
+      }
       if (!append && data.length) {
         setSelectedId((current) => {
           if (current) return current;
@@ -1158,7 +1199,7 @@ export function InboxClient({
       Math.max(Math.ceil(conversationsCountRef.current / LIMIT), 1) * LIMIT,
       MAX_REFRESH_DEPTH,
     );
-    await fetchConversations(status, null, false, depth);
+    await fetchConversations(status, null, false, depth, true);
   }, [fetchConversations, status]);
 
   /** Debounced refresh for SSE bursts (a webhook batch fires many events at once). */

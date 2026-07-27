@@ -16,7 +16,7 @@ function toTime(v?: string | null): number | null {
 }
 
 /** True when `a` sorts AFTER `b` under (lastMessageAt DESC NULLS LAST, id DESC). */
-function sortsAfterInDbOrder(
+export function sortsAfterInDbOrder(
   a: CursorConversation,
   b: CursorConversation,
 ): boolean {
