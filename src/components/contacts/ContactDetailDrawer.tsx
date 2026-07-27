@@ -307,11 +307,11 @@ export function ContactDetailPanelContent({
               muted
             />
           ) : null}
-          {/* Last active = the contact's most recent inbound message. */}
+          {/* Most recent message on this contact, either direction. */}
           {contact.lastMessageAt ? (
             <InfoRow
               icon={Clock}
-              label="Last active"
+              label="Last message"
               value={formatRelativeTime(contact.lastMessageAt)}
               muted
             />

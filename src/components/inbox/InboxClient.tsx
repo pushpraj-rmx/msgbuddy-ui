@@ -2687,7 +2687,7 @@ export function InboxClient({
                 </p>
               </div>
             ) : null}
-            {/* Last active = the contact's most recent inbound message. */}
+            {/* Most recent message on this contact, either direction. */}
             {contactForDetails.lastMessageAt ? (
               <div className="flex items-start gap-3 py-1.5">
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
@@ -2695,9 +2695,9 @@ export function InboxClient({
                 </div>
                 <p
                   className="text-[0.8125rem] text-base-content"
-                  title={`Last inbound message: ${new Date(contactForDetails.lastMessageAt).toLocaleString()}`}
+                  title={`Last message: ${new Date(contactForDetails.lastMessageAt).toLocaleString()}`}
                 >
-                  Active {formatRelativeTime(contactForDetails.lastMessageAt)}
+                  Last message {formatRelativeTime(contactForDetails.lastMessageAt)}
                 </p>
               </div>
             ) : null}
