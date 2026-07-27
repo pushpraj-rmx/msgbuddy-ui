@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { FileAudio, X, CloudUpload, Images, Trash2, Download, Image as ImageIcon, Info, File, RefreshCw, ChevronsUpDown, FileVideo } from "lucide-react";
 import { mediaApi } from "@/lib/api";
+import { mergeRefreshedWindow } from "@/lib/paginationMerge";
 import { resolveMediaUrlForUi } from "@/lib/mediaUrls";
 import { getApiError } from "@/lib/api-error";
 import { roleHasWorkspacePermission } from "@/lib/workspace-role-permissions";
@@ -89,6 +90,9 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
   const [dragOver, setDragOver] = useState(false);
   const [retryingFailed, setRetryingFailed] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  /** Latest loaded items — read by the depth-preserving refresh merge. */
+  const mediaRef = useRef(media);
+  mediaRef.current = media;
 
   const totals = useMemo(() => {
     const bytes = media.reduce((acc, m) => acc + (m.size ?? 0), 0);
@@ -142,13 +146,31 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
     [imageItems]
   );
 
+  /**
+   * Depth-preserving refresh (docs/PAGINATION_STANDARD §6). Every caller — the
+   * Refresh button, upload, delete, retry-failed — re-runs the SAME query, so
+   * the refetched first page is merged into the loaded list instead of
+   * replacing it: without this, refreshing after loading 500 items collapsed
+   * the gallery back to 50.
+   */
   const refresh = async () => {
     setLoading(true);
     setError(null);
     try {
       const data = (await mediaApi.list({ limit: LIMIT })) as MediaItem[];
-      setMedia(data);
-      setCursor(data.length === LIMIT ? data.at(-1)?.id ?? null : null);
+      const { rows, tailLength } = mergeRefreshedWindow(
+        mediaRef.current,
+        data,
+        (item) => item.id
+      );
+      setMedia(rows);
+      // /media returns a bare array (no nextCursor), so the boundary stays the
+      // last row — but of the MERGED list, not of the refetched window: paging
+      // from the window's end would re-fetch rows the user already has. More
+      // remains available when the window came back full or a tail survived.
+      setCursor(
+        data.length === LIMIT || tailLength > 0 ? rows.at(-1)?.id ?? null : null
+      );
     } catch (err: unknown) {
       setError(getApiError(err) || "Failed to load media.");
     } finally {
@@ -192,6 +214,11 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
     setError(null);
     try {
       await mediaApi.remove(id);
+      // Drop it locally first: the refresh below only refetches the first page,
+      // so a deleted item sitting deeper in the loaded list would otherwise be
+      // preserved by the merge.
+      setMedia((prev) => prev.filter((item) => item.id !== id));
+      mediaRef.current = mediaRef.current.filter((item) => item.id !== id);
       await refresh();
     } catch (err: unknown) {
       setError(getApiError(err) || "Delete failed.");

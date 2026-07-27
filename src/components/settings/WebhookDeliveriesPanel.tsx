@@ -11,6 +11,7 @@ import {
   absoluteUTC,
   relativeShort,
 } from "@/lib/relative-time";
+import { mergeRefreshedWindow } from "@/lib/paginationMerge";
 import { useRightPanel } from "@/components/right-panel/useRightPanel";
 
 const TERMINAL: ReadonlySet<WebhookDeliveryStatus> = new Set([
@@ -329,6 +330,11 @@ export function WebhookDeliveriesPanel({
   const nextPollAt = useRef<Map<string, number>>(new Map());
   /** Per-delivery first-seen-at, used to compute age for cadence backoff. */
   const seenAt = useRef<Map<string, number>>(new Map());
+  /** Latest loaded rows — read by the depth-preserving refresh merge. */
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  /** Endpoint the loaded rows belong to; null until the first load lands. */
+  const itemsEndpointIdRef = useRef<string | null>(null);
 
   // Reset state when endpoint changes
   useEffect(() => {
@@ -340,7 +346,17 @@ export function WebhookDeliveriesPanel({
   }, [endpointId]);
 
   const fetchPage = useCallback(
-    async (cursor: string | null, replace: boolean) => {
+    async (
+      cursor: string | null,
+      replace: boolean,
+      /**
+       * Same-endpoint refresh (a `reloadToken` bump): merge the refetched first
+       * page into the loaded rows instead of replacing them, so "Load more"
+       * progress survives — docs/PAGINATION_STANDARD §6. Ignored when the rows
+       * on screen belong to a different endpoint, where replacing is correct.
+       */
+      merge = false,
+    ) => {
       if (replace) setLoading(true);
       else setLoadingMore(true);
       try {
@@ -348,10 +364,26 @@ export function WebhookDeliveriesPanel({
           limit: 20,
           ...(cursor ? { cursor } : {}),
         });
-        setItems((prev) =>
-          replace ? result.items : [...prev, ...result.items],
-        );
-        setNextCursor(result.nextCursor);
+        if (!replace) {
+          setItems((prev) => [...prev, ...result.items]);
+          setNextCursor(result.nextCursor);
+        } else if (merge && itemsEndpointIdRef.current === endpointId) {
+          const { rows, tailLength } = mergeRefreshedWindow(
+            itemsRef.current,
+            result.items,
+            (row) => row.id,
+          );
+          setItems(rows);
+          // The server's nextCursor continues from the refreshed window. When
+          // rows deeper than that window survived, the cursor we already hold
+          // is the one that continues from the deepest row — keep it, or
+          // "Load more" refetches rows the user already has.
+          if (tailLength === 0) setNextCursor(result.nextCursor);
+        } else {
+          setItems(result.items);
+          setNextCursor(result.nextCursor);
+        }
+        itemsEndpointIdRef.current = endpointId;
         setError(null);
       } catch (e) {
         const err = e as { response?: { data?: { message?: string } } };
@@ -367,9 +399,10 @@ export function WebhookDeliveriesPanel({
     [endpointId],
   );
 
-  // Initial / reload fetch
+  // Initial / reload fetch. A `reloadToken` bump is the same query, so it
+  // merges; switching endpoint replaces (fetchPage resolves which).
   useEffect(() => {
-    void fetchPage(null, true);
+    void fetchPage(null, true, true);
   }, [fetchPage, reloadToken]);
 
   // Bookkeeping for poll state — seed seenAt for any new non-terminal rows.

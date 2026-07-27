@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getApiError } from "@/lib/api-error";
+import { mergeRefreshedWindow } from "@/lib/paginationMerge";
 import { campaignsApi, contactsApi, channelTemplatesApi, customFieldsApi, segmentsApi, usageApi } from "@/lib/api";
 import type { ChannelTemplateVersion, Segment } from "@/lib/types";
 import {
@@ -132,6 +133,11 @@ export function CreateCampaignForm({
   const [contactsHasMore, setContactsHasMore] = useState(false);
   const [contactsLoadingMore, setContactsLoadingMore] = useState(false);
   const [contactsSearch, setContactsSearch] = useState("");
+  /** Latest loaded rows — read by the depth-preserving refresh merge. */
+  const contactsRef = useRef(contacts);
+  contactsRef.current = contacts;
+  /** Search term the loaded rows answer; null until the first fetch lands. */
+  const contactsSearchRef = useRef<string | null>(null);
   /** Display rows for already-selected contacts that don't appear in the current page (so the user can still untick them). */
   const [selectedContactDetails, setSelectedContactDetails] = useState<
     Record<string, Contact>
@@ -302,14 +308,37 @@ export function CreateCampaignForm({
     if (step !== 3 || audienceType !== "SPECIFIC") return;
     const handle = window.setTimeout(() => {
       let cancelled = false;
+      const search = contactsSearch.trim();
+      // A changed search term is a DIFFERENT query, so its rows replace the
+      // loaded ones. Re-entering the audience step with the SAME term is a
+      // same-query refetch and must merge, or stepping away and back throws
+      // the user's "Load more" progress away (docs/PAGINATION_STANDARD §6).
+      const merge = contactsSearchRef.current === search;
       setContactsLoaded(false);
       void contactsApi
-        .list({ search: contactsSearch.trim() || undefined, limit: 50 })
+        .list({ search: search || undefined, limit: 50 })
         .then((data) => {
           if (cancelled) return;
-          setContacts(data.contacts ?? []);
-          setContactsCursor(data.nextCursor ?? null);
-          setContactsHasMore(!!data.nextCursor);
+          const items = data.contacts ?? [];
+          if (merge) {
+            const { rows, tailLength } = mergeRefreshedWindow(
+              contactsRef.current,
+              items,
+              (row) => row.id,
+            );
+            setContacts(rows);
+            // Rows deeper than the refreshed window survived, so the cursor we
+            // already hold is the one that continues from the deepest row.
+            if (tailLength === 0) {
+              setContactsCursor(data.nextCursor ?? null);
+              setContactsHasMore(!!data.nextCursor);
+            }
+          } else {
+            setContacts(items);
+            setContactsCursor(data.nextCursor ?? null);
+            setContactsHasMore(!!data.nextCursor);
+          }
+          contactsSearchRef.current = search;
           setContactsLoaded(true);
         })
         .catch(() => {
@@ -317,6 +346,7 @@ export function CreateCampaignForm({
           setContacts([]);
           setContactsCursor(null);
           setContactsHasMore(false);
+          contactsSearchRef.current = search;
           setContactsLoaded(true);
         });
       return () => {
