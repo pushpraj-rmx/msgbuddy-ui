@@ -68,8 +68,12 @@ function formatDetailValue(value: unknown): string {
 export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[]; meRole: string }) {
   const canWrite = roleHasWorkspacePermission(meRole, "media.write");
   const [media, setMedia] = useState<MediaItem[]>(initialMedia);
+  // Offer "Load more" only when a FULL page came back — a partial page is the
+  // last one. Using `length > 0` (the old rule) left the button enabled after
+  // the final partial page, so clicking it just fetched an empty page forever.
+  // See docs/PAGINATION_STANDARD §6.
   const [cursor, setCursor] = useState<string | null>(
-    initialMedia.length ? initialMedia.at(-1)?.id ?? null : null
+    initialMedia.length === LIMIT ? initialMedia.at(-1)?.id ?? null : null
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +148,7 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
     try {
       const data = (await mediaApi.list({ limit: LIMIT })) as MediaItem[];
       setMedia(data);
-      setCursor(data.length ? data.at(-1)?.id ?? null : null);
+      setCursor(data.length === LIMIT ? data.at(-1)?.id ?? null : null);
     } catch (err: unknown) {
       setError(getApiError(err) || "Failed to load media.");
     } finally {
@@ -162,7 +166,7 @@ export function MediaClient({ initialMedia, meRole }: { initialMedia: MediaItem[
         cursor,
       })) as MediaItem[];
       setMedia((prev) => [...prev, ...data]);
-      setCursor(data.length ? data.at(-1)?.id ?? null : null);
+      setCursor(data.length === LIMIT ? data.at(-1)?.id ?? null : null);
     } catch (err: unknown) {
       setError(getApiError(err) || "Failed to load more media.");
     } finally {
