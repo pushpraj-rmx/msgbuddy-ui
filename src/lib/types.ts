@@ -20,6 +20,11 @@ export type Contact = {
   workspaceId: string;
   phone: string;
   phoneLabel?: string;
+  /**
+   * ISO 3166-1 alpha-2 derived server-side from `phone` (no stored column).
+   * The number's registered region, not a verified location.
+   */
+  country?: string | null;
   name?: string;
   email?: string;
   emailLabel?: string;

@@ -4,9 +4,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   Phone, Mail, Shield, ShieldOff, Pencil, Trash2,
-  MessageSquare, Tag, FileText, Clock,
+  MessageSquare, Tag, FileText, Clock, MapPin,
 } from "lucide-react";
 import { getApiError } from "@/lib/api-error";
+import { formatCountry, formatRelativeTime } from "@/lib/format";
 import { contactsApi, tagsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
 import { ContactAvatar } from "@/components/ui/ContactAvatar";
@@ -293,10 +294,31 @@ export function ContactDetailPanelContent({
         ) : null}
       </div>
 
-      {/* ── Created date ── */}
-      {createdAt ? (
-        <div className="border-b border-base-300 px-4 py-3">
-          <InfoRow icon={Clock} label="Created" value={createdAt} muted />
+      {/* ── Region / last active / created ── */}
+      {formatCountry(contact.country) || contact.lastMessageAt || createdAt ? (
+        <div className="space-y-2 border-b border-base-300 px-4 py-3">
+          {/* Derived from the phone's calling code — registered region, not a
+              verified location. */}
+          {formatCountry(contact.country) ? (
+            <InfoRow
+              icon={MapPin}
+              label="Region"
+              value={formatCountry(contact.country)}
+              muted
+            />
+          ) : null}
+          {/* Last active = the contact's most recent inbound message. */}
+          {contact.lastMessageAt ? (
+            <InfoRow
+              icon={Clock}
+              label="Last active"
+              value={formatRelativeTime(contact.lastMessageAt)}
+              muted
+            />
+          ) : null}
+          {createdAt ? (
+            <InfoRow icon={Clock} label="Created" value={createdAt} muted />
+          ) : null}
         </div>
       ) : null}
 

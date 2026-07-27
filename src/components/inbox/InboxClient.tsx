@@ -10,7 +10,8 @@ import {
   type ChangeEvent,
 } from "react";
 import { useSearchParams } from "next/navigation";
-import { CircleUser, Bot, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical, Phone, Mail, Search as SearchIcon, Image as ImageIcon, StickyNote, ExternalLink, ChevronLeft, ChevronRight, Tag as TagIcon, ArrowUpDown, Clock, X as XIcon } from "lucide-react";
+import { CircleUser, Bot, ArrowLeft, PlusCircle, SlidersHorizontal, MoreVertical, Phone, Mail, MapPin, Search as SearchIcon, Image as ImageIcon, StickyNote, ExternalLink, ChevronLeft, ChevronRight, Tag as TagIcon, ArrowUpDown, Clock, X as XIcon } from "lucide-react";
+import { formatCountry, formatRelativeTime } from "@/lib/format";
 import Picker from "@emoji-mart/react";
 import emojiData from "@emoji-mart/data";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
@@ -108,6 +109,10 @@ export type Conversation = {
     id?: string;
     name?: string;
     phone?: string;
+    /** ISO 3166-1 alpha-2 derived server-side from `phone` (registered region). */
+    country?: string | null;
+    /** Most recent inbound message from this contact — "last active". */
+    lastMessageAt?: string | null;
     email?: string;
     avatarUrl?: string | null;
     isOptedOut?: boolean;
@@ -2468,6 +2473,8 @@ export function InboxClient({
           id: selectedConversation.contact.id ?? selectedConversation.contactId,
           name: selectedConversation.contact.name,
           phone: selectedConversation.contact.phone,
+          country: selectedConversation.contact.country ?? null,
+          lastMessageAt: selectedConversation.contact.lastMessageAt ?? null,
           email: selectedConversation.contact.email,
           isOptedOut: selectedConversation.contact.isOptedOut ?? false,
           isBlocked: selectedConversation.contact.isBlocked ?? false,
@@ -2480,6 +2487,8 @@ export function InboxClient({
             id: startContact.id,
             name: startContact.name,
             phone: startContact.phone,
+            country: startContact.country ?? null,
+            lastMessageAt: startContact.lastMessageAt ?? null,
             email: startContact.email,
             isOptedOut: false,
             isBlocked: false,
@@ -2590,6 +2599,35 @@ export function InboxClient({
                 >
                   {contactForDetails.email}
                 </a>
+              </div>
+            ) : null}
+            {/* Region — derived from the phone's calling code, so it's the
+                number's registered country, not a verified location. */}
+            {formatCountry(contactForDetails.country) ? (
+              <div className="flex items-start gap-3 py-1.5">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
+                  <MapPin className="h-3 w-3" />
+                </div>
+                <p
+                  className="text-[0.8125rem] text-base-content"
+                  title="Region derived from the phone number"
+                >
+                  {formatCountry(contactForDetails.country)}
+                </p>
+              </div>
+            ) : null}
+            {/* Last active = the contact's most recent inbound message. */}
+            {contactForDetails.lastMessageAt ? (
+              <div className="flex items-start gap-3 py-1.5">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
+                  <Clock className="h-3 w-3" />
+                </div>
+                <p
+                  className="text-[0.8125rem] text-base-content"
+                  title={`Last inbound message: ${new Date(contactForDetails.lastMessageAt).toLocaleString()}`}
+                >
+                  Active {formatRelativeTime(contactForDetails.lastMessageAt)}
+                </p>
               </div>
             ) : null}
           </div>
