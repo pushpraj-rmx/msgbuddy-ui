@@ -6,7 +6,8 @@ export type MessageType =
   | "AUDIO"
   | "DOCUMENT"
   | "TEMPLATE"
-  | "INTERACTIVE";
+  | "INTERACTIVE"
+  | "LOCATION";
 
 export type MessageStatus =
   | "SCHEDULED"
@@ -86,6 +87,11 @@ export type InboxMessage = {
   templateVariables?: Record<string, string> | null;
   /** Set when the message is a TEMPLATE and the linked version was hydrated. */
   channelTemplateVersion?: InboxMessageTemplateVersion | null;
+  /**
+   * Free-form JSON blob persisted alongside the message. LOCATION messages
+   * carry their coordinates here under `location` — see {@link getMessageLocation}.
+   */
+  metadata?: Record<string, unknown> | null;
   /** Count of OPEN + SNOOZED tasks anchored to this message. Drives the
    *  small task badge on the bubble; 0 (or omitted on legacy payloads)
    *  hides the badge. */
@@ -136,6 +142,52 @@ export function getMessageType(message: InboxMessage): MessageType | string {
   return "TEXT";
 }
 
+/** Coordinates a contact shared, as persisted in `Message.metadata.location`. */
+export type MessageLocation = {
+  latitude: number;
+  longitude: number;
+  name: string | null;
+  address: string | null;
+};
+
+/**
+ * Read a LOCATION message's coordinates out of its untyped metadata blob.
+ * Returns null when the message isn't a location or the blob is malformed —
+ * callers should fall back to plain text rendering rather than showing a pin.
+ */
+export function getMessageLocation(
+  message: Pick<InboxMessage, "metadata">
+): MessageLocation | null {
+  const metadata = message.metadata;
+  if (!metadata || typeof metadata !== "object") return null;
+  const raw = (metadata as Record<string, unknown>).location;
+  if (!raw || typeof raw !== "object") return null;
+
+  const { latitude, longitude, name, address } = raw as Record<string, unknown>;
+  if (
+    typeof latitude !== "number" ||
+    !Number.isFinite(latitude) ||
+    typeof longitude !== "number" ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+  return {
+    latitude,
+    longitude,
+    name: typeof name === "string" && name.trim() ? name : null,
+    address: typeof address === "string" && address.trim() ? address : null,
+  };
+}
+
+/** Google Maps deep link for a shared pin. Opens the native app on mobile. */
+export function googleMapsSearchUrl(
+  latitude: number,
+  longitude: number
+): string {
+  return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
+}
+
 export type MediaKind =
   | "text"
   | "image"
@@ -164,6 +216,9 @@ export function getMediaKind(message: InboxMessage): MediaKind {
       return "sticker";
     case "TEMPLATE":
     case "INTERACTIVE":
+    // A location pin renders as a card inside the normal (non-media) bubble
+    // chrome — there is no media row behind it.
+    case "LOCATION":
       return "text";
     default:
       return "unknown";

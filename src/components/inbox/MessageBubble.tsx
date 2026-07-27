@@ -2,12 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckSquare } from "lucide-react";
+import { CheckSquare, ExternalLink, MapPin } from "lucide-react";
 import {
   type InboxMessage,
   formatDeliveryStatusLabel,
+  getMessageLocation,
   getMessageType,
   getMediaKind,
+  googleMapsSearchUrl,
   isFailedMessage,
   isProcessingMessage,
   substituteTemplateVariables,
@@ -581,6 +583,55 @@ export function MessageBubble({
             {message.text?.trim() || "—"}
           </div>
         </div>
+      );
+    }
+
+    if (kind === "LOCATION") {
+      const location = getMessageLocation(message);
+      // Malformed/absent metadata (legacy rows, partial payloads): fall back to
+      // the text label the webhook stored rather than rendering a dead pin.
+      if (!location) {
+        return (
+          <div className="whitespace-pre-wrap">
+            {message.text?.trim() || "Location"}
+          </div>
+        );
+      }
+      const coords = `${location.latitude}, ${location.longitude}`;
+      const primary = location.name ?? location.address;
+      return (
+        <a
+          href={googleMapsSearchUrl(location.latitude, location.longitude)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block min-w-[12rem] max-w-[18rem] overflow-hidden rounded-box bg-base-300/45 outline-none ring-primary/0 transition-[box-shadow] hover:bg-base-300/55 focus-visible:ring-2 focus-visible:ring-primary/40"
+        >
+          <div className="flex gap-3 px-3 pt-3 pb-2">
+            <div
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-box bg-base-300 text-base-content/70"
+              aria-hidden
+            >
+              <MapPin className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium text-base-content">
+                {primary ?? coords}
+              </p>
+              {primary && location.address && location.address !== primary ? (
+                <p className="truncate text-xs text-base-content/70">
+                  {location.address}
+                </p>
+              ) : null}
+              <p className="mt-0.5 truncate text-xs tabular-nums text-base-content/55">
+                {coords}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-1 border-t border-base-content/10 px-3 py-1.5 text-xs text-base-content/60">
+            Open in Maps
+            <ExternalLink className="h-3 w-3" aria-hidden />
+          </div>
+        </a>
       );
     }
 

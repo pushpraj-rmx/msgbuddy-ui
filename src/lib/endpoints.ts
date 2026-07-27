@@ -201,6 +201,7 @@ export const endpoints = {
     memoryItem: (id: string, memoryId: string) =>
       `${P}/contacts/${id}/memory/${memoryId}`,
     timeline: (id: string) => `${P}/contacts/${id}/timeline`,
+    lastLocation: (id: string) => `${P}/contacts/${id}/last-location`,
   },
   tags: {
     list: `${P}/tags`,

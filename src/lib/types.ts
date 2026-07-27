@@ -143,6 +143,19 @@ export type TimelineResponse = {
   nextCursor: string | null;
 };
 
+/**
+ * GET /contacts/:id/last-location — the most recent location pin the contact
+ * shared over WhatsApp. `null` when they never shared one.
+ */
+export type ContactLastLocation = {
+  latitude: number;
+  longitude: number;
+  name: string | null;
+  address: string | null;
+  /** ISO timestamp of the message that carried the pin. */
+  sharedAt: string;
+};
+
 export type DuplicateGroup = {
   contacts: Contact[];
   matchedOn: "phone" | "email";

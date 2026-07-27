@@ -81,6 +81,8 @@ export function lastMessagePreview(lastMessage?: PreviewLastMessage): string {
       return "Template message";
     case "INTERACTIVE":
       return "Interactive message";
+    case "LOCATION":
+      return "Location";
     default:
       return "No messages";
   }

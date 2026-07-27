@@ -30,6 +30,7 @@ import {
 import type { Tag } from "@/lib/types";
 import {
   CONTACT_LIFECYCLE_STAGES,
+  type ContactLastLocation,
   type ContactLifecycleStage,
 } from "@/lib/types";
 import { EmptyState, ErrorState } from "@/components/ui/states";
@@ -2499,6 +2500,35 @@ export function InboxClient({
     [selectedConversation, startContact]
   );
 
+  // Last location pin the contact shared. Fetched once per selected contact —
+  // the id is the only dependency, so re-renders from typing/streaming don't
+  // re-request. A failure is silent: the row simply doesn't render.
+  const detailsContactId = contactForDetails?.id ?? null;
+  const [lastLocation, setLastLocation] = useState<ContactLastLocation | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (!detailsContactId) {
+      setLastLocation(null);
+      return;
+    }
+    let cancelled = false;
+    void contactsApi
+      .getLastLocation(detailsContactId)
+      .then((location) => {
+        if (cancelled) return;
+        setLastLocation(location);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLastLocation(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailsContactId]);
+
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [lifecycleError, setLifecycleError] = useState<string | null>(null);
 
@@ -2628,6 +2658,35 @@ export function InboxClient({
                 >
                   Active {formatRelativeTime(contactForDetails.lastMessageAt)}
                 </p>
+              </div>
+            ) : null}
+            {/* Last shared location — an actual pin the contact sent over
+                WhatsApp (unlike Region, which is only inferred from the
+                number's calling code). Hidden when they never shared one. */}
+            {lastLocation ? (
+              <div className="flex items-start gap-3 py-1.5">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-200 text-base-content/50">
+                  <MapPin className="h-3 w-3" />
+                </div>
+                <div className="min-w-0">
+                  <a
+                    href={`https://www.google.com/maps/search/?api=1&query=${lastLocation.latitude},${lastLocation.longitude}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block truncate text-[0.8125rem] text-base-content transition-colors hover:text-primary"
+                    title={
+                      lastLocation.address ??
+                      `${lastLocation.latitude}, ${lastLocation.longitude}`
+                    }
+                  >
+                    {lastLocation.name ??
+                      lastLocation.address ??
+                      `${lastLocation.latitude}, ${lastLocation.longitude}`}
+                  </a>
+                  <p className="text-[0.6875rem] text-base-content/55">
+                    Shared {formatRelativeTime(lastLocation.sharedAt)}
+                  </p>
+                </div>
               </div>
             ) : null}
           </div>
@@ -2761,6 +2820,7 @@ export function InboxClient({
       selectedConversation?.channelAccountId,
       refreshConversations,
       consentError,
+      lastLocation,
       lifecycleBusy,
       lifecycleError,
       applyLifecycleStage,

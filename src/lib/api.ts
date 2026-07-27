@@ -29,6 +29,7 @@ import type {
   SegmentQuery,
   SegmentPreviewResponse,
   TimelineResponse,
+  ContactLastLocation,
   DuplicatesResponse,
   PhoneCheckResult,
   Template,
@@ -898,6 +899,13 @@ export const contactsApi = {
       { params }
     );
     return response.data;
+  },
+  /** Latest location pin the contact shared; null when they never shared one. */
+  getLastLocation: async (id: string): Promise<ContactLastLocation | null> => {
+    const response = await api.get<ContactLastLocation | null>(
+      endpoints.contacts.lastLocation(id)
+    );
+    return response.data ?? null;
   },
 };
 
