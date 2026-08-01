@@ -303,7 +303,9 @@ function AudienceTabBody({
           </span>
           <p className="text-[0.78125rem] text-base-content/75">
             These recipients received a marketing template in the last 24h and
-            haven&apos;t replied since — Meta will block these sends.
+            haven&apos;t replied since. msgbuddy holds them back to protect your
+            WhatsApp quality rating — Meta isn&apos;t rejecting them, and you can
+            override this per campaign in Delivery settings.
           </p>
         </div>
       )}

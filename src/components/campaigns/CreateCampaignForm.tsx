@@ -95,6 +95,8 @@ export type CampaignDraftSeed = {
   throttlePerMin?: number | null;
   /** null/undefined = inherit the workspace default. */
   failureHandling?: "MANUAL" | "AUTO_RETRY" | null;
+  /** Bypass the marketing frequency cap for this campaign. */
+  ignoreMarketingFrequencyCap?: boolean | null;
 };
 
 export function CreateCampaignForm({
@@ -208,6 +210,9 @@ export function CreateCampaignForm({
   const [failureHandling, setFailureHandling] = useState<
     "" | "MANUAL" | "AUTO_RETRY"
   >(initialCampaign?.failureHandling ?? "");
+  /** Bypass the marketing frequency cap for this campaign only. Off by default. */
+  const [ignoreMarketingFrequencyCap, setIgnoreMarketingFrequencyCap] =
+    useState<boolean>(initialCampaign?.ignoreMarketingFrequencyCap ?? false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -577,7 +582,15 @@ export function CreateCampaignForm({
       | undefined;
 
     void campaignsApi
-      .preview({ audienceType, contactIds, audienceQuery, templateCategory })
+      .preview({
+        audienceType,
+        contactIds,
+        audienceQuery,
+        templateCategory,
+        // Mirror the campaign flag so the skip count reflects what will
+        // actually happen — bypassing the cap skips nobody for it.
+        ignoreMarketingFrequencyCap,
+      })
       .then((data) => {
         if (cancelled) return;
         setPreview(data);
@@ -593,7 +606,7 @@ export function CreateCampaignForm({
     return () => {
       cancelled = true;
     };
-  }, [step, audienceType, selectedSegmentId, selectedContacts, segments, versionDetail]);
+  }, [step, audienceType, selectedSegmentId, selectedContacts, segments, versionDetail, ignoreMarketingFrequencyCap]);
 
   // Quota probe — fires on review step so we can warn before the user hits Save.
   useEffect(() => {
@@ -699,6 +712,7 @@ export function CreateCampaignForm({
         : {}),
       // "" (inherit) is persisted as null so editing back to inherit works.
       failureHandling: failureHandling === "" ? null : failureHandling,
+      ignoreMarketingFrequencyCap,
     };
   };
 
@@ -1444,6 +1458,39 @@ export function CreateCampaignForm({
                 24h, utility 3h twice, authentication is never auto-retried.
                 Permanently failed numbers are skipped. Max 3 total sends per
                 contact.
+              </p>
+
+              <label className="form-control">
+                <span className="label-text text-xs">Marketing frequency cap</span>
+                <select
+                  className="select select-bordered select-sm"
+                  value={ignoreMarketingFrequencyCap ? "off" : "on"}
+                  onChange={(e) =>
+                    setIgnoreMarketingFrequencyCap(e.target.value === "off")
+                  }
+                >
+                  <option value="on">
+                    Apply — skip contacts messaged in the last 24h
+                  </option>
+                  <option value="off">
+                    Ignore for this campaign — send to everyone
+                  </option>
+                </select>
+              </label>
+              <p className="text-xs text-base-content/50">
+                By default a contact who received a marketing template in the
+                last 24h and hasn&apos;t replied is skipped. This is a msgbuddy
+                guard, not a Meta rule
+                {ignoreMarketingFrequencyCap ? (
+                  <span className="text-warning">
+                    {" "}
+                    — ignoring it sends repeat marketing to unengaged contacts,
+                    which can lower your WhatsApp quality rating and throttle
+                    the whole number.
+                  </span>
+                ) : (
+                  <span> — it protects your WhatsApp quality rating.</span>
+                )}
               </p>
             </div>
           )}

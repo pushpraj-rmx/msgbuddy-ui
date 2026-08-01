@@ -58,6 +58,12 @@ interface Props {
   workspaceId: string;
   /** = templateOnlyMode; outside the 24h window, so the composer leads into the picker. */
   templateOnly: boolean;
+  /**
+   * When a MARKETING template may next be sent to this contact (ISO), or null.
+   * msgbuddy's own marketing frequency cap — surfaced here so the agent is
+   * warned BEFORE sending instead of getting a FAILED bubble afterwards.
+   */
+  marketingCappedUntil?: string | null;
   /** Fires when the "can send a template" predicate flips. */
   onReadyChange: (ready: boolean) => void;
   /**
@@ -78,6 +84,7 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       channel,
       workspaceId,
       templateOnly,
+      marketingCappedUntil,
       onReadyChange,
       onSend,
       sending,
@@ -437,6 +444,28 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       reset();
     }, [contactId, reset]);
 
+    const selectedCategory = useMemo(() => {
+      const c = getWaCategory(selectedTemplateObj?.channelTemplates);
+      return c === "MARKETING" || c === "UTILITY" || c === "AUTHENTICATION"
+        ? c
+        : null;
+    }, [selectedTemplateObj]);
+
+    /**
+     * The contact is inside the marketing frequency cap AND the chosen template
+     * is MARKETING — this send would be rejected at the outbound gate, so block
+     * it here and say so, rather than letting it fail after dispatch.
+     */
+    const marketingCapBlocksSend = useMemo(() => {
+      if (selectedCategory !== "MARKETING" || !marketingCappedUntil) {
+        return null;
+      }
+      const until = new Date(marketingCappedUntil);
+      return Number.isNaN(until.getTime()) || until.getTime() <= Date.now()
+        ? null
+        : until;
+    }, [selectedCategory, marketingCappedUntil]);
+
     const ready =
       active &&
       !!selectedTemplateId &&
@@ -444,7 +473,8 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       selectedTemplateVersion?.status === "PROVIDER_APPROVED" &&
       templateVarsAreValid &&
       templateMediaBindingsReady &&
-      !templateBindingUploadBusy;
+      !templateBindingUploadBusy &&
+      !marketingCapBlocksSend;
 
     // Surface readiness to the parent whenever the predicate flips.
     useEffect(() => {
@@ -474,14 +504,6 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
       () => ({ getSendPayload, reset }),
       [getSendPayload, reset]
     );
-
-    // WhatsApp category of the selected template (for the preview badge).
-    const selectedCategory = useMemo(() => {
-      const c = getWaCategory(selectedTemplateObj?.channelTemplates);
-      return c === "MARKETING" || c === "UTILITY" || c === "AUTHENTICATION"
-        ? c
-        : null;
-    }, [selectedTemplateObj]);
 
     // Live-preview substitutions keyed by variable token, so the bubble
     // re-renders as the agent types values.
@@ -556,6 +578,20 @@ export const TemplateComposer = forwardRef<TemplateComposerHandle, Props>(
             className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm"
           >
             Could not load template details. Try re-selecting the template.
+          </div>
+        ) : null}
+        {/* Warn BEFORE dispatch: this send would be rejected at the outbound
+            gate, and previously the agent only found out via a FAILED bubble. */}
+        {marketingCapBlocksSend ? (
+          <div
+            role="alert"
+            className="rounded-box border border-warning/30 border-l-2 border-l-warning bg-base-200 px-3 py-2 text-sm"
+          >
+            <span className="font-medium">Marketing frequency cap</span> — this
+            contact already got a marketing template in the last 24h and
+            hasn&apos;t replied. Sendable again at{" "}
+            {marketingCapBlocksSend.toLocaleString()}, or as soon as they reply.
+            A utility template can still be sent now.
           </div>
         ) : null}
           {selectedTemplateVersion?.id && inboxTemplateVersionDetail ? (

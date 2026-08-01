@@ -257,6 +257,12 @@ export type ConversationSendPolicyDto = {
   windowHours: number;
   latestInboundAt?: string | null;
   windowClosesAt?: string | null;
+  /**
+   * When a MARKETING template may next go to this contact, or null when not
+   * capped. This is msgbuddy's own marketing frequency cap — NOT the WhatsApp
+   * customer-care window above, and not a Meta limit.
+   */
+  marketingCappedUntil?: string | null;
 };
 
 export type InternalTargetType = "CONTACT" | "CONVERSATION" | "CAMPAIGN";
@@ -1444,6 +1450,8 @@ export const campaignsApi = {
     audienceQuery?: Record<string, unknown> | null;
     /** When MARKETING, response includes `excludedFrequencyCapped`. */
     templateCategory?: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+    /** Mirror of the campaign flag — when true nobody is frequency-capped, so the count is 0. */
+    ignoreMarketingFrequencyCap?: boolean;
   }): Promise<{
     audienceCount: number;
     sample: Array<{ id: string; name: string | null; phone: string }>;

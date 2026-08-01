@@ -4132,6 +4132,7 @@ export function InboxClient({
                         channel={activeChannel}
                         workspaceId={workspaceId}
                         templateOnly={templateOnlyMode}
+                        marketingCappedUntil={sendPolicy?.marketingCappedUntil}
                         onReadyChange={setTemplateReady}
                         onSend={handleSend}
                         sending={sending}
