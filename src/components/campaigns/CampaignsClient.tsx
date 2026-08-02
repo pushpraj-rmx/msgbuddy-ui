@@ -46,6 +46,13 @@ export type Campaign = {
   failureHandling?: "MANUAL" | "AUTO_RETRY" | null;
   updatedAt?: string;
   runs?: { totalJobs?: number; completedJobs?: number; failedJobs?: number; skippedJobs?: number; successRate?: number }[];
+  /** Biggest causes of failure, largest first (max 3). Empty when nothing failed. */
+  topFailureReasons?: {
+    code: string;
+    label: string;
+    failureClass: string;
+    count: number;
+  }[];
 };
 
 type CampaignProgress = {
@@ -808,6 +815,22 @@ export function CampaignsClient({
                       <p className="mt-0.5 text-xs tabular-nums text-base-content/55">
                         {summaryLine}
                       </p>
+                    ) : null}
+                    {/* WHY it failed, not just how many. The list used to show
+                        counts alone, so a WABA billing block that failed every
+                        send for days looked like an ordinary failure count. */}
+                    {campaign.topFailureReasons?.length ? (
+                      <ul className="mt-1 space-y-0.5">
+                        {campaign.topFailureReasons.map((r) => (
+                          <li
+                            key={r.code}
+                            className="truncate text-xs text-warning"
+                            title={`${r.label} (${r.code})`}
+                          >
+                            {r.count.toLocaleString()} · {r.label}
+                          </li>
+                        ))}
+                      </ul>
                     ) : null}
                     {rowTone === "running" && latestRun?.totalJobs ? (
                       <div className="mt-2 h-1 w-full overflow-hidden rounded-sm bg-base-300">
