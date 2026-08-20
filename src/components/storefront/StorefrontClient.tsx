@@ -232,7 +232,42 @@ export default function StorefrontClient({ handle }: { handle: string }) {
           onGoSubscribe={() => setMode("subscribe")}
         />
       )}
+
+      <PolicyFooter handle={handle} />
     </div>
+  );
+}
+
+/**
+ * Razorpay requires the merchant's policies to be reachable from the site before
+ * it will issue live keys — an unlinked page that only exists at a guessable URL
+ * does not count. This is also just what a customer expects before prepaying.
+ */
+function PolicyFooter({ handle }: { handle: string }) {
+  const links = [
+    ["terms", "Terms"],
+    ["privacy", "Privacy"],
+    ["refund", "Refunds"],
+    ["shipping", "Delivery"],
+    ["contact", "Contact"],
+  ] as const;
+  return (
+    <footer className="border-t border-base-300 pt-5 text-center">
+      <nav className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
+        {links.map(([slug, label]) => (
+          <a
+            key={slug}
+            href={`/s/${handle}/policies/${slug}`}
+            className="link link-hover text-base-content/55"
+          >
+            {label}
+          </a>
+        ))}
+      </nav>
+      <p className="mt-3 text-xs text-base-content/45">
+        First delivery free within 7 km.
+      </p>
+    </footer>
   );
 }
 
