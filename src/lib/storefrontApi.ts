@@ -45,10 +45,18 @@ export interface StorefrontProduct {
   price: string;
   quantity: number;
 }
+/**
+ * FIXED  — customer receives the whole bundle, no choice.
+ * SINGLE — a menu: pick exactly one item.
+ * MULTI  — "make your own bundle": any combination, any quantity.
+ */
+export type PlanSelectionMode = "FIXED" | "SINGLE" | "MULTI";
+
 export interface StorefrontPlan {
   id: string;
   name: string;
   description: string | null;
+  selectionMode: PlanSelectionMode;
   products: StorefrontProduct[];
 }
 export interface StorefrontWindow {
@@ -86,6 +94,8 @@ export interface CustomerMe {
 export interface SubscribeInput {
   planId: string;
   productId?: string;
+  /** MULTI plans only — the customer's chosen breads and quantities. */
+  items?: { productId: string; quantity: number }[];
   cadence: Cadence;
   daysOfWeek?: number[];
   deliveryWindowId?: string;

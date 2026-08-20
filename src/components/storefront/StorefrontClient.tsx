@@ -36,18 +36,40 @@ function money(currency: string, amount: string | number) {
   return `${sym}${Number(amount).toFixed(2)}`;
 }
 
-function todayYmd(tz?: string) {
+/**
+ * Default start. Her cutoff is 21:00 — "tonight at 9 we mix tomorrow's dough" —
+ * so the earliest delivery a new subscriber can get is tomorrow, and offering
+ * today would create an order that can never be baked.
+ */
+function tomorrowYmd(tz?: string) {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
   try {
     return new Intl.DateTimeFormat("en-CA", {
       timeZone: tz,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
-    }).format(new Date());
+    }).format(d);
   } catch {
-    return new Date().toISOString().slice(0, 10);
+    return d.toISOString().slice(0, 10);
   }
 }
+
+/** Human form for the start-date line, e.g. "Fri, 21 Aug". */
+function prettyDate(ymd: string, tz?: string) {
+  try {
+    return new Intl.DateTimeFormat("en-IN", {
+      timeZone: tz,
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    }).format(new Date(`${ymd}T12:00:00`));
+  } catch {
+    return ymd;
+  }
+}
+
 
 /* ── Merchant brand (derived from handle until real branding lands, Part D) ──
    Gives each storefront a distinct, deterministic accent + monogram without any
@@ -313,9 +335,15 @@ function SubscribeFlow({
   const [step, setStep] = useState<Step>("plan");
   const [planId, setPlanId] = useState<string | null>(null);
   const [productId, setProductId] = useState<string | null>(null);
-  const [days, setDays] = useState<number[]>([]);
+  /** MULTI plans: productId -> quantity. Absent key = not chosen. */
+  const [bundle, setBundle] = useState<Record<string, number>>({});
+  // Everything below is pre-answered so the only required action is choosing
+  // bread. All seven days ("all seven days, Sunday included"), the morning
+  // window, and tomorrow — dough is mixed tonight for tomorrow's delivery.
+  const [days, setDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
   const [windowId, setWindowId] = useState<string | null>(null);
-  const [startDate, setStartDate] = useState(todayYmd(catalog.timezone));
+  const [startDate, setStartDate] = useState(tomorrowYmd(catalog.timezone));
+  const [showStartPicker, setShowStartPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -325,9 +353,48 @@ function SubscribeFlow({
     () => [...new Set(catalog.windows.map((w) => w.weekday))].sort((a, b) => a - b),
     [catalog.windows],
   );
-  const perDelivery = product
-    ? Number(product.price) * product.quantity + Number(catalog.deliveryFee)
-    : 0;
+  const isMulti = plan?.selectionMode === "MULTI";
+  /**
+   * Must mirror the server's buildSnapshot(): sum(price x quantity) over the
+   * chosen lines, plus the delivery fee. If these two ever disagree the
+   * customer is quoted one number and charged another.
+   */
+  const itemsSubtotal = isMulti
+    ? (plan?.products ?? []).reduce(
+        (sum, pr) => sum + Number(pr.price) * (bundle[pr.productId] ?? 0),
+        0,
+      )
+    : product
+      ? Number(product.price) * product.quantity
+      : 0;
+  const hasSelection = isMulti
+    ? Object.values(bundle).some((q) => q > 0)
+    : Boolean(productId);
+  const perDelivery = hasSelection ? itemsSubtotal + Number(catalog.deliveryFee) : 0;
+
+  // Bread is a morning product and her copy never asks the customer to choose a
+  // time ("out before sunrise"). Pre-pick the earliest window so this stops
+  // being a required step; the picker stays available to change it.
+  const defaultWindowId = useMemo(() => {
+    const ws = dedupeWindows(catalog.windows);
+    if (ws.length === 0) return null;
+    return [...ws].sort((a, b) => a.startTime.localeCompare(b.startTime))[0].id;
+  }, [catalog.windows]);
+
+  useEffect(() => {
+    if (!windowId && defaultWindowId) setWindowId(defaultWindowId);
+  }, [windowId, defaultWindowId]);
+
+  function setQty(pid: string, qty: number) {
+    setBundle((cur) => {
+      const next = { ...cur };
+      // Cap mirrors MAX_BUNDLE_ITEM_QUANTITY on the server.
+      const clamped = Math.max(0, Math.min(20, qty));
+      if (clamped === 0) delete next[pid];
+      else next[pid] = clamped;
+      return next;
+    });
+  }
 
   function toggleDay(d: number) {
     setDays((cur) => (cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d].sort()));
@@ -341,7 +408,12 @@ function SubscribeFlow({
       const cadence: Cadence = days.length === 7 ? "DAILY" : "CUSTOM";
       const sub = await storefrontApi.subscribe(handle, customerToken, {
         planId: plan.id,
-        productId: productId ?? undefined,
+        productId: isMulti ? undefined : (productId ?? undefined),
+        items: isMulti
+          ? Object.entries(bundle)
+              .filter(([, q]) => q > 0)
+              .map(([productId, quantity]) => ({ productId, quantity }))
+          : undefined,
         cadence,
         daysOfWeek: cadence === "CUSTOM" ? days : undefined,
         deliveryWindowId: windowId ?? undefined,
@@ -403,7 +475,11 @@ function SubscribeFlow({
               selected={p.id === planId}
               onSelect={() => {
                 setPlanId(p.id);
-                setProductId(p.products[0]?.productId ?? null);
+                // MULTI starts empty — the customer is composing. SINGLE
+                // pre-picks so the only required tap is Continue.
+                const multi = p.selectionMode === "MULTI";
+                setProductId(multi ? null : (p.products[0]?.productId ?? null));
+                setBundle({});
                 setStep("configure");
               }}
             />
@@ -416,41 +492,93 @@ function SubscribeFlow({
           <BackLink onClick={() => setStep("plan")}>Change plan</BackLink>
 
           <div>
-            <SectionLabel>Pick your item</SectionLabel>
+            <SectionLabel>{isMulti ? "Build your bundle" : "Pick your item"}</SectionLabel>
+            {isMulti && (
+              <p className="mt-1 text-sm text-base-content/60">
+                Add as many as you like — any combination, any quantity.
+              </p>
+            )}
             <div className="mt-2.5 space-y-2">
               {plan.products.map((pr) => {
-                const active = pr.productId === productId;
+                const qty = bundle[pr.productId] ?? 0;
+                const active = isMulti ? qty > 0 : pr.productId === productId;
+                const Row = isMulti ? "div" : "label";
                 return (
-                  <label
+                  <Row
                     key={pr.productId}
-                    className={`flex cursor-pointer items-center justify-between rounded-box border p-3.5 transition-colors ${
+                    className={`flex items-center justify-between rounded-box border p-3.5 transition-colors ${
+                      isMulti ? "" : "cursor-pointer"
+                    } ${
                       active
                         ? "border-primary bg-primary/5"
                         : "border-base-300 hover:border-base-content/25"
                     }`}
                   >
-                    <span className="flex items-center gap-3">
-                      <input
-                        type="radio"
-                        name="product"
-                        className="radio radio-sm radio-primary"
-                        checked={active}
-                        onChange={() => setProductId(pr.productId)}
-                      />
-                      <span>
+                    <span className="flex min-w-0 items-center gap-3">
+                      {!isMulti && (
+                        <input
+                          type="radio"
+                          name="product"
+                          className="radio radio-sm radio-primary"
+                          checked={active}
+                          onChange={() => setProductId(pr.productId)}
+                        />
+                      )}
+                      <span className="min-w-0">
                         <span className="font-medium">{pr.name}</span>
                         {pr.variant && (
                           <span className="text-base-content/50"> · {pr.variant}</span>
                         )}
-                        {pr.quantity > 1 && (
+                        {!isMulti && pr.quantity > 1 && (
                           <span className="text-base-content/50"> ×{pr.quantity}</span>
                         )}
+                        <span className="block text-sm text-base-content/60 tabular-nums">
+                          {money(catalog.currency, pr.price)}
+                        </span>
                       </span>
                     </span>
-                    <span className="text-[0.9375rem] font-semibold tabular-nums">
-                      {money(catalog.currency, pr.price)}
-                    </span>
-                  </label>
+
+                    {isMulti ? (
+                      qty === 0 ? (
+                        // One tap to add — steppers only appear once it is in
+                        // the bundle, so the common case stays a single tap.
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          onClick={() => setQty(pr.productId, 1)}
+                        >
+                          Add
+                        </button>
+                      ) : (
+                        <span className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            aria-label={`Remove one ${pr.name}`}
+                            className="btn btn-sm btn-circle btn-ghost"
+                            onClick={() => setQty(pr.productId, qty - 1)}
+                          >
+                            −
+                          </button>
+                          <span className="w-5 text-center font-semibold tabular-nums">
+                            {qty}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={`Add one ${pr.name}`}
+                            className="btn btn-sm btn-circle btn-ghost"
+                            disabled={qty >= 20}
+                            onClick={() => setQty(pr.productId, qty + 1)}
+                          >
+                            +
+                          </button>
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-[0.9375rem] font-semibold tabular-nums">
+                        {money(catalog.currency, pr.price)}
+                      </span>
+                    )}
+                  </Row>
                 );
               })}
             </div>
@@ -523,14 +651,29 @@ function SubscribeFlow({
           )}
 
           <div>
-            <SectionLabel>Start date</SectionLabel>
-            <input
-              type="date"
-              className="input input-bordered mt-2.5 w-full"
-              value={startDate}
-              min={todayYmd(catalog.timezone)}
-              onChange={(e) => setStartDate(e.target.value)}
-            />
+            <SectionLabel>Starts</SectionLabel>
+            {showStartPicker ? (
+              <input
+                type="date"
+                className="input input-bordered mt-2.5 w-full"
+                value={startDate}
+                min={tomorrowYmd(catalog.timezone)}
+                onChange={(e) => setStartDate(e.target.value)}
+              />
+            ) : (
+              <p className="mt-2 text-sm">
+                <span className="font-medium">
+                  {prettyDate(startDate, catalog.timezone)}
+                </span>
+                <button
+                  type="button"
+                  className="link link-hover ml-2 text-base-content/60"
+                  onClick={() => setShowStartPicker(true)}
+                >
+                  Start later
+                </button>
+              </p>
+            )}
           </div>
 
           <OrderSummary currency={catalog.currency} perDelivery={perDelivery} days={days} />
@@ -539,7 +682,9 @@ function SubscribeFlow({
             <button
               className="btn btn-primary btn-block"
               disabled={
-                !productId || days.length === 0 || (catalog.windows.length > 0 && !windowId)
+                !hasSelection ||
+                days.length === 0 ||
+                (catalog.windows.length > 0 && !windowId)
               }
               onClick={() => setStep("auth")}
             >
