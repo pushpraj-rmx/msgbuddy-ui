@@ -102,6 +102,12 @@ export interface SubscribeInput {
   startDate: string; // YYYY-MM-DD
 }
 
+export interface DemoPayResult {
+  credited: string;
+  balance: string;
+  periods: number;
+}
+
 export interface PayOrder {
   orderId: string;
   amount: number; // minor units
@@ -166,6 +172,13 @@ export const storefrontApi = {
 
   cancel: (handle: string, token: string, id: string) =>
     call(endpoints.recurring.public.cancel(handle, id), { method: "POST" }, token),
+
+  /** DEMO-ONLY: fund the wallet without a gateway. Server refuses once live. */
+  demoPay: (handle: string, token: string, id: string, periods: number) =>
+    call<DemoPayResult>(endpoints.recurring.public.demoPay(handle, id), {
+      method: "POST",
+      body: JSON.stringify({ periods }),
+    }, token),
 
   pay: (handle: string, token: string, id: string, periods = 1) =>
     call<PayOrder>(endpoints.recurring.public.pay(handle, id), {

@@ -23,7 +23,7 @@ import {
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-type Step = "plan" | "configure" | "auth" | "success";
+type Step = "plan" | "configure" | "auth" | "pay" | "success";
 type Mode = "subscribe" | "manage";
 
 function errMsg(e: unknown): string {
@@ -348,6 +348,8 @@ function SubscribeFlow({
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingSub, setPendingSub] = useState<{ id: string; perDelivery: number } | null>(null);
+  const [funded, setFunded] = useState<{ credited: string; balance: string } | null>(null);
 
   const plan = catalog.plans.find((p) => p.id === planId) ?? null;
   const product = plan?.products.find((pr) => pr.productId === productId) ?? null;
@@ -421,8 +423,14 @@ function SubscribeFlow({
         deliveryWindowId: windowId ?? undefined,
         startDate,
       });
-      // Kick off the first per-period payment (best-effort — the subscription
-      // exists regardless; unpaid deliveries just won't lock until funded).
+      // The subscription exists before any money moves, so a failed or
+      // abandoned payment leaves a real order with an unfunded wallet rather
+      // than losing the order.
+      if (catalog.demoMode) {
+        setPendingSub({ id: sub.id, perDelivery });
+        setStep("pay");
+        return;
+      }
       try {
         const order = await storefrontApi.pay(handle, customerToken, sub.id, 1);
         await openRazorpay(order, { name: handle }, () => {});
@@ -444,6 +452,18 @@ function SubscribeFlow({
           <CheckCircle2 className="h-8 w-8 text-success" />
         </div>
         <h2 className="text-lg font-semibold">You&apos;re subscribed!</h2>
+        {funded && (
+          <p className="mx-auto max-w-xs text-sm">
+            <span className="font-semibold tabular-nums">
+              {money(catalog.currency, funded.credited)}
+            </span>{" "}
+            added — wallet balance{" "}
+            <span className="font-semibold tabular-nums">
+              {money(catalog.currency, funded.balance)}
+            </span>
+            .
+          </p>
+        )}
         <p className="mx-auto max-w-xs text-sm text-base-content/70">
           We&apos;ll send delivery reminders on WhatsApp. You can skip, pause or change your plan
           anytime.
@@ -696,6 +716,35 @@ function SubscribeFlow({
         </div>
       )}
 
+      {step === "pay" && pendingSub && (
+        <PayStep
+          currency={catalog.currency}
+          perDelivery={pendingSub.perDelivery}
+          busy={busy}
+          error={error}
+          onPay={async (periods) => {
+            if (!token) return;
+            setBusy(true);
+            setError(null);
+            try {
+              const res = await storefrontApi.demoPay(
+                handle,
+                token,
+                pendingSub.id,
+                periods,
+              );
+              setFunded({ credited: res.credited, balance: res.balance });
+              setStep("success");
+            } catch (e) {
+              setError(errMsg(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+          onSkip={() => setStep("success")}
+        />
+      )}
+
       {step === "auth" && (
         <AuthStep
           handle={handle}
@@ -708,6 +757,91 @@ function SubscribeFlow({
           }}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Wallet funding step. Shown only when the storefront has no live Razorpay
+ * account yet — the server-side endpoint refuses once real keys are connected,
+ * so this cannot survive into a storefront that takes real money.
+ */
+function PayStep({
+  currency,
+  perDelivery,
+  busy,
+  error,
+  onPay,
+  onSkip,
+}: {
+  currency: string;
+  perDelivery: number;
+  busy: boolean;
+  error: string | null;
+  onPay: (periods: number) => void;
+  onSkip: () => void;
+}) {
+  const OPTIONS = [7, 14, 30];
+  const [periods, setPeriods] = useState(7);
+  return (
+    <div className="space-y-6">
+      <div>
+        <SectionLabel>Top up your wallet</SectionLabel>
+        <p className="mt-1 text-sm text-base-content/60">
+          You prepay into a wallet and each delivery is debited from it. Skip a
+          morning and the money simply stays put.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        {OPTIONS.map((n) => {
+          const active = n === periods;
+          return (
+            <label
+              key={n}
+              className={`flex cursor-pointer items-center justify-between rounded-box border p-3.5 transition-colors ${
+                active
+                  ? "border-primary bg-primary/5"
+                  : "border-base-300 hover:border-base-content/25"
+              }`}
+            >
+              <span className="flex items-center gap-3">
+                <input
+                  type="radio"
+                  name="periods"
+                  className="radio radio-sm radio-primary"
+                  checked={active}
+                  onChange={() => setPeriods(n)}
+                />
+                <span>
+                  <span className="font-medium">{n} deliveries</span>
+                  <span className="block text-sm text-base-content/55">
+                    about {Math.round(n / 7)} week{n > 7 ? "s" : ""} of bread
+                  </span>
+                </span>
+              </span>
+              <span className="font-semibold tabular-nums">
+                {money(currency, perDelivery * n)}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      {error && <Alert msg={error} />}
+
+      <div className="sticky bottom-0 -mx-4 space-y-2 bg-gradient-to-t from-base-100 via-base-100 to-transparent px-4 pb-2 pt-3">
+        <button
+          className="btn btn-primary btn-block"
+          disabled={busy}
+          onClick={() => onPay(periods)}
+        >
+          {busy ? "Processing…" : `Pay ${money(currency, perDelivery * periods)}`}
+        </button>
+        <button className="btn btn-ghost btn-block btn-sm" disabled={busy} onClick={onSkip}>
+          I&apos;ll pay later
+        </button>
+      </div>
     </div>
   );
 }

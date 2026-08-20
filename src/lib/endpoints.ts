@@ -54,6 +54,9 @@ export const endpoints = {
       resume: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/resume`,
       cancel: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/cancel`,
       pay: (h: string, id: string) => `${P}/subscriptions/public/${h}/subscriptions/${id}/pay`,
+      // DEMO-ONLY: simulated funding, refused once Razorpay keys exist.
+      demoPay: (h: string, id: string) =>
+        `${P}/subscriptions/public/${h}/subscriptions/${id}/demo-pay`,
     },
   },
   auth: {
