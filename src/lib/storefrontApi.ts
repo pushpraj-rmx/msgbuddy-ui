@@ -116,8 +116,15 @@ export const storefrontApi = {
   catalog: (handle: string) => call<StorefrontCatalog>(endpoints.recurring.public.catalog(handle)),
 
   requestOtp: (handle: string, phone: string) =>
-    // DEMO-ONLY: in demo mode the response carries `demoCode` (no real WhatsApp).
-    call<{ sent: true; expiresInSec: number; demoCode?: string }>(endpoints.recurring.public.otpRequest(handle), {
+    // DEMO-ONLY: a demo storefront has no verified WABA, so no code can actually
+    // be delivered. The API returns the session token here instead and the code
+    // screen is skipped entirely.
+    call<{
+      sent: true;
+      expiresInSec: number;
+      token?: string;
+      contactId?: string;
+    }>(endpoints.recurring.public.otpRequest(handle), {
       method: "POST",
       body: JSON.stringify({ phone }),
     }),

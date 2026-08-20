@@ -781,7 +781,13 @@ function AuthStep({
     setSending(true);
     setError(null);
     try {
-      await storefrontApi.requestOtp(handle, phone.replace(/\s+/g, ""));
+      const res = await storefrontApi.requestOtp(handle, phone.replace(/\s+/g, ""));
+      // Demo storefronts hand back the token immediately — there is no code to
+      // wait for, so go straight through rather than showing an empty box.
+      if (res.token) {
+        onVerified(res.token);
+        return;
+      }
       setPhase("code");
     } catch (e) {
       setError(errMsg(e));
@@ -828,7 +834,7 @@ function AuthStep({
             onClick={sendCode}
           >
             {sending && <span className="loading loading-spinner loading-xs" />}
-            Send code
+            Continue
           </button>
         </>
       ) : (
