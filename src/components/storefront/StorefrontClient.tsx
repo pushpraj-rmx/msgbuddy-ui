@@ -453,16 +453,21 @@ function SubscribeFlow({
         </div>
         <h2 className="text-lg font-semibold">You&apos;re subscribed!</h2>
         {funded && (
-          <p className="mx-auto max-w-xs text-sm">
-            <span className="font-semibold tabular-nums">
-              {money(catalog.currency, funded.credited)}
-            </span>{" "}
-            added — wallet balance{" "}
-            <span className="font-semibold tabular-nums">
-              {money(catalog.currency, funded.balance)}
-            </span>
-            .
-          </p>
+          <>
+            <p className="mx-auto max-w-xs text-sm">
+              <span className="font-semibold tabular-nums">
+                {money(catalog.currency, funded.credited)}
+              </span>{" "}
+              added — wallet balance{" "}
+              <span className="font-semibold tabular-nums">
+                {money(catalog.currency, funded.balance)}
+              </span>
+              .
+            </p>
+            <p className="mx-auto max-w-xs text-xs text-base-content/55">
+              Simulated — payments aren&apos;t live yet, so you weren&apos;t charged.
+            </p>
+          </>
         )}
         <p className="mx-auto max-w-xs text-sm text-base-content/70">
           We&apos;ll send delivery reminders on WhatsApp. You can skip, pause or change your plan
@@ -791,6 +796,16 @@ function PayStep({
           You prepay into a wallet and each delivery is debited from it. Skip a
           morning and the money simply stays put.
         </p>
+      </div>
+
+      {/* The storefront is public, so someone can reach this without knowing it
+          is a preview. Saying so plainly is the only honest option — and it
+          means the link can be shared before payments go live. */}
+      <div className="rounded-box border border-base-300 bg-base-200/70 p-3.5 text-sm">
+        <span className="font-medium">Payments aren&apos;t live yet.</span>{" "}
+        <span className="text-base-content/70">
+          Your subscription is created for real — no money is taken.
+        </span>
       </div>
 
       <div className="space-y-2">
