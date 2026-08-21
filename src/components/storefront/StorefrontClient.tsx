@@ -439,7 +439,17 @@ function SubscribeFlow({
       }
       setStep("success");
     } catch (e) {
-      setError(errMsg(e));
+      // A saved token can outlive the contact it points at (e.g. the catalog was
+      // reseeded). Without this the customer sees "Invalid or expired customer
+      // token" on a screen with no way out — the stale token is reused on every
+      // retry. Drop it and send them back to the number step.
+      if (e instanceof StorefrontError && (e.status === 401 || e.status === 403)) {
+        onToken(null);
+        setError("That session expired — enter your number again.");
+        setStep("auth");
+      } else {
+        setError(errMsg(e));
+      }
     } finally {
       setBusy(false);
     }
@@ -975,7 +985,7 @@ function AuthStep({
             onChange={(e) => setPhone(e.target.value)}
           />
           <p className="text-xs text-base-content/50">
-            We&apos;ll send a verification code to this number on WhatsApp.
+            We&apos;ll use this to send your delivery reminders on WhatsApp.
           </p>
           <button
             className="btn btn-primary btn-block"
