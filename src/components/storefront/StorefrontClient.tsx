@@ -131,7 +131,16 @@ export default function StorefrontClient({ handle }: { handle: string }) {
   const brand = useMemo(() => brandFromHandle(handle), [handle]);
 
   useEffect(() => {
-    setToken(localStorage.getItem(`mb_sf_token:${handle}`));
+    const saved = localStorage.getItem(`mb_sf_token:${handle}`);
+    setToken(saved);
+    // A returning customer wants their deliveries, not the signup form. Land
+    // them there if we know them — either a live session, a remembered number,
+    // or an explicit ?view=manage link (which is what the WhatsApp reminder and
+    // any "manage your subscription" link should point at).
+    const wantsManage =
+      new URLSearchParams(window.location.search).get("view") === "manage";
+    const known = saved || localStorage.getItem(`mb_sf_phone:${handle}`);
+    if (wantsManage || known) setMode("manage");
   }, [handle]);
 
   const loadCatalog = useCallback(async () => {
@@ -154,6 +163,8 @@ export default function StorefrontClient({ handle }: { handle: string }) {
     (t: string | null) => {
       setToken(t);
       if (t) localStorage.setItem(`mb_sf_token:${handle}`, t);
+      // Deliberately keep the remembered phone number when the token goes: the
+      // 45-minute session expiring should cost one tap, not re-typing a number.
       else localStorage.removeItem(`mb_sf_token:${handle}`);
     },
     [handle],
@@ -1134,7 +1145,14 @@ function AuthStep({
   onVerified: (token: string) => void;
 }) {
   const [phase, setPhase] = useState<"phone" | "code">("phone");
-  const [phone, setPhone] = useState("+91");
+  // Prefill the number we already know. Sessions last 45 minutes, so a customer
+  // checking their deliveries twice in a day would otherwise retype it each time.
+  const [phone, setPhone] = useState(
+    () =>
+      (typeof window !== "undefined" &&
+        localStorage.getItem(`mb_sf_phone:${handle}`)) ||
+      "+91",
+  );
   const [code, setCode] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -1149,7 +1167,9 @@ function AuthStep({
     setSending(true);
     setError(null);
     try {
-      const res = await storefrontApi.requestOtp(handle, phone.replace(/\s+/g, ""));
+      const normalised = phone.replace(/\s+/g, "");
+      const res = await storefrontApi.requestOtp(handle, normalised);
+      localStorage.setItem(`mb_sf_phone:${handle}`, normalised);
       // Demo storefronts hand back the token immediately — there is no code to
       // wait for, so go straight through rather than showing an empty box.
       if (res.token) {
