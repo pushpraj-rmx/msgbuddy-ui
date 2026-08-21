@@ -699,7 +699,7 @@ function SubscribeFlow({
                         // the bundle, so the common case stays a single tap.
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline"
+                          className="btn btn-outline h-11 min-h-11 px-5"
                           onClick={() => setQty(pr.productId, 1)}
                         >
                           Add
@@ -709,7 +709,7 @@ function SubscribeFlow({
                           <button
                             type="button"
                             aria-label={`Remove one ${pr.name}`}
-                            className="btn btn-sm btn-circle btn-ghost"
+                            className="btn btn-circle btn-ghost h-11 min-h-11 w-11 text-lg"
                             onClick={() => setQty(pr.productId, qty - 1)}
                           >
                             −
@@ -720,7 +720,7 @@ function SubscribeFlow({
                           <button
                             type="button"
                             aria-label={`Add one ${pr.name}`}
-                            className="btn btn-sm btn-circle btn-ghost"
+                            className="btn btn-circle btn-ghost h-11 min-h-11 w-11 text-lg"
                             disabled={qty >= 20}
                             onClick={() => setQty(pr.productId, qty + 1)}
                           >
@@ -941,15 +941,18 @@ function PayStep({
         </p>
         <ul className="mt-2 space-y-1.5">
           {lines.map((l) => (
-            <li key={l.name} className="flex items-baseline justify-between gap-3 text-sm">
+            <li key={l.name} className="flex items-start justify-between gap-3 text-sm">
               <span className="min-w-0">
-                {l.name}
-                {l.variant && <span className="text-base-content/45"> · {l.variant}</span>}
-                <span className="text-base-content/60"> × {l.qty}</span>
+                <span className="block truncate">
+                  {l.name}
+                  {l.variant && <span className="text-base-content/45"> · {l.variant}</span>}
+                </span>
+                <span className="block text-xs tabular-nums text-base-content/55">
+                  {money(currency, l.unit)} × {l.qty}
+                </span>
               </span>
-              <span className="shrink-0 tabular-nums text-base-content/70">
-                {money(currency, l.unit)} × {l.qty} ={" "}
-                <span className="font-medium text-base-content">{money(currency, l.total)}</span>
+              <span className="shrink-0 font-medium tabular-nums">
+                {money(currency, l.total)}
               </span>
             </li>
           ))}
