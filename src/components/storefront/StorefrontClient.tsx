@@ -1475,9 +1475,18 @@ function PlanCard({
 }
 
 function StepDots({ step }: { step: Step }) {
-  const order: Step[] = ["plan", "configure", "auth"];
-  const labels: Record<string, string> = { plan: "Plan", configure: "Details", auth: "Confirm" };
-  const idx = order.indexOf(step);
+  // Must list every step the flow can be on. "pay" was missing, so indexOf
+  // returned -1 and the whole bar rendered inert on the payment screen.
+  const order: Step[] = ["plan", "configure", "auth", "pay"];
+  const labels: Record<string, string> = {
+    plan: "Plan",
+    configure: "Details",
+    // No OTP any more — this step is just the phone number.
+    auth: "Number",
+    pay: "Pay",
+  };
+  // "success" is past the end rather than unknown: show every step complete.
+  const idx = step === "success" ? order.length - 1 : order.indexOf(step);
   return (
     <div className="flex items-center gap-2">
       {order.map((s, i) => (
