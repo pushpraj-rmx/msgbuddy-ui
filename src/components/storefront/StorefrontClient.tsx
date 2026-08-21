@@ -642,7 +642,7 @@ function SubscribeFlow({
         </div>
       )}
 
-      {step === "configure" && plan && (
+      {(step === "configure" || step === "pay") && plan && (
         <div className="space-y-6">
           <BackLink onClick={() => setStep("plan")}>Change plan</BackLink>
 
@@ -850,33 +850,20 @@ function SubscribeFlow({
       )}
 
       {step === "pay" && pendingSub && (
-        <PayStep
+        <PayModal
           currency={catalog.currency}
+          brandName={catalog.branding?.displayName ?? "this bakery"}
           perDelivery={pendingSub.perDelivery}
           lines={pendingSub.lines}
           deliveryFee={Number(catalog.deliveryFee)}
-          busy={busy}
           error={error}
+          onCancel={() => setStep("success")}
           onPay={async (periods) => {
-            if (!token) return;
-            setBusy(true);
-            setError(null);
-            try {
-              const res = await storefrontApi.demoPay(
-                handle,
-                token,
-                pendingSub.id,
-                periods,
-              );
-              setFunded({ credited: res.credited, balance: res.balance });
-              setStep("success");
-            } catch (e) {
-              setError(errMsg(e));
-            } finally {
-              setBusy(false);
-            }
+            if (!token) throw new Error("Session expired");
+            const res = await storefrontApi.demoPay(handle, token, pendingSub.id, periods);
+            setFunded({ credited: res.credited, balance: res.balance });
           }}
-          onSkip={() => setStep("success")}
+          onDone={() => setStep("success")}
         />
       )}
 
@@ -897,136 +884,197 @@ function SubscribeFlow({
 }
 
 /**
- * Wallet funding step. Shown only when the storefront has no live Razorpay
- * account yet — the server-side endpoint refuses once real keys are connected,
- * so this cannot survive into a storefront that takes real money.
+ * Checkout overlay. Presented as a sheet over the storefront rather than as a
+ * page of its own, because that is how a real gateway behaves — the customer
+ * never appears to leave the shop.
+ *
+ * Only reachable while the storefront has no live Razorpay account; the
+ * server-side endpoint refuses once real keys exist, so this cannot survive
+ * into a storefront that takes real money.
  */
-function PayStep({
+function PayModal({
   currency,
+  brandName,
   perDelivery,
   lines,
   deliveryFee,
-  busy,
   error,
   onPay,
-  onSkip,
+  onCancel,
+  onDone,
 }: {
   currency: string;
+  brandName: string;
   perDelivery: number;
   lines: { name: string; variant: string | null; qty: number; unit: number; total: number }[];
   deliveryFee: number;
-  busy: boolean;
   error: string | null;
-  onPay: (periods: number) => void;
-  onSkip: () => void;
+  onPay: (periods: number) => Promise<void>;
+  onCancel: () => void;
+  onDone: () => void;
 }) {
   const OPTIONS = [7, 14, 30];
   const [periods, setPeriods] = useState(7);
+  const [phase, setPhase] = useState<"choose" | "processing" | "done">("choose");
+  const [err, setErr] = useState<string | null>(null);
+
+  async function pay() {
+    setPhase("processing");
+    setErr(null);
+    const started = Date.now();
+    try {
+      await onPay(periods);
+      // A gateway takes a beat; resolving instantly reads as "nothing happened".
+      // Hold the processing state for a realistic minimum, minus whatever the
+      // request already took.
+      const elapsed = Date.now() - started;
+      await new Promise((r) => setTimeout(r, Math.max(0, 3200 - elapsed)));
+      setPhase("done");
+      setTimeout(onDone, 1100);
+    } catch (e) {
+      setErr(errMsg(e));
+      setPhase("choose");
+    }
+  }
+
+  const total = perDelivery * periods;
+
   return (
-    <div className="space-y-6">
-      <div>
-        <SectionLabel>Top up your wallet</SectionLabel>
-        <p className="mt-1 text-sm text-base-content/60">
-          You prepay into a wallet and each delivery is debited from it. Skip a
-          morning and the money simply stays put.
-        </p>
-      </div>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-2xl bg-base-100 shadow-xl sm:rounded-2xl">
+        {phase === "choose" && (
+          <div className="space-y-5 p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[0.6875rem] uppercase tracking-wide text-base-content/45">
+                  Paying
+                </p>
+                <p className="font-serif text-xl leading-tight">{brandName}</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                className="btn btn-circle btn-ghost h-9 min-h-9 w-9"
+                onClick={onCancel}
+              >
+                ✕
+              </button>
+            </div>
 
-      {/* Show the arithmetic. A prepaid subscription asks for money up front, so
-          the customer should be able to check the per-delivery figure rather than
-          take it on faith. Mirrors the server's price x quantity sum. */}
-      <div className="rounded-box border border-base-300 p-3.5">
-        <p className="text-[0.6875rem] uppercase tracking-wide text-base-content/45">
-          Each delivery
-        </p>
-        <ul className="mt-2 space-y-1.5">
-          {lines.map((l) => (
-            <li key={l.name} className="flex items-start justify-between gap-3 text-sm">
-              <span className="min-w-0">
-                <span className="block truncate">
-                  {l.name}
-                  {l.variant && <span className="text-base-content/45"> · {l.variant}</span>}
-                </span>
-                <span className="block text-xs tabular-nums text-base-content/55">
-                  {money(currency, l.unit)} × {l.qty}
-                </span>
+            <div className="rounded-box border border-base-300 p-3.5">
+              <p className="text-[0.6875rem] uppercase tracking-wide text-base-content/45">
+                Each delivery
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {lines.map((l) => (
+                  <li key={l.name} className="flex items-start justify-between gap-3 text-sm">
+                    <span className="min-w-0">
+                      <span className="block truncate">
+                        {l.name}
+                        {l.variant && <span className="text-base-content/45"> · {l.variant}</span>}
+                      </span>
+                      <span className="block text-xs tabular-nums text-base-content/55">
+                        {money(currency, l.unit)} × {l.qty}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-medium tabular-nums">
+                      {money(currency, l.total)}
+                    </span>
+                  </li>
+                ))}
+                {deliveryFee > 0 && (
+                  <li className="flex items-baseline justify-between text-sm">
+                    <span>Delivery</span>
+                    <span className="tabular-nums">{money(currency, deliveryFee)}</span>
+                  </li>
+                )}
+              </ul>
+              <div className="mt-2.5 flex items-baseline justify-between border-t border-base-300 pt-2.5 text-sm">
+                <span className="font-medium">Per delivery</span>
+                <span className="font-semibold tabular-nums">{money(currency, perDelivery)}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {OPTIONS.map((n) => {
+                const active = n === periods;
+                return (
+                  <label
+                    key={n}
+                    className={`flex cursor-pointer items-center justify-between rounded-box border p-3.5 transition-colors ${
+                      active
+                        ? "border-primary bg-primary/5"
+                        : "border-base-300 hover:border-base-content/25"
+                    }`}
+                  >
+                    <span className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="periods"
+                        className="radio radio-sm radio-primary"
+                        checked={active}
+                        onChange={() => setPeriods(n)}
+                      />
+                      <span>
+                        <span className="font-medium">{n} deliveries</span>
+                        <span className="block text-sm text-base-content/55">
+                          {money(currency, perDelivery)} × {n}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {money(currency, perDelivery * n)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="rounded-box border border-base-300 bg-base-200/70 p-3.5 text-sm">
+              <span className="font-medium">Simulated payment.</span>{" "}
+              <span className="text-base-content/70">
+                This checkout is for demonstration — no card is charged and no money
+                moves. Your subscription and wallet are created for real.
               </span>
-              <span className="shrink-0 font-medium tabular-nums">
-                {money(currency, l.total)}
-              </span>
-            </li>
-          ))}
-          {deliveryFee > 0 && (
-            <li className="flex items-baseline justify-between text-sm">
-              <span>Delivery</span>
-              <span className="tabular-nums">{money(currency, deliveryFee)}</span>
-            </li>
-          )}
-        </ul>
-        <div className="mt-2.5 flex items-baseline justify-between border-t border-base-300 pt-2.5 text-sm">
-          <span className="font-medium">Per delivery</span>
-          <span className="font-semibold tabular-nums">{money(currency, perDelivery)}</span>
-        </div>
-      </div>
+            </div>
 
-      {/* The storefront is public, so someone can reach this without knowing it
-          is a preview. Saying so plainly is the only honest option — and it
-          means the link can be shared before payments go live. */}
-      <div className="rounded-box border border-base-300 bg-base-200/70 p-3.5 text-sm">
-        <span className="font-medium">Payments aren&apos;t live yet.</span>{" "}
-        <span className="text-base-content/70">
-          Your subscription is created for real — no money is taken.
-        </span>
-      </div>
+            {(err || error) && <Alert msg={err ?? error ?? ""} />}
 
-      <div className="space-y-2">
-        {OPTIONS.map((n) => {
-          const active = n === periods;
-          return (
-            <label
-              key={n}
-              className={`flex cursor-pointer items-center justify-between rounded-box border p-3.5 transition-colors ${
-                active
-                  ? "border-primary bg-primary/5"
-                  : "border-base-300 hover:border-base-content/25"
-              }`}
-            >
-              <span className="flex items-center gap-3">
-                <input
-                  type="radio"
-                  name="periods"
-                  className="radio radio-sm radio-primary"
-                  checked={active}
-                  onChange={() => setPeriods(n)}
-                />
-                <span>
-                  <span className="font-medium">{n} deliveries</span>
-                  <span className="block text-sm text-base-content/55">
-                    {money(currency, perDelivery)} × {n}
-                  </span>
-                </span>
-              </span>
-              <span className="font-semibold tabular-nums">
-                {money(currency, perDelivery * n)}
-              </span>
-            </label>
-          );
-        })}
-      </div>
+            <button className="btn btn-primary btn-block h-12 min-h-12" onClick={() => void pay()}>
+              Pay {money(currency, total)}
+            </button>
+            <button className="btn btn-ghost btn-block btn-sm" onClick={onCancel}>
+              I&apos;ll pay later
+            </button>
+          </div>
+        )}
 
-      {error && <Alert msg={error} />}
+        {phase === "processing" && (
+          <div className="flex flex-col items-center gap-4 p-10 text-center">
+            <span className="loading loading-spinner loading-lg text-primary" />
+            <div>
+              <p className="font-medium">Processing {money(currency, total)}</p>
+              <p className="mt-1 text-sm text-base-content/60">
+                Contacting your bank — please don&apos;t close this window.
+              </p>
+            </div>
+            <p className="text-xs text-base-content/40">Simulated for demonstration</p>
+          </div>
+        )}
 
-      <div className="sticky bottom-0 -mx-4 space-y-2 bg-gradient-to-t from-base-100 via-base-100 to-transparent px-4 pb-2 pt-3">
-        <button
-          className="btn btn-primary btn-block"
-          disabled={busy}
-          onClick={() => onPay(periods)}
-        >
-          {busy ? "Processing…" : `Pay ${money(currency, perDelivery * periods)}`}
-        </button>
-        <button className="btn btn-ghost btn-block btn-sm" disabled={busy} onClick={onSkip}>
-          I&apos;ll pay later
-        </button>
+        {phase === "done" && (
+          <div className="flex flex-col items-center gap-4 p-10 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
+              <CheckCircle2 className="h-8 w-8 text-success" />
+            </div>
+            <div>
+              <p className="text-lg font-semibold">Payment successful</p>
+              <p className="mt-1 text-sm text-base-content/60">
+                {money(currency, total)} added to your wallet.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
