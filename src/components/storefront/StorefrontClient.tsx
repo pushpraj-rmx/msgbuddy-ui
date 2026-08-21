@@ -159,8 +159,16 @@ export default function StorefrontClient({ handle }: { handle: string }) {
     [handle],
   );
 
-  // Expose the merchant hue as `--brand` for the whole subtree.
-  const brandStyle = { ["--brand" as any]: `hsl(${brand.hue} 72% 55%)` } as React.CSSProperties;
+  // Expose the merchant colour as `--brand` for the whole subtree.
+  //
+  // Prefer the merchant's configured accent. The handle-hash hue below is only a
+  // fallback for storefronts that never set one — it was being used even when an
+  // accent existed, so a bakery that picked warm amber rendered in whatever hue
+  // its slug happened to hash to.
+  const brandStyle = {
+    ["--brand" as any]:
+      catalog?.branding?.accentColor?.trim() || `hsl(${brand.hue} 72% 55%)`,
+  } as React.CSSProperties;
 
   if (loading)
     return (
