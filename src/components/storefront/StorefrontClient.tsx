@@ -239,10 +239,61 @@ export default function StorefrontClient({ handle }: { handle: string }) {
 
 
 /**
- * DEMO-ONLY: a mock of the daily WhatsApp reminder so a viewer sees the
- * "updates" part of the flow without a verified WABA / approved template.
+ * A mock of the daily WhatsApp reminder, shown because this storefront has no
+ * verified WABA yet and so cannot send the real thing.
+ *
+ * The three replies are WIRED TO THE REAL API, not decorative. They were spans
+ * styled like buttons, which invited taps and did nothing — worse than not
+ * showing them. Tapping "Skip tomorrow" genuinely skips tomorrow's delivery and
+ * credits the wallet back, which is the whole point being demonstrated.
  */
-function WhatsAppReminderPreview({ brandName }: { brandName: string }) {
+function WhatsAppReminderPreview({
+  brandName,
+  handle,
+  token,
+  subscriptionId,
+  timezone,
+  onChanged,
+}: {
+  brandName: string;
+  handle: string;
+  token: string | null;
+  subscriptionId: string | null;
+  timezone?: string;
+  onChanged?: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const live = Boolean(token && subscriptionId);
+
+  async function act(label: string, fn: () => Promise<unknown>) {
+    if (!live || busy) return;
+    setBusy(label);
+    setErr(null);
+    try {
+      await fn();
+      setDone(label);
+      onChanged?.();
+    } catch (e) {
+      setErr(errMsg(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const replies: { label: string; run: () => Promise<unknown> }[] = [
+    // Nothing to call: an un-skipped delivery is already scheduled. Confirming
+    // is the customer saying "yes, as it stands".
+    { label: "Confirm", run: async () => undefined },
+    {
+      label: "Skip tomorrow",
+      run: () =>
+        storefrontApi.skip(handle, token!, subscriptionId!, tomorrowYmd(timezone)),
+    },
+    { label: "Pause", run: () => storefrontApi.pause(handle, token!, subscriptionId!) },
+  ];
+
   return (
     <div className="mt-2 space-y-1.5 text-left">
       <p className="text-center text-[0.6875rem] uppercase tracking-wide text-base-content/40">
@@ -255,19 +306,35 @@ function WhatsAppReminderPreview({ brandName }: { brandName: string }) {
           confirm, skip or pause.
         </p>
         <div className="mt-2 grid grid-cols-3 gap-1">
-          {["Confirm", "Skip tomorrow", "Pause"].map((b) => (
-            <span
-              key={b}
-              className="rounded-md bg-white/70 px-1.5 py-1 text-center text-[0.6875rem] font-medium text-sky-700"
-            >
-              {b}
-            </span>
-          ))}
+          {replies.map((r) => {
+            const isDone = done === r.label;
+            return (
+              <button
+                key={r.label}
+                type="button"
+                disabled={!live || busy !== null}
+                onClick={() => void act(r.label, r.run)}
+                className={`rounded-md px-1.5 py-1 text-center text-[0.6875rem] font-medium transition-colors disabled:opacity-60 ${
+                  isDone
+                    ? "bg-sky-600 text-white"
+                    : "bg-white/70 text-sky-700 hover:bg-white"
+                }`}
+              >
+                {busy === r.label ? "…" : isDone ? "✓ " + r.label : r.label}
+              </button>
+            );
+          })}
         </div>
       </div>
+      {err && <p className="text-center text-[0.625rem] text-error">{err}</p>}
       <p className="text-center text-[0.625rem] text-base-content/40">
-        In production these taps update the subscription automatically — try
-        Skip/Pause live under “My deliveries”.
+        {done === "Skip tomorrow"
+          ? "Tomorrow skipped — the charge is credited back to the wallet."
+          : done === "Pause"
+            ? "Paused — deliveries and charges stop together. Resume under “My deliveries”."
+            : done === "Confirm"
+              ? "Confirmed — nothing to change; tomorrow is already scheduled."
+              : "These replies are live — they update the subscription for real."}
       </p>
     </div>
   );
@@ -348,7 +415,11 @@ function SubscribeFlow({
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingSub, setPendingSub] = useState<{ id: string; perDelivery: number } | null>(null);
+  const [pendingSub, setPendingSub] = useState<{
+    id: string;
+    perDelivery: number;
+    lines: { name: string; variant: string | null; qty: number; unit: number; total: number }[];
+  } | null>(null);
   const [funded, setFunded] = useState<{ credited: string; balance: string } | null>(null);
 
   const plan = catalog.plans.find((p) => p.id === planId) ?? null;
@@ -389,6 +460,39 @@ function SubscribeFlow({
     if (!windowId && defaultWindowId) setWindowId(defaultWindowId);
   }, [windowId, defaultWindowId]);
 
+  /**
+   * The exact lines being charged for, in the same shape the server prices them
+   * (price x quantity). Shown to the customer so the per-delivery figure is
+   * something they can check rather than trust.
+   */
+  const selectedLines = useMemo(() => {
+    if (!plan) return [] as { name: string; variant: string | null; qty: number; unit: number; total: number }[];
+    if (isMulti) {
+      return plan.products
+        .filter((pr) => (bundle[pr.productId] ?? 0) > 0)
+        .map((pr) => {
+          const qty = bundle[pr.productId];
+          return {
+            name: pr.name,
+            variant: pr.variant,
+            qty,
+            unit: Number(pr.price),
+            total: Number(pr.price) * qty,
+          };
+        });
+    }
+    if (!product) return [];
+    return [
+      {
+        name: product.name,
+        variant: product.variant,
+        qty: product.quantity,
+        unit: Number(product.price),
+        total: Number(product.price) * product.quantity,
+      },
+    ];
+  }, [plan, isMulti, bundle, product]);
+
   function setQty(pid: string, qty: number) {
     setBundle((cur) => {
       const next = { ...cur };
@@ -427,7 +531,7 @@ function SubscribeFlow({
       // abandoned payment leaves a real order with an unfunded wallet rather
       // than losing the order.
       if (catalog.demoMode) {
-        setPendingSub({ id: sub.id, perDelivery });
+        setPendingSub({ id: sub.id, perDelivery, lines: selectedLines });
         setStep("pay");
         return;
       }
@@ -487,7 +591,13 @@ function SubscribeFlow({
           View my deliveries
         </button>
         {catalog.demoMode && (
-          <WhatsAppReminderPreview brandName="Wholesome Bar Co." />
+          <WhatsAppReminderPreview
+            brandName={catalog.branding?.displayName ?? "Wholesome Bar Co."}
+            handle={handle}
+            token={token}
+            subscriptionId={pendingSub?.id ?? null}
+            timezone={catalog.timezone}
+          />
         )}
       </div>
     );
@@ -735,6 +845,8 @@ function SubscribeFlow({
         <PayStep
           currency={catalog.currency}
           perDelivery={pendingSub.perDelivery}
+          lines={pendingSub.lines}
+          deliveryFee={Number(catalog.deliveryFee)}
           busy={busy}
           error={error}
           onPay={async (periods) => {
@@ -784,6 +896,8 @@ function SubscribeFlow({
 function PayStep({
   currency,
   perDelivery,
+  lines,
+  deliveryFee,
   busy,
   error,
   onPay,
@@ -791,6 +905,8 @@ function PayStep({
 }: {
   currency: string;
   perDelivery: number;
+  lines: { name: string; variant: string | null; qty: number; unit: number; total: number }[];
+  deliveryFee: number;
   busy: boolean;
   error: string | null;
   onPay: (periods: number) => void;
@@ -806,6 +922,40 @@ function PayStep({
           You prepay into a wallet and each delivery is debited from it. Skip a
           morning and the money simply stays put.
         </p>
+      </div>
+
+      {/* Show the arithmetic. A prepaid subscription asks for money up front, so
+          the customer should be able to check the per-delivery figure rather than
+          take it on faith. Mirrors the server's price x quantity sum. */}
+      <div className="rounded-box border border-base-300 p-3.5">
+        <p className="text-[0.6875rem] uppercase tracking-wide text-base-content/45">
+          Each delivery
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {lines.map((l) => (
+            <li key={l.name} className="flex items-baseline justify-between gap-3 text-sm">
+              <span className="min-w-0">
+                {l.name}
+                {l.variant && <span className="text-base-content/45"> · {l.variant}</span>}
+                <span className="text-base-content/60"> × {l.qty}</span>
+              </span>
+              <span className="shrink-0 tabular-nums text-base-content/70">
+                {money(currency, l.unit)} × {l.qty} ={" "}
+                <span className="font-medium text-base-content">{money(currency, l.total)}</span>
+              </span>
+            </li>
+          ))}
+          {deliveryFee > 0 && (
+            <li className="flex items-baseline justify-between text-sm">
+              <span>Delivery</span>
+              <span className="tabular-nums">{money(currency, deliveryFee)}</span>
+            </li>
+          )}
+        </ul>
+        <div className="mt-2.5 flex items-baseline justify-between border-t border-base-300 pt-2.5 text-sm">
+          <span className="font-medium">Per delivery</span>
+          <span className="font-semibold tabular-nums">{money(currency, perDelivery)}</span>
+        </div>
       </div>
 
       {/* The storefront is public, so someone can reach this without knowing it
@@ -841,7 +991,7 @@ function PayStep({
                 <span>
                   <span className="font-medium">{n} deliveries</span>
                   <span className="block text-sm text-base-content/55">
-                    about {Math.round(n / 7)} week{n > 7 ? "s" : ""} of bread
+                    {money(currency, perDelivery)} × {n}
                   </span>
                 </span>
               </span>

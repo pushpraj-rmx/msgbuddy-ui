@@ -70,6 +70,13 @@ export interface StorefrontCatalog {
   currency: string;
   timezone: string;
   deliveryFee: string;
+  /** Merchant branding; the API has always returned this, it was just untyped. */
+  branding?: {
+    displayName?: string | null;
+    tagline?: string | null;
+    heroHeadline?: string | null;
+    accentColor?: string | null;
+  } | null;
   plans: StorefrontPlan[];
   windows: StorefrontWindow[];
   /** DEMO-ONLY: storefront runs without real WhatsApp (OTP + reminders faked). */
