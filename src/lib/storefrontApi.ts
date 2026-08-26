@@ -81,6 +81,12 @@ export interface StorefrontCatalog {
   windows: StorefrontWindow[];
   /** DEMO-ONLY: storefront runs without real WhatsApp (OTP + reminders faked). */
   demoMode?: boolean;
+  /**
+   * Whether this workspace has a live Razorpay account connected. Independent
+   * of demoMode — a demo storefront (no WABA) can still have real payments live.
+   * Drives which checkout the client opens; do not derive this from demoMode.
+   */
+  razorpayConnected?: boolean;
 }
 
 export interface CustomerSubscription {

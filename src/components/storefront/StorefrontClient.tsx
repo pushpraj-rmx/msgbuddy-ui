@@ -92,8 +92,9 @@ function brandFromHandle(handle: string) {
 
 async function openRazorpay(
   order: { orderId: string; amount: number; currency: string; keyId?: string },
-  opts: { name: string; contact?: string },
+  opts: { name: string; contact?: string; color?: string },
   onPaid: () => void,
+  onDismiss: () => void,
 ): Promise<boolean> {
   if (!order.keyId) return false;
   const ok = await new Promise<boolean>((resolve) => {
@@ -113,8 +114,11 @@ async function openRazorpay(
     name: opts.name,
     description: "Subscription payment",
     prefill: { contact: opts.contact },
-    theme: { color: "#6EA8FE" },
+    theme: { color: opts.color || "#6EA8FE" },
     handler: () => onPaid(),
+    // Fires when the customer closes Razorpay's own overlay without paying —
+    // without this our modal underneath would wait forever for `handler`.
+    modal: { ondismiss: () => onDismiss() },
   });
   rzp.open();
   return true;
@@ -548,19 +552,11 @@ function SubscribeFlow({
       });
       // The subscription exists before any money moves, so a failed or
       // abandoned payment leaves a real order with an unfunded wallet rather
-      // than losing the order.
-      if (catalog.demoMode) {
-        setPendingSub({ id: sub.id, perDelivery, lines: selectedLines });
-        setStep("pay");
-        return;
-      }
-      try {
-        const order = await storefrontApi.pay(handle, customerToken, sub.id, 1);
-        await openRazorpay(order, { name: handle }, () => {});
-      } catch {
-        /* payment optional at signup; can pay from "My deliveries" */
-      }
-      setStep("success");
+      // than losing the order. Always route through the payment modal — which
+      // internally opens real Razorpay Checkout when connected, or the
+      // simulated flow otherwise (see catalog.razorpayConnected).
+      setPendingSub({ id: sub.id, perDelivery, lines: selectedLines });
+      setStep("pay");
     } catch (e) {
       // A saved token can outlive the contact it points at (e.g. the catalog was
       // reseeded). Without this the customer sees "Invalid or expired customer
@@ -864,12 +860,18 @@ function SubscribeFlow({
         <PayModal
           currency={catalog.currency}
           brandName={catalog.branding?.displayName ?? "this bakery"}
+          brandColor={catalog.branding?.accentColor ?? undefined}
           perDelivery={pendingSub.perDelivery}
           lines={pendingSub.lines}
           deliveryFee={Number(catalog.deliveryFee)}
+          razorpayConnected={Boolean(catalog.razorpayConnected)}
           error={error}
           onCancel={() => setStep("success")}
-          onPay={async (periods) => {
+          onCreateOrder={(periods) => {
+            if (!token) throw new Error("Session expired");
+            return storefrontApi.pay(handle, token, pendingSub.id, periods);
+          }}
+          onSimulatedPay={async (periods) => {
             if (!token) throw new Error("Session expired");
             const res = await storefrontApi.demoPay(handle, token, pendingSub.id, periods);
             setFunded({ credited: res.credited, balance: res.balance });
@@ -906,21 +908,31 @@ function SubscribeFlow({
 function PayModal({
   currency,
   brandName,
+  brandColor,
   perDelivery,
   lines,
   deliveryFee,
+  razorpayConnected,
   error,
-  onPay,
+  onCreateOrder,
+  onSimulatedPay,
   onCancel,
   onDone,
 }: {
   currency: string;
   brandName: string;
+  brandColor?: string;
   perDelivery: number;
   lines: { name: string; variant: string | null; qty: number; unit: number; total: number }[];
   deliveryFee: number;
+  /** True once the workspace has a live Razorpay account — opens the real
+   *  Checkout instead of the simulated flow. See catalog.razorpayConnected. */
+  razorpayConnected: boolean;
   error: string | null;
-  onPay: (periods: number) => Promise<void>;
+  onCreateOrder: (
+    periods: number,
+  ) => Promise<{ orderId: string; amount: number; currency: string; keyId?: string }>;
+  onSimulatedPay: (periods: number) => Promise<void>;
   onCancel: () => void;
   onDone: () => void;
 }) {
@@ -930,14 +942,44 @@ function PayModal({
   const [err, setErr] = useState<string | null>(null);
 
   async function pay() {
-    setPhase("processing");
     setErr(null);
+    if (razorpayConnected) {
+      // Real gateway: hand off to Razorpay's own overlay. Its `handler` fires
+      // only once the customer actually completes payment on their side, so
+      // there is no artificial wait to add here — the wait IS the real one.
+      setPhase("processing");
+      try {
+        const order = await onCreateOrder(periods);
+        const opened = await openRazorpay(
+          order,
+          { name: brandName, color: brandColor },
+          () => {
+            setPhase("done");
+            setTimeout(onDone, 1100);
+          },
+          () => {
+            // Customer closed Razorpay's overlay without paying — not an error,
+            // just let them try again or pick a different amount.
+            setPhase("choose");
+          },
+        );
+        if (!opened) {
+          setErr("Couldn't open the payment window. Check your connection and try again.");
+          setPhase("choose");
+        }
+      } catch (e) {
+        setErr(errMsg(e));
+        setPhase("choose");
+      }
+      return;
+    }
+
+    // Simulated flow — no real gateway to wait on, so hold the processing
+    // state for a believable minimum; resolving instantly reads as fake.
+    setPhase("processing");
     const started = Date.now();
     try {
-      await onPay(periods);
-      // A gateway takes a beat; resolving instantly reads as "nothing happened".
-      // Hold the processing state for a realistic minimum, minus whatever the
-      // request already took.
+      await onSimulatedPay(periods);
       const elapsed = Date.now() - started;
       await new Promise((r) => setTimeout(r, Math.max(0, 3200 - elapsed)));
       setPhase("done");
@@ -1041,13 +1083,15 @@ function PayModal({
               })}
             </div>
 
-            <div className="rounded-box border border-base-300 bg-base-200/70 p-3.5 text-sm">
-              <span className="font-medium">Simulated payment.</span>{" "}
-              <span className="text-base-content/70">
-                This checkout is for demonstration — no card is charged and no money
-                moves. Your subscription and wallet are created for real.
-              </span>
-            </div>
+            {!razorpayConnected && (
+              <div className="rounded-box border border-base-300 bg-base-200/70 p-3.5 text-sm">
+                <span className="font-medium">Simulated payment.</span>{" "}
+                <span className="text-base-content/70">
+                  This checkout is for demonstration — no card is charged and no money
+                  moves. Your subscription and wallet are created for real.
+                </span>
+              </div>
+            )}
 
             {(err || error) && <Alert msg={err ?? error ?? ""} />}
 
@@ -1064,12 +1108,18 @@ function PayModal({
           <div className="flex flex-col items-center gap-4 p-10 text-center">
             <span className="loading loading-spinner loading-lg text-primary" />
             <div>
-              <p className="font-medium">Processing {money(currency, total)}</p>
+              <p className="font-medium">
+                {razorpayConnected ? "Opening secure checkout…" : `Processing ${money(currency, total)}`}
+              </p>
               <p className="mt-1 text-sm text-base-content/60">
-                Contacting your bank — please don&apos;t close this window.
+                {razorpayConnected
+                  ? "Complete your payment in the window that opens."
+                  : "Contacting your bank — please don't close this window."}
               </p>
             </div>
-            <p className="text-xs text-base-content/40">Simulated for demonstration</p>
+            {!razorpayConnected && (
+              <p className="text-xs text-base-content/40">Simulated for demonstration</p>
+            )}
           </div>
         )}
 
@@ -1081,7 +1131,11 @@ function PayModal({
             <div>
               <p className="text-lg font-semibold">Payment successful</p>
               <p className="mt-1 text-sm text-base-content/60">
-                {money(currency, total)} added to your wallet.
+                {razorpayConnected
+                  ? // The wallet credit lands via webhook a moment after Razorpay
+                    // confirms the charge — don't assert it happened before it has.
+                    `${money(currency, total)} received — your wallet will update in a moment.`
+                  : `${money(currency, total)} added to your wallet.`}
               </p>
             </div>
           </div>
