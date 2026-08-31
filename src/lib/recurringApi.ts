@@ -58,6 +58,9 @@ export interface RecurringSubscription {
   createdAt: string;
   /** Contact's current wallet balance (decimal string). */
   walletBalance: string;
+  /** MULTI bundles: the composed lines; SINGLE plans: `product` instead. */
+  items?: { quantity: number; product: { id: string; name: string; variant: string | null } }[];
+  product?: { id: string; name: string; variant: string | null } | null;
 }
 
 export interface RecurringSubscriptionList {

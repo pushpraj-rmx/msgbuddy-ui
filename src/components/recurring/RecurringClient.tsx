@@ -150,7 +150,18 @@ function SubscribersTab() {
                       <div className="text-xs text-base-content/60">{s.contact.phone}</div>
                     )}
                   </td>
-                  <td onClick={() => setOpenId(s.id)}>{s.plan.name}</td>
+                  <td onClick={() => setOpenId(s.id)}>
+                    <div>{s.plan.name}</div>
+                    <div className="text-xs text-base-content/55">
+                      {s.items?.length
+                        ? s.items
+                            .map((it) =>
+                              it.quantity > 1 ? `${it.product.name} ×${it.quantity}` : it.product.name,
+                            )
+                            .join(" · ")
+                        : (s.product?.name ?? null)}
+                    </div>
+                  </td>
                   <td onClick={() => setOpenId(s.id)}>
                     {s.cadence === "CUSTOM"
                       ? `Custom · ${s.daysOfWeek
