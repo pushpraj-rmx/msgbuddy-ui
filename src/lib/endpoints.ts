@@ -7,8 +7,19 @@
  * `/v2/api/...` unless your gateway expects it. `resolveMediaUrlForUi` resolves path-absolute
  * media paths (e.g. `/uploads/...` → `.../v2/uploads/...`).
  */
+const PUBLIC_API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "https://api.msgbuddy.com";
+
+/**
+ * Same-origin deployments set NEXT_PUBLIC_API_URL="" so the browser fetches
+ * relative to whatever host served the page. Server actions and RSC cannot
+ * fetch a relative URL at all ("Failed to parse URL from /v2/..."), so on the
+ * server an empty base falls back to the API's loopback address —
+ * API_URL_INTERNAL, a runtime server-only env var (not inlined at build).
+ */
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "https://api.msgbuddy.com";
+  PUBLIC_API_BASE === "" && typeof window === "undefined"
+    ? (process.env.API_URL_INTERNAL ?? "http://127.0.0.1:3456")
+    : PUBLIC_API_BASE;
 
 const P = "/v2";
 

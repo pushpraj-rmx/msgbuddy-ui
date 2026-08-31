@@ -68,7 +68,7 @@ export const THEMES: ThemeDef[] = [
   { id: "silk", label: "Silk", colorScheme: "light", swatch: "oklch(23.27% .0249 284.3)" },
 ];
 
-export const DEFAULT_THEME = "dark";
+export const DEFAULT_THEME = "light";
 
 export const THEME_IDS: string[] = THEMES.map((t) => t.id);
 
