@@ -381,8 +381,74 @@ function SubscriberDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <div className="grid grid-cols-2 gap-3 text-sm">
               <Info label="Plan" value={detail.plan.name} />
               <Info label="Status" value={detail.status} />
-              <Info label="Cadence" value={detail.cadence} />
+              <Info
+                label="Delivers"
+                value={
+                  detail.cadence === "DAILY"
+                    ? "Every day"
+                    : detail.cadence === "WEEKDAYS"
+                      ? "Weekdays"
+                      : detail.daysOfWeek
+                          .map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d] ?? String(d))
+                          .join(", ") || "—"
+                }
+              />
+              <Info
+                label="Window"
+                value={
+                  detail.deliveryWindow
+                    ? `${detail.deliveryWindow.label ?? ""} ${detail.deliveryWindow.startTime}–${detail.deliveryWindow.endTime}`.trim()
+                    : "—"
+                }
+              />
               <Info label="Wallet balance" value={detail.wallet.balance} />
+              <Info label="Started" value={detail.startDate.slice(0, 10)} />
+            </div>
+
+            {/* The order itself — what to bake for this person. */}
+            <div>
+              <span className="op-label">Order · each delivery</span>
+              <ul className="mt-1.5 space-y-1 rounded-box border border-base-300 p-3 text-sm">
+                {(detail.items?.length
+                  ? detail.items.map((it) => ({
+                      key: it.product.id,
+                      name: it.product.name,
+                      variant: it.product.variant,
+                      qty: it.quantity,
+                      total: Number(it.product.price) * it.quantity,
+                    }))
+                  : detail.product
+                    ? [
+                        {
+                          key: detail.product.id,
+                          name: detail.product.name,
+                          variant: detail.product.variant,
+                          qty: 1,
+                          total: Number(detail.product.price),
+                        },
+                      ]
+                    : []
+                ).map((l) => (
+                  <li key={l.key} className="flex items-baseline justify-between gap-3">
+                    <span>
+                      {l.name}
+                      {l.variant && <span className="text-base-content/50"> · {l.variant}</span>}
+                      {l.qty > 1 && <span className="text-base-content/60"> ×{l.qty}</span>}
+                    </span>
+                    <span className="tabular-nums">₹{l.total.toFixed(2)}</span>
+                  </li>
+                ))}
+                <li className="flex items-baseline justify-between border-t border-base-300 pt-1.5 font-medium">
+                  <span>Per delivery</span>
+                  <span className="tabular-nums">
+                    ₹
+                    {(detail.items?.length
+                      ? detail.items.reduce((a, it) => a + Number(it.product.price) * it.quantity, 0)
+                      : Number(detail.product?.price ?? 0)
+                    ).toFixed(2)}
+                  </span>
+                </li>
+              </ul>
             </div>
 
             <div className="flex items-end gap-2">

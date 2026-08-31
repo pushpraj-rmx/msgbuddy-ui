@@ -92,6 +92,11 @@ export interface Wallet {
 
 export interface RecurringSubscriptionDetail extends RecurringSubscription {
   plan: RecurringPlan & { id: string; name: string };
+  /** MULTI bundles: the customer's own composed lines. */
+  items?: { quantity: number; product: { id: string; name: string; variant: string | null; price: string } }[];
+  /** SINGLE plans: the one chosen product. */
+  product?: { id: string; name: string; variant: string | null; price: string } | null;
+  deliveryWindow?: { weekday: number; startTime: string; endTime: string; label: string | null } | null;
   cycles: RecurringCycle[];
   wallet: Wallet;
 }
