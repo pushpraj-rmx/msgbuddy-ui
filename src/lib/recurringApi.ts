@@ -56,6 +56,14 @@ export interface RecurringSubscription {
   contact: ContactRef;
   plan: { id: string; name: string };
   createdAt: string;
+  /** Contact's current wallet balance (decimal string). */
+  walletBalance: string;
+}
+
+export interface RecurringSubscriptionList {
+  /** Workspace's low-balance line — at or under this reads "low". */
+  lowBalanceThreshold: string;
+  subscriptions: RecurringSubscription[];
 }
 
 export interface RecurringCycle {
@@ -182,7 +190,7 @@ export const recurringApi = {
 
   // Subscriptions
   listSubscriptions: async () =>
-    (await api.get<RecurringSubscription[]>(endpoints.recurring.subscriptions)).data,
+    (await api.get<RecurringSubscriptionList>(endpoints.recurring.subscriptions)).data,
   getSubscription: async (id: string) =>
     (await api.get<RecurringSubscriptionDetail>(endpoints.recurring.subscriptionById(id))).data,
   createSubscription: async (dto: {

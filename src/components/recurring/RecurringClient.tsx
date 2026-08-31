@@ -59,6 +59,7 @@ export function RecurringClient() {
 
 function SubscribersTab() {
   const [subs, setSubs] = useState<RecurringSubscription[]>([]);
+  const [threshold, setThreshold] = useState(200);
   const [plans, setPlans] = useState<RecurringPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +74,8 @@ function SubscribersTab() {
         recurringApi.listSubscriptions(),
         recurringApi.listPlans(),
       ]);
-      setSubs(s);
+      setSubs(s.subscriptions);
+      setThreshold(Number(s.lowBalanceThreshold));
       setPlans(p);
     } catch (e) {
       setError(errMsg(e));
@@ -121,6 +123,7 @@ function SubscribersTab() {
                 <th>Plan</th>
                 <th>Cadence</th>
                 <th>Start</th>
+                <th>Wallet</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -143,6 +146,9 @@ function SubscribersTab() {
                       : s.cadence}
                   </td>
                   <td onClick={() => setOpenId(s.id)}>{s.startDate.slice(0, 10)}</td>
+                  <td onClick={() => setOpenId(s.id)}>
+                    <WalletBadge balance={s.walletBalance} threshold={threshold} />
+                  </td>
                   <td onClick={() => setOpenId(s.id)}>
                     <StatusBadge status={s.status} />
                   </td>
@@ -967,6 +973,22 @@ function ContactPicker({
       )}
     </div>
   );
+}
+
+/**
+ * Funding at a glance. Thresholds: <= 0 is "No balance" (next cycle will fail
+ * to lock), <= the workspace low-balance line is "Low", else the amount reads
+ * as healthy. Rendered per subscription but the balance is per contact.
+ */
+function WalletBadge({ balance, threshold }: { balance: string; threshold: number }) {
+  const n = Number(balance);
+  if (!Number.isFinite(n)) return <span className="text-base-content/40">—</span>;
+  if (n <= 0) return <span className="badge badge-sm badge-error">No balance</span>;
+  if (n <= threshold)
+    return (
+      <span className="badge badge-sm badge-warning tabular-nums">Low · ₹{n.toFixed(0)}</span>
+    );
+  return <span className="tabular-nums text-success">₹{n.toFixed(2)}</span>;
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
