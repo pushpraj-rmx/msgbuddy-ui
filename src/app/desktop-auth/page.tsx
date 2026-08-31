@@ -70,7 +70,7 @@ export default function DesktopAuthPage() {
     <div className="min-h-[100dvh] flex items-center justify-center bg-base-200 p-6">
       <div className="w-full max-w-sm card bg-base-100 border border-base-300 p-8 text-center space-y-5">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-box border border-base-300 bg-base-200">
-          <BrandIcon expression={expression} className="h-8 w-8" title="MsgBuddy" />
+          <BrandIcon expression={expression} className="h-8 w-8" />
         </div>
         <div className="space-y-1">
           <h1 className="text-base font-semibold tracking-[-0.015em]">

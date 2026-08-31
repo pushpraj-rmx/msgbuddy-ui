@@ -35,14 +35,16 @@ export const metadata: Metadata = {
   description: IS_WHITELABEL ? BRAND_NAME : "Multi-tenant WhatsApp SaaS platform",
   applicationName: BRAND_NAME,
   openGraph: {
-    title: "MsgBuddy — WhatsApp SaaS",
-    description: "Run your customer relationships from WhatsApp — inbox, contacts, campaigns.",
-    siteName: "MsgBuddy",
+    title: IS_WHITELABEL ? BRAND_NAME : "MsgBuddy — WhatsApp SaaS",
+    description: IS_WHITELABEL
+      ? BRAND_NAME
+      : "Run your customer relationships from WhatsApp — inbox, contacts, campaigns.",
+    siteName: BRAND_NAME,
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "MsgBuddy — WhatsApp SaaS",
+    title: IS_WHITELABEL ? BRAND_NAME : "MsgBuddy — WhatsApp SaaS",
     description: "Run your customer relationships from WhatsApp — inbox, contacts, campaigns.",
   },
 };

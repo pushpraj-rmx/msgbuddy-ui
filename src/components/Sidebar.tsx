@@ -48,7 +48,7 @@ export function Sidebar({
         {collapsed ? (
           <div className="flex flex-col items-center gap-1.5 py-1.5">
             <Link href="/dashboard" aria-label="MsgBuddy home">
-              <BrandIcon title="MsgBuddy" className="h-8 w-8" />
+              <BrandIcon className="h-8 w-8" />
             </Link>
             {onToggle && (
               <button

@@ -4,7 +4,7 @@ import { BrandIcon } from "@/components/BrandIcon";
 export default function NotFound() {
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-4 text-center">
-      <BrandIcon expression="error" className="h-16 w-16" title="MsgBuddy" />
+      <BrandIcon expression="error" className="h-16 w-16" />
       <div>
         <p className="op-label mb-1">error 404</p>
         <h1 className="text-2xl font-semibold tracking-[-0.02em]">Page not found</h1>

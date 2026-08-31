@@ -77,7 +77,7 @@ export function AppUpdateToast() {
     >
       <div className="flex max-w-md items-center gap-3 rounded-box border border-base-300 bg-base-200 px-4 py-3 shadow-lg">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-base-300 bg-base-100">
-          <BrandIcon expression="happy" className="h-5 w-5" title="MsgBuddy" />
+          <BrandIcon expression="happy" className="h-5 w-5" />
         </div>
         <div className="flex-1">
           <span className="op-label block text-primary">update available</span>

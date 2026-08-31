@@ -23,7 +23,7 @@ export default function GlobalError({ reset }: { error: Error & { digest?: strin
           fontFamily: "system-ui, -apple-system, sans-serif",
         }}
       >
-        <BrandIcon expression="error" tone="white" title="MsgBuddy" style={{ width: 64, height: 64 }} />
+        <BrandIcon expression="error" tone="white" style={{ width: 64, height: 64 }} />
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0 }}>Something went wrong</h1>
         <p style={{ fontSize: 14, opacity: 0.6, margin: 0, maxWidth: 360 }}>
           An unexpected error occurred. Try reloading — if it keeps happening, please let us know.
