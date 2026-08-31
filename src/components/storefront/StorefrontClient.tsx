@@ -861,6 +861,11 @@ function SubscribeFlow({
           currency={catalog.currency}
           brandName={catalog.branding?.displayName ?? "this bakery"}
           brandColor={catalog.branding?.accentColor ?? undefined}
+          customerPhone={
+            typeof window !== "undefined"
+              ? (localStorage.getItem(`mb_sf_phone:${handle}`) ?? undefined)
+              : undefined
+          }
           perDelivery={pendingSub.perDelivery}
           lines={pendingSub.lines}
           deliveryFee={Number(catalog.deliveryFee)}
@@ -909,6 +914,7 @@ function PayModal({
   currency,
   brandName,
   brandColor,
+  customerPhone,
   perDelivery,
   lines,
   deliveryFee,
@@ -922,6 +928,9 @@ function PayModal({
   currency: string;
   brandName: string;
   brandColor?: string;
+  /** Prefilled into Razorpay Checkout — the customer already typed this at the
+   *  number step; asking for it a second time inside the gateway reads broken. */
+  customerPhone?: string;
   perDelivery: number;
   lines: { name: string; variant: string | null; qty: number; unit: number; total: number }[];
   deliveryFee: number;
@@ -952,7 +961,7 @@ function PayModal({
         const order = await onCreateOrder(periods);
         const opened = await openRazorpay(
           order,
-          { name: brandName, color: brandColor },
+          { name: brandName, color: brandColor, contact: customerPhone },
           () => {
             setPhase("done");
             setTimeout(onDone, 1100);
