@@ -581,6 +581,14 @@ function SubscribeFlow({
           <CheckCircle2 className="h-8 w-8 text-success" />
         </div>
         <h2 className="text-lg font-semibold">You&apos;re subscribed!</h2>
+        {/* They chose "pay later": say plainly that nothing delivers until the
+            wallet is funded, and that the button below is where to do it. */}
+        {!funded && pendingSub && (
+          <p className="mx-auto max-w-xs rounded-box border border-warning/40 bg-warning/10 p-3 text-sm">
+            Payment pending — deliveries start once your wallet is topped up. You
+            can pay anytime under <span className="font-medium">My deliveries</span>.
+          </p>
+        )}
         {funded && (
           <>
             <p className="mx-auto max-w-xs text-sm">
@@ -1335,6 +1343,49 @@ function ManageView({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsAuth, setNeedsAuth] = useState(!token);
+  const [topupBusy, setTopupBusy] = useState(false);
+  const [topupErr, setTopupErr] = useState<string | null>(null);
+
+  /**
+   * Fund a subscription from "My deliveries". This is the recovery path for
+   * "I'll pay later" — without it, an unfunded subscription showed an ACTIVE
+   * badge, silently failed its 9pm wallet debit every night, and offered the
+   * customer no way to ever pay. The server prices the order (per-delivery
+   * total × periods), so nothing here needs to know the bundle contents.
+   */
+  async function topUp(subscriptionId: string, periods: number) {
+    if (!token) return;
+    setTopupBusy(true);
+    setTopupErr(null);
+    try {
+      const order = await storefrontApi.pay(handle, token, subscriptionId, periods);
+      const phone =
+        typeof window !== "undefined"
+          ? (localStorage.getItem(`mb_sf_phone:${handle}`) ?? undefined)
+          : undefined;
+      const opened = await openRazorpay(
+        order,
+        {
+          name: catalog.branding?.displayName ?? handle,
+          color: catalog.branding?.accentColor ?? undefined,
+          contact: phone,
+        },
+        () => {
+          // Webhook credits the wallet a beat after capture — refresh shortly.
+          setTimeout(() => void load(token), 2500);
+          setTopupBusy(false);
+        },
+        () => setTopupBusy(false),
+      );
+      if (!opened) {
+        setTopupErr("Couldn't open the payment window. Try again.");
+        setTopupBusy(false);
+      }
+    } catch (e) {
+      setTopupErr(errMsg(e));
+      setTopupBusy(false);
+    }
+  }
 
   const load = useCallback(
     async (t: string) => {
@@ -1393,16 +1444,47 @@ function ManageView({
     <div className="space-y-4">
       {error && <Alert msg={error} />}
       {me && (
-        <div className="flex items-center gap-3 rounded-box border border-base-300 bg-base-200 p-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-            <Wallet className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <div className="op-label">Wallet balance</div>
-            <div className="text-2xl font-semibold tabular-nums">
-              {money(catalog.currency, me.wallet.balance)}
+        <div className="rounded-box border border-base-300 bg-base-200 p-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+              <Wallet className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <div className="op-label">Wallet balance</div>
+              <div className="text-2xl font-semibold tabular-nums">
+                {money(catalog.currency, me.wallet.balance)}
+              </div>
             </div>
           </div>
+          {(() => {
+            const active = me.subscriptions.find((s) => s.status === "ACTIVE");
+            if (!active) return null;
+            return (
+              <div className="mt-3 border-t border-base-300 pt-3">
+                <p className="mb-2 text-xs text-base-content/55">
+                  Top up — pay for your next deliveries in advance:
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[7, 14, 30].map((n) => (
+                    <button
+                      key={n}
+                      className="btn btn-outline btn-sm"
+                      disabled={topupBusy}
+                      onClick={() => void topUp(active.id, n)}
+                    >
+                      {topupBusy ? "…" : `${n} deliveries`}
+                    </button>
+                  ))}
+                </div>
+                {Number(me.wallet.balance) <= 0 && (
+                  <p className="mt-2 text-xs text-warning">
+                    Your wallet is empty — deliveries only go out once it&apos;s funded.
+                  </p>
+                )}
+                {topupErr && <p className="mt-2 text-xs text-error">{topupErr}</p>}
+              </div>
+            );
+          })()}
         </div>
       )}
 
