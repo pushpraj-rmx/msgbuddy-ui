@@ -2,7 +2,9 @@ import { ImageResponse } from "next/og";
 
 // Root social share image (og:image / twitter:image). Applies to any route that
 // doesn't define its own opengraph-image. Fixed brand indigo + the visor mark.
-export const alt = "MsgBuddy — WhatsApp SaaS";
+import { BRAND_NAME, IS_WHITELABEL } from "@/lib/brand";
+
+export const alt = IS_WHITELABEL ? BRAND_NAME : "MsgBuddy — WhatsApp SaaS";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -34,7 +36,7 @@ export default function Image() {
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={src} width={216} height={216} alt="" />
-        <div style={{ marginTop: 20, fontSize: 88, fontWeight: 700, letterSpacing: "-0.03em" }}>MsgBuddy</div>
+        <div style={{ marginTop: 20, fontSize: 88, fontWeight: 700, letterSpacing: "-0.03em" }}>{BRAND_NAME}</div>
         <div style={{ marginTop: 6, fontSize: 34, opacity: 0.85 }}>Run your business from WhatsApp</div>
       </div>
     ),
