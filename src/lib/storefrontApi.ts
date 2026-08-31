@@ -97,6 +97,11 @@ export interface CustomerSubscription {
   startDate: string;
   plan: { id: string; name: string };
   product: { id: string; name: string; variant: string | null } | null;
+  /** MULTI bundles: the customer's own composed lines. Empty for SINGLE/FIXED. */
+  items?: {
+    quantity: number;
+    product: { id: string; name: string; variant: string | null };
+  }[];
   deliveryWindow: StorefrontWindow | null;
 }
 export interface CustomerMe {

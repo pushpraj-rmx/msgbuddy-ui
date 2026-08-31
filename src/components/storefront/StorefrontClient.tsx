@@ -1502,7 +1502,21 @@ function ManageView({
           <div className="flex items-start justify-between">
             <div>
               <div className="font-medium">{s.product?.name ?? s.plan.name}</div>
-              <div className="text-xs text-base-content/50">{s.plan.name}</div>
+              {/* SINGLE: product on top, plan beneath. MULTI: plan on top and
+                  the composed lines beneath — never the plan name twice. */}
+              <div className="text-xs text-base-content/50">
+                {s.items && s.items.length > 0
+                  ? s.items
+                      .map((it) =>
+                        it.quantity > 1
+                          ? `${it.product.name} ×${it.quantity}`
+                          : it.product.name,
+                      )
+                      .join(" · ")
+                  : s.product
+                    ? s.plan.name
+                    : null}
+              </div>
             </div>
             <span
               className={`badge badge-sm ${
