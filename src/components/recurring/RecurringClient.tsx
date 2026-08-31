@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import { contactsApi } from "@/lib/api";
 import type { Contact } from "@/lib/types";
 import { DeliveryWindowsPanel, RazorpayConnectPanel, StorefrontFields } from "./StorefrontSettings";
@@ -129,8 +129,21 @@ function SubscribersTab() {
               </tr>
             </thead>
             <tbody>
-              {subs.map((s) => (
-                <tr key={s.id} className="hover cursor-pointer" >
+              {(() => {
+                // Standing orders first; ended ones below a divider. PAUSED is
+                // grouped with active — it's a live relationship, just resting.
+                const active = subs.filter((s) => s.status !== "CANCELLED");
+                const inactive = subs.filter((s) => s.status === "CANCELLED");
+                const section = (label: string, list: typeof subs, dim: boolean) =>
+                  list.length === 0 ? null : (
+                    <Fragment key={label}>
+                      <tr className="bg-base-200/60">
+                        <td colSpan={7} className="py-1.5 text-[0.6875rem] font-medium uppercase tracking-wide text-base-content/50">
+                          {label} · {list.length}
+                        </td>
+                      </tr>
+                      {list.map((s) => (
+                <tr key={s.id} className={`hover cursor-pointer ${dim ? "opacity-60" : ""}`}>
                   <td onClick={() => setOpenId(s.id)}>
                     <div className="font-medium">{s.contact.name ?? s.contact.phone}</div>
                     {s.contact.name && (
@@ -171,10 +184,19 @@ function SubscribersTab() {
                     )}
                   </td>
                 </tr>
-              ))}
+                      ))}
+                    </Fragment>
+                  );
+                return (
+                  <>
+                    {section("Active", active, false)}
+                    {section("Inactive", inactive, true)}
+                  </>
+                );
+              })()}
               {subs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center text-base-content/50">
+                  <td colSpan={7} className="text-center text-base-content/50">
                     No subscriptions yet.
                   </td>
                 </tr>
@@ -773,7 +795,7 @@ function FulfilmentTab() {
             ))}
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-base-content/50">
+                <td colSpan={7} className="text-center text-base-content/50">
                   No committed cycles for this date.
                 </td>
               </tr>
