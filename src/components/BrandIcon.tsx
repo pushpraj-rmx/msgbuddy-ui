@@ -2,6 +2,7 @@
 
 import { useId } from "react";
 import type { SVGProps } from "react";
+import { BRAND_NAME, IS_WHITELABEL } from "@/lib/brand";
 
 export type BrandExpression =
   | "neutral"
@@ -82,6 +83,20 @@ function Face({ expression, c }: { expression: BrandExpression; c: string }) {
 export function BrandIcon({ expression = "neutral", tone = "brand", title, ...props }: BrandIconProps) {
   const maskId = useId();
   const c = TONE[tone];
+  // White-label builds: a monogram instead of the visor buddy. Expressions are
+  // a MsgBuddy-brand behaviour, so they're intentionally dropped here.
+  if (IS_WHITELABEL) {
+    return (
+      <span
+        role="img"
+        aria-label={title ?? BRAND_NAME}
+        title={title}
+        className={`inline-flex items-center justify-center rounded-xl border-2 border-current font-serif text-lg leading-none ${props.className ?? ""}`}
+      >
+        {BRAND_NAME.charAt(0)}
+      </span>
+    );
+  }
   return (
     <svg role="img" aria-label={title ?? "MsgBuddy"} viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" {...props}>
       {title ? <title>{title}</title> : null}

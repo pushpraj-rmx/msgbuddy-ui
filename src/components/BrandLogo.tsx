@@ -1,4 +1,5 @@
 import type { SVGProps } from "react";
+import { BRAND_NAME, IS_WHITELABEL } from "@/lib/brand";
 
 type BrandLogoProps = Omit<SVGProps<SVGSVGElement>, "children"> & {
   alt?: string;
@@ -13,7 +14,19 @@ type BrandLogoProps = Omit<SVGProps<SVGSVGElement>, "children"> & {
  * favicon per `branding/kit` rules; in-product the mark is monochrome. Size it
  * via `className` (e.g. `h-7 w-auto`) — the viewBox drives the aspect ratio.
  */
-export function BrandLogo({ alt = "MsgBuddy", priority: _priority, ...props }: BrandLogoProps) {
+export function BrandLogo({ alt = BRAND_NAME, priority: _priority, ...props }: BrandLogoProps) {
+  // White-label builds get a typographic wordmark; the visor mark stays
+  // exclusive to MsgBuddy-branded deployments.
+  if (IS_WHITELABEL) {
+    return (
+      <span
+        aria-label={alt}
+        className={`inline-flex items-center whitespace-nowrap font-serif text-xl leading-none tracking-tight ${props.className ?? ""}`}
+      >
+        {BRAND_NAME}
+      </span>
+    );
+  }
   return (
     <svg
       role="img"

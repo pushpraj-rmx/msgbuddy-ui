@@ -1,3 +1,4 @@
+import { BRAND_NAME } from "@/lib/brand";
 import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 import {
@@ -164,5 +165,5 @@ export function getPageTitle(pathname: string): string {
   if (pathname.startsWith("/feedback")) return "Feedback";
   if (pathname.startsWith("/billing")) return "Billing";
   if (pathname.startsWith("/usage")) return "Usage";
-  return "MsgBuddy";
+  return BRAND_NAME;
 }

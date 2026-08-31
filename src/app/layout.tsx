@@ -5,6 +5,7 @@ import "./globals.css";
 import { QueryProvider } from "@/providers/QueryProvider";
 import { getAppOrigin } from "@/lib/site";
 import { DEFAULT_THEME, THEME_IDS } from "@/lib/themes";
+import { BRAND_NAME, IS_WHITELABEL } from "@/lib/brand";
 
 /** Operator design system: Geist body/UI, Geist Mono for numerics/IDs/micro-labels,
  *  Instrument Serif for sparing display moments (hero/empty-states). */
@@ -30,9 +31,9 @@ const instrumentSerif = Instrument_Serif({
 
 export const metadata: Metadata = {
   metadataBase: new URL(getAppOrigin()),
-  title: "MsgBuddy - WhatsApp SaaS",
-  description: "Multi-tenant WhatsApp SaaS platform",
-  applicationName: "MsgBuddy",
+  title: IS_WHITELABEL ? BRAND_NAME : "MsgBuddy - WhatsApp SaaS",
+  description: IS_WHITELABEL ? BRAND_NAME : "Multi-tenant WhatsApp SaaS platform",
+  applicationName: BRAND_NAME,
   openGraph: {
     title: "MsgBuddy — WhatsApp SaaS",
     description: "Run your customer relationships from WhatsApp — inbox, contacts, campaigns.",
