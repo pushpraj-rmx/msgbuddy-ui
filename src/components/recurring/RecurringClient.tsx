@@ -130,12 +130,17 @@ function SubscribersTab() {
                 <tr key={s.id} className="hover cursor-pointer" >
                   <td onClick={() => setOpenId(s.id)}>
                     <div className="font-medium">{s.contact.name ?? s.contact.phone}</div>
-                    <div className="text-xs text-base-content/60">{s.contact.phone}</div>
+                    {s.contact.name && (
+                      <div className="text-xs text-base-content/60">{s.contact.phone}</div>
+                    )}
                   </td>
                   <td onClick={() => setOpenId(s.id)}>{s.plan.name}</td>
                   <td onClick={() => setOpenId(s.id)}>
-                    {s.cadence}
-                    {s.cadence === "CUSTOM" ? ` (${s.daysOfWeek.join(",")})` : ""}
+                    {s.cadence === "CUSTOM"
+                      ? `Custom · ${s.daysOfWeek
+                          .map((d) => ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d] ?? d)
+                          .join(" ")}`
+                      : s.cadence}
                   </td>
                   <td onClick={() => setOpenId(s.id)}>{s.startDate.slice(0, 10)}</td>
                   <td onClick={() => setOpenId(s.id)}>
